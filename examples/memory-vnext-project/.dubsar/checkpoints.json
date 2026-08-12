@@ -1,0 +1,39 @@
+{
+  "entries": [
+    {
+      "attempt": null,
+      "checkpoint_id": "checkpoint-slug-session-001",
+      "checkpoint_sha256": "0c11a1e7444da1765774b779a7a529995c5c285aee041ead3d57f3c45748d89c",
+      "index": 0,
+      "kind": "progress",
+      "limitations": [
+        "Inputs containing no letters or digits are not rejected yet."
+      ],
+      "previous_checkpoint_sha256": null,
+      "references": [
+        {
+          "path": "src/slug.mjs",
+          "sha256": "02c66b83ba5ea55ead0f53d74a03f1ab70611aa26a2179b798199666832c73f6"
+        },
+        {
+          "path": "test/slug.test.mjs",
+          "sha256": "e1b3b78b5a42518b37bae003f3c6257d9506e0fe51ab0bec9f2263a3514370e5"
+        }
+      ],
+      "resolves": null,
+      "resulting_state": {
+        "blockers": [],
+        "next_action": "Add rejection for input that normalizes to an empty slug, then add the focused regression test.",
+        "status": "active",
+        "summary": "Accent and punctuation normalization is implemented and the focused test passes."
+      },
+      "summary": "Implemented deterministic ASCII slug normalization and verified the focused test.",
+      "validation": [
+        "node --test test/slug.test.mjs passed with one test."
+      ],
+      "work_id": "work-slug-normalization-001"
+    }
+  ],
+  "format": "dubsar.continuity-checkpoints/2",
+  "project_id": "project-slug-pilot-001"
+}

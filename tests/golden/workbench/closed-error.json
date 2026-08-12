@@ -1,0 +1,6 @@
+{
+  "authority": "local_preparation_record",
+  "code": "CLI_COMMAND_INVALID",
+  "format": "dubsar.cli-error/1",
+  "status": "error"
+}

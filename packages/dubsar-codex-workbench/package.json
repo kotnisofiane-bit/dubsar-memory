@@ -1,0 +1,11 @@
+{
+  "name": "@dubsar/codex-workbench-adapter",
+  "version": "0.1.0-dev",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.mjs",
+  "description": "Explicit Codex-only adapter for verified DUBSAR resume capsules.",
+  "engines": {
+    "node": ">=20"
+  }
+}

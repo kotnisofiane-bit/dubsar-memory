@@ -1,0 +1,19 @@
+{
+  "format": "dubsar.private-capabilities/1",
+  "package": "dubsar-codex-workbench",
+  "version": "0.1.0-dev",
+  "authority": "local_preparation_record",
+  "effects": {
+    "background_service": "none",
+    "filesystem_read": "explicit_registry_and_selected_project",
+    "filesystem_write": "none",
+    "network": "none",
+    "process_execution": "explicit_one_shot_operator_cli",
+    "remote_mutation": "none"
+  },
+  "integrations": {
+    "backend": "none",
+    "mcp": "none",
+    "personal_memory": "none"
+  }
+}

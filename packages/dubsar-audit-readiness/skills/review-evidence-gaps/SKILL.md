@@ -37,6 +37,14 @@ safety of the target system.
 7. Use `ready_for_human_review` only when the full preparation is coherent.
 8. Run deterministic validation and report every finding and readiness reason.
 
+## Review gate
+
+Before changing the case to `ready_for_human_review`, follow [the common review
+protocol](../dubsar-audit-readiness/references/review-protocol.md) with an
+independent verification reviewer. Add a challenger only if the readiness
+decision remains materially contested. Neither can erase a contradiction or
+grant approval, and a failed revalidation leaves the case `not_ready`.
+
 ## Deterministic validation
 
 When installed with the complete pack, run

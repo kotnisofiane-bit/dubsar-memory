@@ -15,7 +15,7 @@ impact, and whether the report involves a generated audit bundle.
 
 ## Security boundary
 
-The published packs are offline preparation tools. They do not require
+The public source and any future packs are offline preparation tools. They do not require
 credentials, network access, hooks, MCP servers, or access to a private DUBSAR
 service. Treat any contribution that adds one of those capabilities as a
 security-sensitive design change requiring explicit maintainer review.

@@ -1,4 +1,4 @@
 interface:
   display_name: "Resume Project Context"
   short_description: "Resume safely from a project handoff"
-  default_prompt: "Use $resume-project-context to resume this project from its nearest local continuity workspace without inventing progress."
+  default_prompt: "Use $resume-project-context to present this project's verified local resume capsule without starting work."

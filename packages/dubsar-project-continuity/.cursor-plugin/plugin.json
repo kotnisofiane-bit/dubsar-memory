@@ -1,8 +1,8 @@
 {
   "name": "dubsar-project-continuity",
   "displayName": "DUBSAR Project Continuity",
-  "description": "Keep project intent, lots, execution boundaries, evidence, and handoffs explicit.",
-  "version": "0.1.1",
+  "description": "Resume and checkpoint local project context without replacing native agent tools.",
+  "version": "0.3.0-dev",
   "author": {
     "name": "DUBSAR"
   },

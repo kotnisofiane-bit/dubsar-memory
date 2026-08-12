@@ -1,0 +1,11 @@
+{
+  "name": "@dubsar/operator-core",
+  "version": "0.1.0-dev",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic read-only core for local DUBSAR project and audit workspaces.",
+  "exports": "./src/index.mjs",
+  "engines": {
+    "node": ">=20"
+  }
+}

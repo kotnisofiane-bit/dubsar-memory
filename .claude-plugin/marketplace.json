@@ -1,21 +1,15 @@
 {
-  "name": "dubsar-agent-skills",
-  "description": "Portable offline Agent Skills for automation audit readiness and evidence-aware project continuity.",
+  "name": "dubsar-continuity",
+  "description": "Portable offline continuity for resumable software projects.",
   "owner": {
     "name": "DUBSAR"
   },
   "plugins": [
     {
-      "name": "dubsar-audit-readiness",
-      "source": "./packages/dubsar-audit-readiness",
-      "description": "Offline preparation for bounded automation audits.",
-      "version": "0.1.1"
-    },
-    {
       "name": "dubsar-project-continuity",
       "source": "./packages/dubsar-project-continuity",
       "description": "Evidence-aware project continuity and handoffs.",
-      "version": "0.1.1"
+      "version": "0.3.0-dev"
     }
   ]
 }

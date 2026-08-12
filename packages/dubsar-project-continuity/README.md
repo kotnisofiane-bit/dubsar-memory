@@ -1,86 +1,85 @@
 # DUBSAR Project Continuity
 
-Portable Agent Skills that keep a long-running project understandable,
-verifiable, and safely resumable across people, tools, and sessions.
+A dependency-free local runtime and two lightweight skills for carrying a
+verified project summary across sessions and coding hosts.
 
-## Skills
+New projects use `.dubsar/`, a human-readable project-memory format:
 
-| Skill | Use it to |
-| --- | --- |
-| `$frame-project-mission` | Turn broad intent into an approved, bounded mission |
-| `$decompose-project-lots` | Split an approved mission into ordered, verifiable lots |
-| `$draft-execution-contract` | Bound one candidate lot before implementation |
-| `$record-project-evidence` | Append claims, proof, validation, and limitations |
-| `$resume-project-context` | Reconstruct state after interruption or handoff |
-| `$dubsar-project-continuity` | Run the complete continuity workflow |
-
-## Lightweight continuity
-
-The initializer generates one opaque local `mission_id` automatically. The
-same mission keeps that identifier across conversations, context compression,
-host changes, interruptions, and handoffs. Users do not need to choose or
-remember it.
-
-On resume, the helper searches from the current directory to the nearest Git
-project root and reuses the nearest ancestor `.dubsar-project`. Without a Git
-root, the supplied start directory is the boundary. Initialize a new workspace
-only when no mission workspace exists. For a pre-existing project, start a
-fresh local non-canonical record and preserve uncertain history as reported or
-unverified.
-
-One directory scope has one active mission workspace. If the request is a
-genuinely different mission, confirm that separation before reuse, then create
-an exact `.dubsar-project` marker inside a dedicated in-project directory. Do
-not delete, overwrite, or recycle the previous mission identifier.
-
-## Workflow
-
-1. turns an idea into a bounded mission with explicit proof;
-2. decomposes the mission into small, ordered lots;
-3. records an execution contract before work begins;
-4. indexes evidence without converting claims into facts;
-5. produces a deterministic handoff and resume summary.
-
-Use the specialized skill for one step and the umbrella skill only for the
-complete sequence.
-
-## Boundaries
-
-It does not grant execution authority, run background actions, synchronize
-repositories, merge branches, deploy software, or communicate with a production
-DUBSAR service. It declares no hooks or MCP dependencies, and its scripts make
-no network calls. This pack contains doctrine and local helpers only, not the
-DUBSAR Core, product runtime, or canonical session records.
-
-## Hosts
-
-The same `skills/` directory is used by:
-
-- Codex through `.codex-plugin/plugin.json`;
-- Claude Code through `.claude-plugin/plugin.json`;
-- Cursor through `.cursor-plugin/plugin.json`;
-- Hermes Agent through the self-contained umbrella skill mirrored under the
-  repository root `skills/` directory.
-
-## Local scripts
-
-From the target project's root, point to the installed pack:
-
-```bash
-node /absolute/path/to/dubsar-project-continuity/scripts/ensure-project-workspace.mjs --start .
-node /absolute/path/to/dubsar-project-continuity/scripts/validate-project-workspace.mjs --root ./.dubsar-project
-node /absolute/path/to/dubsar-project-continuity/scripts/render-project-summary.mjs --root ./.dubsar-project --output ./handoff
+```text
+.dubsar/
+|-- manifest.json       # stable project identity
+|-- checkpoints.json    # append-order continuity records
+|-- work/*.md           # shared work items
+|-- knowledge/*.md      # explicitly promoted project knowledge
+|-- inbox/*.md          # local advisory notes, ignored by Git
+|-- local.json          # optional local work selection, ignored by Git
+`-- generated/          # disposable views, ignored by Git
 ```
 
-All scripts are offline and dependency-free. They never run project commands.
-The `ensure` helper resolves or initializes the workspace automatically and
-returns only an opaque identifier and a path relative to the supplied
-`--start`. The host resolves that path locally before invoking another helper;
-it does not need to expose an absolute path. The lower-level `init` helper
-remains available for controlled explicit initialization.
+Markdown files use one strict JSON frontmatter object. Work and Knowledge are
+inventoried from safe filenames, so creating one item never requires a fake
+multi-file transaction. Existing `.dubsar-project` Lite and four-file legacy
+workspaces remain readable. Migration is explicit, digest-confirmed, and keeps
+the old workspace unchanged as immutable migration evidence.
 
-## Status
+## Active skills
 
-Public beta v0.1.1 under the MIT License. The package includes reviewed
-clean-room provenance and a deterministic release inventory. See the
-repository-level `PUBLIC_BOUNDARY.md`.
+- `$resume-project-context`: reads a digest-verified capsule and explains the
+  recorded mission, work package, blockers, evidence state, and next action.
+- `$checkpoint-project-context`: previews one bounded update and applies it only
+  after explicit confirmation of the exact digest.
+
+The package does not require reviewers, subagents, a backend, MCP, hooks, or a
+global CLI. Native planning and goals remain host features. Resume may suggest
+planning when work is broad and a goal when long work needs a measurable stop.
+
+## CLI
+
+```bash
+node "<plugin-root>/bin/dubsar.mjs" init --start . --proposal <init.json> --json
+node "<plugin-root>/bin/dubsar.mjs" resume --start . --capsule --json
+node "<plugin-root>/bin/dubsar.mjs" route --start . --json
+node "<plugin-root>/bin/dubsar.mjs" work list --start . --json
+node "<plugin-root>/bin/dubsar.mjs" knowledge list --start . --json
+node "<plugin-root>/bin/dubsar.mjs" inbox list --start . --json
+node "<plugin-root>/bin/dubsar.mjs" context --start . --json
+node "<plugin-root>/bin/dubsar.mjs" history --start . --json
+node "<plugin-root>/bin/dubsar.mjs" lots --start . --json
+node "<plugin-root>/bin/dubsar.mjs" precedents --start . --lot <lot-id> --json
+node "<plugin-root>/bin/dubsar.mjs" checkpoint --start . --proposal <proposal.json> --json
+node "<plugin-root>/bin/dubsar.mjs" close --start .
+node "<plugin-root>/bin/dubsar.mjs" migrate --to-memory-vnext --start . --json
+```
+
+`resume`, `route`, `history`, `lots`, and `precedents` are read-only. `init` and
+`checkpoint` require a preview and exact digest confirmation. `close` requires a human TTY.
+No command selects or executes a work package automatically.
+
+In a vNext workspace, one local work item may be selected explicitly. That
+selection changes only the contextual digest; it never changes the shared
+snapshot or chooses work for another developer. Project Knowledge reaches a
+context only when an approved entry is explicitly linked by the selected work.
+When `local.json` is absent after a clean clone, the selection is simply null;
+the user may select a Work explicitly on that machine.
+
+`context` writes nothing by default. `context --write` uses the same
+preview/digest/apply protocol and writes only `generated/context.md`. It never
+copies data into `AGENTS.md`, `CLAUDE.md`, or Cursor rules.
+
+Two equivalent unsupported `attempt` checkpoints for the same action, gate,
+failure fingerprint, and unchanged material state yield advisory
+`reframe_recommended`. They do not block work or invoke reviewers.
+
+`route` exposes Memory Guidance v2: one explainable advisory action, a factual
+memory state, an artifact lifecycle projection, exact-only relations, and
+optional native Plan/Goal guidance. It never scores, ranks, chooses work, or
+activates a host tool.
+
+Personal memory is optional, separate from project state, and never included in
+project readiness or capsules.
+
+Earlier workflow skills are preserved under the repository-level `legacy/`
+directory but are not packaged or exposed by host manifests.
+
+This vNext snapshot is local development work. Its release provenance is
+`draft/pending`; no publication is authorized by the current manifests.

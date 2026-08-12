@@ -1,18 +1,18 @@
 {
   "format": "dubsar.public-file-inventory/1",
-  "root_sha256": "06165bb5daf163f1c7a8d7e2edd8de8714af0b84ac6818fe8ac3da4ff268dd92",
+  "root_sha256": "799c601c7288c1580979f42af3aae64f517f7b7e62ffabf8cb472bf4745a1d2e",
   "files": [
     {
       "path": ".claude-plugin/plugin.json",
-      "sha256": "378679245a888d0ecc839063533ff2bd868bec89f4a1a768115b286dc53515e5"
+      "sha256": "379215c1118e0889c71efdb24b9c249b26662ecb2cb69370684f6133ded80b98"
     },
     {
       "path": ".codex-plugin/plugin.json",
-      "sha256": "09eb854e2117a82fb7c48b983714bc94442a82d3525de6106ae0d0e5f03e743d"
+      "sha256": "663e57bed70db46c79e04c4a540c78555c8b5cc9d95d4f9af563b1aead61f88a"
     },
     {
       "path": ".cursor-plugin/plugin.json",
-      "sha256": "4c3f7c66c629b4de18b31f9a0d1a6bbd5206472375f2ac0642f12c95566a1c0f"
+      "sha256": "94670caf3a0277416e977f4e9fd7b4a1d6f2fa8ff7bd055c15ad763ed241998d"
     },
     {
       "path": "LICENSE",
@@ -20,11 +20,11 @@
     },
     {
       "path": "PROVENANCE.json",
-      "sha256": "17f89ccdf18f6c137cc4dc05a0adc878766a0d7e8552bcc1b28bb121f9cb0269"
+      "sha256": "8960675120e1ba90c31254bdc34068cb4cef53fc47e7248914750648352f0bea"
     },
     {
       "path": "README.md",
-      "sha256": "ec096e0a7d78edbece453c0199bba844c3fb23fcccc1c07e8f4a3745e76b7702"
+      "sha256": "4d30ba8284ed9c5fb8986a672cc9ddd3e4dcfcc5e4591930497c3620844423e0"
     },
     {
       "path": "scripts/ensure-audit-workspace.mjs",
@@ -39,6 +39,14 @@
       "sha256": "12a72de81158b079f71994f2f903e10e674e8a45fb65e2244fb93b369b37169f"
     },
     {
+      "path": "scripts/record-review-receipt.mjs",
+      "sha256": "37a6f0b7189ab7e3b6df736774ab70d2026e4c3d2740dc863780e4660157ed9e"
+    },
+    {
+      "path": "scripts/render-audit-summary.mjs",
+      "sha256": "769fa804904b4bf91bf464414c008f7fa3e550f18ef7f15373aabd15a5271370"
+    },
+    {
       "path": "scripts/validate-audit-workspace.mjs",
       "sha256": "48f0368d1834ba6c02078978e1c904b57cb13388d0f0e16ecb3afe3e1d09b511"
     },
@@ -51,8 +59,16 @@
       "sha256": "95db76f7f59da2c25f0cdd462c0f9e42374a67ae96010ca980e7bf723191515a"
     },
     {
+      "path": "skills/dubsar-audit-readiness/references/review-protocol.md",
+      "sha256": "cdf3afce311d515111314c76ff6d8416fb110321cb4ee0f488f616fd57ceff96"
+    },
+    {
+      "path": "skills/dubsar-audit-readiness/references/review-receipt-contract.md",
+      "sha256": "a11df3110b72f1a408ba7007b35126e0a1c8ee1334f1a355e0c203344f90f7c3"
+    },
+    {
       "path": "skills/dubsar-audit-readiness/scripts/audit-model.mjs",
-      "sha256": "c4419bde054ae357ee75412d2a4631687147bdbfa05e2acd09a2cc1075ccb07b"
+      "sha256": "39f3ae14c334074264d5a3738e16c091a8c1ce3e1b98bbd04cf120680cda9b24"
     },
     {
       "path": "skills/dubsar-audit-readiness/scripts/ensure-audit-workspace.mjs",
@@ -60,15 +76,23 @@
     },
     {
       "path": "skills/dubsar-audit-readiness/scripts/export-audit-bundle.mjs",
-      "sha256": "48ab01a66ee3894118824b530708284a1f7c42aeab9e6273a157436a35282494"
+      "sha256": "771396cc45175bc755d22a0ce92662b34c2131757f1fce529b88b32485276cf2"
     },
     {
       "path": "skills/dubsar-audit-readiness/scripts/init-audit-workspace.mjs",
       "sha256": "faa6c6c91ea3903428eb0e14852ed820e5caa54b7ce5e97e9a1154c4bb03d512"
     },
     {
+      "path": "skills/dubsar-audit-readiness/scripts/record-review-receipt.mjs",
+      "sha256": "dbdc8e7caf7ec20452dafd98aaa80e75c6ae8df90580a8541c63390afb025fa2"
+    },
+    {
+      "path": "skills/dubsar-audit-readiness/scripts/render-audit-summary.mjs",
+      "sha256": "cec30f5cfe2861b3e083b7af927451b8d826f0221affa2c8d56f337c033d1fdf"
+    },
+    {
       "path": "skills/dubsar-audit-readiness/scripts/safe-io.mjs",
-      "sha256": "98cb6bfc42c62d67f7865f5e0e095295bad9dc6a7b4ad174ac18e22d1bd76c43"
+      "sha256": "c3e5d2620b2746f893799912a391899e8ee0e80de7ca4023324301d2e8549ace"
     },
     {
       "path": "skills/dubsar-audit-readiness/scripts/validate-audit-workspace.mjs",
@@ -76,7 +100,7 @@
     },
     {
       "path": "skills/dubsar-audit-readiness/SKILL.md",
-      "sha256": "e6262ecce1b60c0b7c5ec576f02618465c5200ea3a0b121112df77424d67a842"
+      "sha256": "7958eae3aa6afcd107763a4a9d5ade48b624430bef7eb4f84aaa548b95825d01"
     },
     {
       "path": "skills/export-audit-bundle/agents/openai.yaml",
@@ -84,7 +108,7 @@
     },
     {
       "path": "skills/export-audit-bundle/SKILL.md",
-      "sha256": "81e6148618ab5445c8db5aaf5b5d5955c4ac61abbd44905b322b84b5c98225b2"
+      "sha256": "be685b2dbb335b883fe1d7d51e0774164a3ffe90848a2c0c4def0b4f2e485031"
     },
     {
       "path": "skills/frame-audit-scope/agents/openai.yaml",
@@ -92,7 +116,7 @@
     },
     {
       "path": "skills/frame-audit-scope/SKILL.md",
-      "sha256": "b169947e77ebcbb53f3fbfdb99d5a9838366a49e030ff6b526ebeba014c43e7d"
+      "sha256": "4be058a462f445bf96b70bc3d7e707137ff0c14eda12463415c64c8b0148547f"
     },
     {
       "path": "skills/inventory-automations/agents/openai.yaml",
@@ -100,7 +124,7 @@
     },
     {
       "path": "skills/inventory-automations/SKILL.md",
-      "sha256": "27d25e3aa1602ce745e4a2d1eb6fce9a8dc12a37eb5660e416fd7afab2002390"
+      "sha256": "d35f3c1633a57402c6328270bf6a0b7f920452da06914d5d1714b0e68b10e8d7"
     },
     {
       "path": "skills/map-sensitive-actions/agents/openai.yaml",
@@ -108,7 +132,7 @@
     },
     {
       "path": "skills/map-sensitive-actions/SKILL.md",
-      "sha256": "bae097ba964ebfd110d3e3c2c820480a41fc02c73e787830289adf3dcc7102a6"
+      "sha256": "013ae8c86963bd38343f9048fb1068f93c18b32fef360ed9d7f11427fc1bbf54"
     },
     {
       "path": "skills/review-evidence-gaps/agents/openai.yaml",
@@ -116,7 +140,7 @@
     },
     {
       "path": "skills/review-evidence-gaps/SKILL.md",
-      "sha256": "fe409e0c03e6df5a1e0c88a5c28ae773d2d861cd0b1f5ab26cb9193174bc712c"
+      "sha256": "4ad7c17f7ec8aee4b8eba149098cdd97c2db9d2513386221912a1bcb567a612b"
     }
   ]
 }

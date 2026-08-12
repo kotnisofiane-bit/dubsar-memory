@@ -1,0 +1,11 @@
+{
+  "name": "@dubsar/personal-memory",
+  "version": "0.1.0-dev",
+  "private": true,
+  "type": "module",
+  "description": "Optional fixed-root personal advisory memory for local DUBSAR sessions.",
+  "exports": "./src/index.mjs",
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -27,8 +27,15 @@ pseudonymous identifier, UTC timestamp, and local reference.
 
 ## Workflow
 
-1. Read [the data contracts](references/data-contracts.md).
-2. Run `scripts/ensure-audit-workspace.mjs --start <current-directory>`.
+1. State the requested end point and stop after that phase. Run the complete
+   sequence only when explicitly requested; never turn a finding into another
+   case or advance to the next phase automatically.
+2. Read [the data contracts](references/data-contracts.md).
+   For a material gate, follow [the review and challenge
+   protocol](references/review-protocol.md) before requesting human approval.
+   Record the result with [the immutable receipt
+   contract](references/review-receipt-contract.md).
+3. Run `scripts/ensure-audit-workspace.mjs --start <current-directory>`.
    The helper stays inside the nearest Git project, reuses the nearest ancestor
    `.dubsar-audit`, or initializes one at the project root and generates
    `case_id`. Without a Git root, the supplied start directory is the boundary.
@@ -36,21 +43,21 @@ pseudonymous identifier, UTC timestamp, and local reference.
    separation before reuse, then use `--workspace` once to create an exact
    marker in a dedicated in-project directory. Never ask the user to name or
    remember the identifier.
-3. Frame the objective, approved evidence, exclusions, time window, completion
+4. Frame the objective, approved evidence, exclusions, time window, completion
    criteria, limitations, and attributable scope approval in
    `audit-scope.json`.
-4. Index approved regular local files and their SHA-256 values in
+5. Index approved regular local files and their SHA-256 values in
    `evidence-index.json`.
-5. Inventory only evidence-supported automations and agents in
+6. Inventory only evidence-supported automations and agents in
    `automation-inventory.json`.
-6. Map material effects and proposed review points in
+7. Map material effects and proposed review points in
    `sensitive-actions.json`; require human review even when the map is empty.
-7. Separate observations, reports, contradictions, gaps, and limitations in
+8. Separate observations, reports, contradictions, gaps, and limitations in
    `evidence-review.json`; link every supported observation to one or more
    indexed artifact IDs.
-8. Validate the workspace. Preserve every reported finding and readiness
+9. Validate the workspace. Preserve every reported finding and readiness
    reason.
-9. Export only after validation reports `valid` and
+10. Export only after validation reports `valid` and
    `ready_for_human_review`, and the user confirms the included files.
 
 ## Local helpers
@@ -60,7 +67,9 @@ The scripts use Node.js built-ins only:
 ```bash
 node scripts/ensure-audit-workspace.mjs --start .
 node scripts/validate-audit-workspace.mjs --root ./.dubsar-audit
+node scripts/render-audit-summary.mjs --root ./.dubsar-audit --output ./audit-summary
 node scripts/export-audit-bundle.mjs --root ./.dubsar-audit --output ./audit-bundle
+node scripts/record-review-receipt.mjs --root ./.dubsar-audit < receipt.json
 ```
 
 Resolve the returned `workspace` against the same `--start` directory, then
@@ -69,8 +78,9 @@ user-facing result.
 
 ## Output
 
-Produce or update the five contract files. If export is requested and allowed,
-also produce `MANIFEST.sha256.json`. Report:
+Produce or update the five contract files. Render
+`AUDIT-PREPARATION-SUMMARY.md` for human reading. If export is requested and
+allowed, include that summary and produce `MANIFEST.sha256.json`. Report:
 
 - the structural validation status;
 - readiness reasons and unresolved gaps;
@@ -86,6 +96,8 @@ also produce `MANIFEST.sha256.json`. Report:
 - Treat `ready_for_human_review` as a preparation state, not a compliance,
   legal, safety, or audit verdict.
 - Treat digests as byte-integrity evidence only.
+- Do not treat a reviewer severity label as authority to widen scope. Apply the
+  common protocol's goal lock, proportionality test, and terminal review budget.
 - Keep one active audit workspace per directory scope. Never recycle an old
   identifier for a different case.
 - Do not move or overwrite an existing non-empty workspace or output.

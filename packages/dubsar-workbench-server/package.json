@@ -1,0 +1,11 @@
+{
+  "name": "@dubsar/workbench-server",
+  "version": "0.1.0-dev",
+  "private": true,
+  "type": "module",
+  "description": "Ephemeral transport-only IPv4 loopback server for a pre-rendered DUBSAR Workbench report.",
+  "exports": "./src/index.mjs",
+  "engines": {
+    "node": ">=20"
+  }
+}

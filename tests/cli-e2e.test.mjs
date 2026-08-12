@@ -187,9 +187,8 @@ test("Hermes pack script completes a project init, validate, and handoff", async
 
   const scripts = path.join(
     labRoot,
-    "packages",
-    "dubsar-project-continuity",
-    "skills",
+    "legacy",
+    "hermes-skills",
     "dubsar-project-continuity",
     "scripts",
   );
@@ -231,7 +230,8 @@ test("CLI rejects path traversal before writing", async (t) => {
   });
   const script = path.join(
     labRoot,
-    "packages",
+    "legacy",
+    "hermes-skills",
     "dubsar-project-continuity",
     "scripts",
     "init-project-workspace.mjs",

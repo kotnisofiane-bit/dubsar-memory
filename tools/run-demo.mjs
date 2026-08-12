@@ -1,32 +1,40 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { runAuditValidation } from "../packages/dubsar-audit-readiness/scripts/validate-audit-workspace.mjs";
-import { runProjectValidation } from "../packages/dubsar-project-continuity/scripts/validate-project-workspace.mjs";
+
+import {
+  buildMemoryResumeCapsule,
+  buildMemoryRoute,
+  inspectWorkspace,
+} from "../packages/dubsar-project-continuity/runtime/index.mjs";
+
+const PRODUCER = Object.freeze({
+  name: "@dubsar/project-continuity",
+  version: "0.3.0-dev",
+});
 
 export async function runDemo(root) {
-  const audit = await runAuditValidation(
-    path.join(root, "examples", "audit-readiness"),
-  );
-  const project = await runProjectValidation(
-    path.join(root, "examples", "project-continuity"),
-  );
+  const start = path.join(root, "examples", "memory-vnext-project");
+  const inspection = await inspectWorkspace({ start });
+  const capsule = buildMemoryResumeCapsule({ inspection, producer: PRODUCER });
+  const route = buildMemoryRoute({ inspection });
+  const memory = inspection.evaluation.memory;
   return {
     status:
-      audit.status === "valid" &&
-      audit.preparation_status === "ready_for_human_review" &&
-      project.status === "valid"
+      inspection.evaluation.integrity.status === "valid" &&
+      capsule.format === "dubsar.resume-capsule/3" &&
+      route.format === "dubsar.memory-route/2"
         ? "pass"
         : "fail",
-    audit: {
-      structural_status: audit.status,
-      preparation_status: audit.preparation_status,
-      counts: audit.counts,
-      disclaimer: "No audit result or certification was produced.",
-    },
     project: {
-      continuity_status: project.continuity_status,
-      counts: project.counts,
-      next_preparation_step: project.next_preparation_step,
+      workspace_mode: "memory_vnext",
+      integrity: inspection.evaluation.integrity.status,
+      readiness: inspection.evaluation.readiness.status,
+      active_work_id: capsule.active_work?.work_id ?? null,
+      checkpoint_count: memory.checkpoints.length,
+      next_action: capsule.next_action.code,
+      route_action: route.guidance.action,
+      shared_snapshot_sha256: capsule.project.shared_snapshot_sha256,
+      snapshot_sha256: capsule.project.snapshot_sha256,
       disclaimer: "No project action was executed or authorized.",
     },
   };
@@ -36,7 +44,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const result = await runDemo(root);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  if (result.status !== "pass") {
-    process.exitCode = 1;
-  }
+  if (result.status !== "pass") process.exitCode = 1;
 }

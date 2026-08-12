@@ -43,6 +43,14 @@ is important. Record confidentiality concerns separately.
 6. Ask a human to confirm priority and whether the map is complete enough for
    the approved scope.
 
+## Review gate
+
+For every material trust boundary or sensitive external effect, follow [the
+common review protocol](../dubsar-audit-readiness/references/review-protocol.md).
+Use one security reviewer by default. Add architecture or reliability only for
+an applicable cross-cutting current-scope risk, and use a challenger only if a
+costly control decision remains contested before human confirmation.
+
 ## Output
 
 Write `sensitive-actions.json` with one entry per action:

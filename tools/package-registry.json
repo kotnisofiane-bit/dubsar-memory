@@ -1,0 +1,11 @@
+{
+  "format": "dubsar.package-registry/1",
+  "packages": [
+    {
+      "name": "dubsar-project-continuity",
+      "path": "packages/dubsar-project-continuity",
+      "version": "0.3.0-dev",
+      "release_review": "pending"
+    }
+  ]
+}

@@ -1,4 +1,0 @@
-interface:
-  display_name: "DUBSAR Project Continuity"
-  short_description: "Keep project work bounded and resumable"
-  default_prompt: "Use $dubsar-project-continuity to automatically reuse or initialize this project's lightweight local continuity workspace and keep the work bounded, verifiable, and resumable."

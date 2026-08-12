@@ -210,6 +210,7 @@ export async function validateAuditWorkspace(root) {
   );
   const reservedArtifactPaths = new Set([
     ...REQUIRED_FILES.map((file) => file.toLowerCase()),
+    "audit-preparation-summary.md",
     "manifest.sha256.json",
   ]);
   let inventoryHasUnlinkedItem = false;

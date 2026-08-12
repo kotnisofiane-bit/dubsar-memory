@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { initAuditWorkspace } from "../packages/dubsar-audit-readiness/scripts/init-audit-workspace.mjs";
-import { initProjectWorkspace } from "../packages/dubsar-project-continuity/scripts/init-project-workspace.mjs";
+import { initProjectWorkspace } from "../legacy/hermes-skills/dubsar-project-continuity/scripts/init-project-workspace.mjs";
 
 const UUID_V4 =
   "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";

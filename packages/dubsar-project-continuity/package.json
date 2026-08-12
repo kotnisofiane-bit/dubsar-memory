@@ -1,0 +1,24 @@
+{
+  "name": "@dubsar/project-continuity",
+  "version": "0.3.0-dev",
+  "type": "module",
+  "bin": {
+    "dubsar": "bin/dubsar.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    ".claude-plugin",
+    ".codex-plugin",
+    ".cursor-plugin",
+    "bin",
+    "runtime",
+    "skills/checkpoint-project-context",
+    "skills/resume-project-context",
+    "FILES.sha256.json",
+    "LICENSE",
+    "PROVENANCE.json",
+    "README.md"
+  ]
+}

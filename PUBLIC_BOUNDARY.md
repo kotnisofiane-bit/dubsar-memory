@@ -1,55 +1,50 @@
 # Public boundary
 
-These packs are a deliberately small, offline preparation layer.
-
-## Relationship to DUBSAR
-
-The MIT license applies only to the files in this repository. These packs are
-a public adaptation of the DUBSAR governance doctrine, not a distribution of
-the separate private DUBSAR product, Core, or runtime. See the
-[DUBSAR website](https://dubsar.ai/) and
-[public documentation](https://github.com/kotnisofiane-bit/DUBSAR) for public
-product context.
+This repository contains a small public developer product for local project
+continuity.
 
 ## Included
 
-- portable Agent Skills;
-- a lightweight public adaptation of DUBSAR governance doctrine through local
-  contracts and deterministic helpers;
-- deterministic local scripts using only Node.js built-ins;
-- synthetic examples and non-authoritative templates;
-- local validation, hashing, inventory, and human-review preparation;
-- thin manifests for Claude Code, Codex, Cursor, and Hermes-compatible skills.
+- the dependency-free Continuity runtime and CLI;
+- the active resume and checkpoint skills;
+- deterministic project views and resume capsules;
+- the `.dubsar/` Work, Knowledge, checkpoints and local-selection model for new projects;
+- read compatibility for two-file Continuity Lite and unchanged legacy workspaces;
+- the local read-only Workbench and Windows launcher;
+- optional personal memory with a separate fixed local root;
+- synthetic fixtures, tests, inventories, and conformance gates.
 
 ## Excluded
 
-- production DUBSAR implementation details;
-- DUBSAR Core, MCP servers, product hooks, enforcement runtimes, background
-  orchestration, and canonical session or execution records;
-- internal tool names, routes, protocols, repositories, and deployment topology;
-- production connectors, credentials, activation, and billing;
-- enforcement, runtime interception, or automatic permission grants;
-- claims of certification, legal compliance, or completed audit.
+- the private DUBSAR B2B Core and Control Tower;
+- Hermes orchestration and production agent governance;
+- Audit Readiness and Local Operator from the active marketplace and release
+  registry. Historical Audit Readiness sources remain frozen for compatibility
+  tests and are not an active product;
+- MCP servers, hooks, connectors, network services, billing, and deployment;
+- mandatory reviewers, challengers, subagents, or review waves;
+- private routing topology, weights, scoring, and governance structures;
+- claims of certification, compliance, approval, or completed work.
 
-The public packs may say that evidence is structurally ready for human review.
-They must never conclude that a system is compliant, safe, approved, or
-certified.
+## Authority
 
-## Safe execution contract
+Project files are the only project authority. Capsules, dashboards, personal
+memory, and agent summaries are derived or advisory. They never authorize an
+execution, merge, publication, or deployment.
 
-Scripts:
+The runtime is offline. Read commands do not modify projects. Initialization,
+migration, Work, Knowledge, checkpoint and generated-context writes require a
+byte-specific preview and explicit confirmation. Each steady-state apply
+changes one file. Migration publishes one new directory atomically and retains
+the old workspace. Personal memory is opt-in, stored separately, and never
+influences project readiness or routing.
 
-- accept an explicit input or output directory;
-- reject traversal and symbolic links;
-- never read environment variables;
-- never access the network;
-- never delete or overwrite a non-empty target;
-- write stable UTF-8 JSON with sorted keys and SHA-256 inventories;
-- report only relative paths.
+The runtime never writes `AGENTS.md`, `CLAUDE.md`, Cursor rules, Git hooks, or
+branch metadata. Native Plan, Goal and subagent capabilities remain under the
+host and user; DUBSAR can only emit bounded advisory recommendations.
 
-## Release gate
+## Provenance
 
-Development mode checks the executable and documentation boundary. Release
-mode additionally requires the approved MIT licence, an approved provenance
-manifest, a deterministic file inventory, passing tests, and a clean private
-signal scan.
+No code from internal experiments or private DUBSAR products is copied into
+this public branch. Conceptual provenance and the clean-room boundary are
+recorded in `docs/CONCEPTUAL_PROVENANCE.md`.
