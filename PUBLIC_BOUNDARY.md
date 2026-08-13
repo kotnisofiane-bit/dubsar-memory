@@ -1,17 +1,18 @@
 # Public boundary
 
-This repository contains a small public developer product for local project
-continuity.
+This repository contains the public DUBSAR Memory engine and its first local
+developer workflow, DUBSAR Continuity.
 
 ## Included
 
-- the dependency-free Continuity runtime and CLI;
-- the active resume and checkpoint skills;
+- the dependency-free Memory/Continuity runtime and CLI;
+- two optional resume and checkpoint host adapters;
 - deterministic project views and resume capsules;
 - the `.dubsar/` Work, Knowledge, checkpoints and local-selection model for new projects;
 - read compatibility for two-file Continuity Lite and unchanged legacy workspaces;
 - the local read-only Workbench and Windows launcher;
-- optional personal memory with a separate fixed local root;
+- optional personal memory with a separate fixed local root and no project
+  authority;
 - synthetic fixtures, tests, inventories, and conformance gates.
 
 ## Excluded
@@ -28,9 +29,9 @@ continuity.
 
 ## Authority
 
-Project files are the only project authority. Capsules, dashboards, personal
-memory, and agent summaries are derived or advisory. They never authorize an
-execution, merge, publication, or deployment.
+Project files are the only project authority. Capsules, routes, dashboards,
+personal memory, and agent summaries are derived or advisory. They never
+authorize an execution, merge, publication, or deployment.
 
 The runtime is offline. Read commands do not modify projects. Initialization,
 migration, Work, Knowledge, checkpoint and generated-context writes require a

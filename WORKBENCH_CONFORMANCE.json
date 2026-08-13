@@ -440,8 +440,8 @@
     },
     {
       "path": "packages/dubsar-operator-core/src/review-ledger.mjs",
-      "bytes": 45178,
-      "sha256": "804a6702e606bcd19952547088c97e871132580f603c2e02b65235ce8a8fb3a9",
+      "bytes": 45560,
+      "sha256": "5a56758052f79936c09e06ab016ec7dfa69ec3c9fc1b91d91c72c2d77d4b4800",
       "role": "runtime"
     },
     {
@@ -835,5 +835,5 @@
       "role": "runtime"
     }
   ],
-  "content_root_sha256": "cb698309b5d6b4db39e4163d3ca860f39cead00285755e0ffc43c26431c04e5f"
+  "content_root_sha256": "35c8f0d9fac9b2e5e2d2bb91170679ea90fc0a9b66de79a1ac1ff75c23b4a49b"
 }

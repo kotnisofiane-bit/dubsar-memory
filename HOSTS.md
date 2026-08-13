@@ -1,8 +1,7 @@
-# Host installation
+# Optional host adapters
 
-DUBSAR Continuity ships the same two active skills and the same local runtime
-for Codex, Claude Code, and Cursor. Host manifests add no hooks, network
-connections, background services, or execution authority.
+DUBSAR Memory is a CLI-first engine. Codex, Claude Code, and Cursor can consume
+the same runtime through two optional adapters, but no host is required.
 
 ## Requirements
 
@@ -10,29 +9,41 @@ connections, background services, or execution authority.
 - a complete local copy of `packages/dubsar-project-continuity`;
 - no global `dubsar` command.
 
-Skills resolve `bin/dubsar.mjs` from their installed plugin root, never from
-`PATH` or project content.
+Adapters resolve `bin/dubsar.mjs` from their installed package root, never from
+`PATH`, the current directory, or project content.
+
+## Exposed adapters
+
+- `resume-project-context` reads a capsule and stops after reporting recorded
+  state unless the user asks for more;
+- `checkpoint-project-context` prepares one explicit, bounded project-memory
+  update through the normal preview/apply contract.
+
+Neither adapter replaces the host's native plan, goal, permission model, or
+subagent behavior.
 
 ## Claude Code
 
 Add the repository as a local marketplace and install
-`dubsar-project-continuity`. The plugin exposes only
-`resume-project-context` and `checkpoint-project-context`.
+`dubsar-project-continuity`. The package exposes only the two adapters above.
 
 ## Codex
 
 Add the repository root as a local marketplace, inspect the package, install
-it, then restart Codex. Native Codex planning, goals, and subagents remain
+it, and restart Codex. Native Codex planning, goals, and subagents remain
 independent of DUBSAR.
 
 ## Cursor
 
 Copy the complete `packages/dubsar-project-continuity` directory into Cursor's
-local plugin directory, then reload the window. Do not copy only `skills/`:
-the skills require the packaged runtime.
+local plugin directory, then reload the window. Copying only `skills/` is not
+sufficient because adapters invoke the packaged runtime.
 
-## Non-goals
+## Product boundary
 
-Hermes belongs to the separate DUBSAR B2B ecosystem and is not an installation
-target of this public developer product. Installing this package never starts
-MCP, a backend, a hook, a daemon, a reviewer workflow, or a deployment action.
+Hermes and the DUBSAR B2B Control Tower are separate products. Installing this
+public package never starts MCP, a backend, a hook, a daemon, a reviewer
+workflow, a deployment action, or a model request.
+
+For non-host use, call the CLI directly as described in
+[`docs/INTEGRATION.md`](docs/INTEGRATION.md).

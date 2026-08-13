@@ -3,16 +3,18 @@
   "version": "0.3.0-dev",
   "private": true,
   "type": "module",
-  "description": "Local, offline project continuity and a read-only Workbench for coding agents.",
+  "description": "Local, deterministic project-memory engine with an optional read-only Workbench.",
   "license": "MIT",
-  "homepage": "https://github.com/kotnisofiane-bit/dubsar-agent-skills#readme",
+  "homepage": "https://github.com/kotnisofiane-bit/dubsar-memory#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kotnisofiane-bit/dubsar-agent-skills.git"
+    "url": "git+https://github.com/kotnisofiane-bit/dubsar-memory.git"
   },
   "keywords": [
-    "agent-skills",
     "ai-agents",
+    "deterministic",
+    "memory-engine",
+    "offline-first",
     "project-continuity",
     "project-memory",
     "claude-code",

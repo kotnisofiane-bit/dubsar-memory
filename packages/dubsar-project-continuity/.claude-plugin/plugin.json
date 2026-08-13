@@ -1,11 +1,11 @@
 {
   "name": "dubsar-project-continuity",
   "version": "0.3.0-dev",
-  "description": "Resume and checkpoint local project context without replacing native agent tools.",
+  "description": "Local project-memory runtime with optional resume and checkpoint adapters.",
   "author": {
     "name": "DUBSAR"
   },
-  "homepage": "https://github.com/kotnisofiane-bit/dubsar-agent-skills/tree/main/packages/dubsar-project-continuity",
-  "repository": "https://github.com/kotnisofiane-bit/dubsar-agent-skills",
+  "homepage": "https://github.com/kotnisofiane-bit/dubsar-memory/tree/main/packages/dubsar-project-continuity",
+  "repository": "https://github.com/kotnisofiane-bit/dubsar-memory",
   "license": "MIT"
 }

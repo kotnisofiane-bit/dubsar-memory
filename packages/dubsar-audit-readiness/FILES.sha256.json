@@ -1,10 +1,10 @@
 {
   "format": "dubsar.public-file-inventory/1",
-  "root_sha256": "799c601c7288c1580979f42af3aae64f517f7b7e62ffabf8cb472bf4745a1d2e",
+  "root_sha256": "6ae5e574b61fb6b5657f25e8ab0f9bc78f8bee406e79332a935571114e1c03e3",
   "files": [
     {
       "path": ".claude-plugin/plugin.json",
-      "sha256": "379215c1118e0889c71efdb24b9c249b26662ecb2cb69370684f6133ded80b98"
+      "sha256": "00e2a81c67853a0aec444d837196e135e4eeb5eaa22472121c022d0970ba6f98"
     },
     {
       "path": ".codex-plugin/plugin.json",
@@ -12,7 +12,11 @@
     },
     {
       "path": ".cursor-plugin/plugin.json",
-      "sha256": "94670caf3a0277416e977f4e9fd7b4a1d6f2fa8ff7bd055c15ad763ed241998d"
+      "sha256": "31ea6d369cbf263b9bed4ae48e5cd2329d8638c2e53b3de9eb0bb797fec043a3"
+    },
+    {
+      "path": "LEGACY.md",
+      "sha256": "2bb417f62dd5b90c7609a6fcd4918a1528e09c808eab26188bc422cf63f88c48"
     },
     {
       "path": "LICENSE",

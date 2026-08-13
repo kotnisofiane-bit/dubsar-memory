@@ -1343,6 +1343,17 @@ export async function readReviewLedger(workspaceRoot, identities) {
       return output;
     }
 
+    let declaredAggregateBytes = 0;
+    for (const candidate of initial.candidates) {
+      const size = Number(candidate.stat.size);
+      if (size <= REVIEW_LIMITS.maxReceiptBytes) {
+        declaredAggregateBytes += size;
+        if (declaredAggregateBytes > REVIEW_LIMITS.maxAggregateReceiptBytes) {
+          fail("REVIEW_LEDGER_SIZE_LIMIT_EXCEEDED");
+        }
+      }
+    }
+
     const warnings = [];
     const retained = [];
     let aggregateBytes = 0;

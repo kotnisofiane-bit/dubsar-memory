@@ -1,10 +1,10 @@
 {
   "format": "dubsar.public-file-inventory/1",
-  "root_sha256": "be0f5c84e7fc6c680e6c62c81f28a6ae05ddb413750c62a6826998abb6d99436",
+  "root_sha256": "6d118bbc4894a4436f36c76c009234a1addddc67ee1c15a2fa9ba349e77d7d33",
   "files": [
     {
       "path": ".claude-plugin/plugin.json",
-      "sha256": "cc020b8342007ade537f47f213c5d8dea06d3711dfb8286229a325a654c82de4"
+      "sha256": "028adccc8ca73b49b0a7ce6eb16fe253e30e8442fdd07ce3733d28dc2b08a461"
     },
     {
       "path": ".codex-plugin/plugin.json",
@@ -12,7 +12,7 @@
     },
     {
       "path": ".cursor-plugin/plugin.json",
-      "sha256": "e0f51f3c172e49e4db48608bcf2c45d249a61c777057227b5dc7e431cc328afb"
+      "sha256": "7eb8ad55f5483bed5d2c0985061ebbe7e30dab0fdf936602d682d661a9291b14"
     },
     {
       "path": "bin/dubsar.mjs",
@@ -32,7 +32,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "a0169ba25f2690d5c028ebf4347783cd6a168f34891901cf47530c0427853384"
+      "sha256": "7de01a965bcdcb326b4eedd2a4856323cb0b14d439f815429c91dee56519a3d8"
     },
     {
       "path": "runtime/artifact-lifecycle.mjs",

@@ -1,85 +1,87 @@
-# DUBSAR Project Continuity
+# DUBSAR Memory runtime
 
-A dependency-free local runtime and two lightweight skills for carrying a
-verified project summary across sessions and coding hosts.
+`@dubsar/project-continuity` is the dependency-free public runtime behind
+DUBSAR Memory and the Continuity CLI. It captures one local project-memory
+workspace, validates its closed contracts, and produces versioned JSON views
+for humans, agents, and backend processes.
 
-New projects use `.dubsar/`, a human-readable project-memory format:
+The package includes two optional host adapters. They are deliberately thin;
+the runtime and CLI remain usable without a plugin host.
+
+## Storage
+
+New projects use `.dubsar/`:
 
 ```text
 .dubsar/
 |-- manifest.json       # stable project identity
-|-- checkpoints.json    # append-order continuity records
-|-- work/*.md           # shared work items
-|-- knowledge/*.md      # explicitly promoted project knowledge
+|-- checkpoints.json    # hash-chained, append-order continuity records
+|-- work/*.md           # shared Work items
+|-- knowledge/*.md      # approved project Knowledge
 |-- inbox/*.md          # local advisory notes, ignored by Git
-|-- local.json          # optional local work selection, ignored by Git
+|-- local.json          # optional local Work selection, ignored by Git
 `-- generated/          # disposable views, ignored by Git
 ```
 
-Markdown files use one strict JSON frontmatter object. Work and Knowledge are
-inventoried from safe filenames, so creating one item never requires a fake
-multi-file transaction. Existing `.dubsar-project` Lite and four-file legacy
-workspaces remain readable. Migration is explicit, digest-confirmed, and keeps
-the old workspace unchanged as immutable migration evidence.
+Work and Knowledge Markdown use strict JSON frontmatter. Routed facts live in
+validated metadata; the Markdown body is advisory display data and is never
+interpreted as an instruction.
 
-## Active skills
-
-- `$resume-project-context`: reads a digest-verified capsule and explains the
-  recorded mission, work package, blockers, evidence state, and next action.
-- `$checkpoint-project-context`: previews one bounded update and applies it only
-  after explicit confirmation of the exact digest.
-
-The package does not require reviewers, subagents, a backend, MCP, hooks, or a
-global CLI. Native planning and goals remain host features. Resume may suggest
-planning when work is broad and a goal when long work needs a measurable stop.
+The manifest does not maintain a second file registry. Safe directory
+enumeration derives the inventory so a normal steady-state write changes one
+file.
 
 ## CLI
 
 ```bash
-node "<plugin-root>/bin/dubsar.mjs" init --start . --proposal <init.json> --json
-node "<plugin-root>/bin/dubsar.mjs" resume --start . --capsule --json
-node "<plugin-root>/bin/dubsar.mjs" route --start . --json
-node "<plugin-root>/bin/dubsar.mjs" work list --start . --json
-node "<plugin-root>/bin/dubsar.mjs" knowledge list --start . --json
-node "<plugin-root>/bin/dubsar.mjs" inbox list --start . --json
-node "<plugin-root>/bin/dubsar.mjs" context --start . --json
-node "<plugin-root>/bin/dubsar.mjs" history --start . --json
-node "<plugin-root>/bin/dubsar.mjs" lots --start . --json
-node "<plugin-root>/bin/dubsar.mjs" precedents --start . --lot <lot-id> --json
-node "<plugin-root>/bin/dubsar.mjs" checkpoint --start . --proposal <proposal.json> --json
-node "<plugin-root>/bin/dubsar.mjs" close --start .
-node "<plugin-root>/bin/dubsar.mjs" migrate --to-memory-vnext --start . --json
+node "<package-root>/bin/dubsar.mjs" resume --start . --capsule --json
+node "<package-root>/bin/dubsar.mjs" route --start . --json
+node "<package-root>/bin/dubsar.mjs" context --start . --json
+node "<package-root>/bin/dubsar.mjs" history --start . --json
+node "<package-root>/bin/dubsar.mjs" work list --start . --json
+node "<package-root>/bin/dubsar.mjs" knowledge list --start . --json
 ```
 
-`resume`, `route`, `history`, `lots`, and `precedents` are read-only. `init` and
-`checkpoint` require a preview and exact digest confirmation. `close` requires a human TTY.
-No command selects or executes a work package automatically.
+Initialization and changes use preview plus exact digest confirmation:
 
-In a vNext workspace, one local work item may be selected explicitly. That
-selection changes only the contextual digest; it never changes the shared
-snapshot or chooses work for another developer. Project Knowledge reaches a
-context only when an approved entry is explicitly linked by the selected work.
-When `local.json` is absent after a clean clone, the selection is simply null;
-the user may select a Work explicitly on that machine.
+```bash
+node "<package-root>/bin/dubsar.mjs" init --start . --proposal <init.json> --json
+node "<package-root>/bin/dubsar.mjs" checkpoint --start . --proposal <proposal.json> --json
+node "<package-root>/bin/dubsar.mjs" close --start .
+```
 
-`context` writes nothing by default. `context --write` uses the same
-preview/digest/apply protocol and writes only `generated/context.md`. It never
-copies data into `AGENTS.md`, `CLAUDE.md`, or Cursor rules.
+`close` requires a human interactive terminal. No command selects or executes
+Work automatically. `context` writes nothing unless `--write` is explicit, and
+then targets only `generated/context.md` through the normal preview/apply path.
 
-Two equivalent unsupported `attempt` checkpoints for the same action, gate,
-failure fingerprint, and unchanged material state yield advisory
-`reframe_recommended`. They do not block work or invoke reviewers.
+## Memory guidance
 
-`route` exposes Memory Guidance v2: one explainable advisory action, a factual
-memory state, an artifact lifecycle projection, exact-only relations, and
-optional native Plan/Goal guidance. It never scores, ranks, chooses work, or
-activates a host tool.
+`route` returns one explainable advisory action, factual memory state, bounded
+artifact lifecycle, exact-only relations, and optional native Plan/Goal
+guidance. It never scores, ranks, chooses Work, starts a host feature, invokes a
+reviewer, or calls a model.
 
-Personal memory is optional, separate from project state, and never included in
-project readiness or capsules.
+Two equivalent recorded attempt failures with no material progress can produce
+`reframe_recommended`. This is an anti-loop warning, not a block or automatic
+escalation.
 
-Earlier workflow skills are preserved under the repository-level `legacy/`
-directory but are not packaged or exposed by host manifests.
+## Optional host adapters
 
-This vNext snapshot is local development work. Its release provenance is
-`draft/pending`; no publication is authorized by the current manifests.
+- `resume-project-context` reads and explains a digest-verified capsule;
+- `checkpoint-project-context` prepares one bounded write through the same CLI.
+
+Both resolve `bin/dubsar.mjs` from the installed package root, never from `PATH`
+or project content. Native planning, goals, permissions, and subagents stay
+under the host and user.
+
+## Compatibility and isolation
+
+Existing `.dubsar-project` Lite and four-file legacy workspaces remain readable.
+Migration is explicit and digest-confirmed; it keeps the old workspace unchanged
+and binds it by SHA-256. No read command migrates silently.
+
+Personal memory is optional and separate. It never changes project readiness,
+routing, snapshots, or resume capsules.
+
+This is a source technical preview. Package release review and provenance remain
+pending; no npm publication or stable JavaScript API is declared.
