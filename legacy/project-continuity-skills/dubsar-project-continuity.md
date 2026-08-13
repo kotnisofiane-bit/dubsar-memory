@@ -45,12 +45,12 @@ For a single step, prefer `frame-project-mission`,
 8. Render a stable handoff that states facts, limitations, the next preparation
    step, and actions that remain unauthorized.
 
-Read [the data contracts](references/data-contracts.md) before creating or
+Read [the data contracts](../hermes-skills/dubsar-project-continuity/references/data-contracts.md) before creating or
 repairing the JSON files.
 For a material gate, follow [the review and challenge
-protocol](references/review-protocol.md) before requesting human approval.
+protocol](../hermes-skills/dubsar-project-continuity/references/review-protocol.md) before requesting human approval.
 Record the result with [the immutable receipt
-contract](references/review-receipt-contract.md).
+contract](../hermes-skills/dubsar-project-continuity/references/review-receipt-contract.md).
 
 ## Local helpers
 

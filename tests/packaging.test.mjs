@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  cp,
   mkdir,
   mkdtemp,
   readFile,
@@ -77,6 +78,70 @@ test("the public package passes the development boundary", async () => {
     "development",
   );
   assert.equal(result.status, "pass", JSON.stringify(result.findings));
+});
+
+test("the public package metadata contract remains closed", async (t) => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "dubsar-package-metadata-"));
+  t.after(async () => {
+    await rm(tempRoot, { recursive: true, force: true });
+  });
+  const packageRoot = path.join(tempRoot, "package");
+  await cp(
+    path.join(labRoot, "packages", "dubsar-project-continuity"),
+    packageRoot,
+    { recursive: true },
+  );
+  const manifestPath = path.join(packageRoot, "package.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  manifest.repository.directory = "packages/other";
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
+  const result = await checkBoundary(packageRoot, "development");
+  assert.equal(result.status, "fail");
+  assert.ok(result.findings.some((finding) =>
+    finding.rule === "PB120" &&
+    finding.path === "package.json" &&
+    finding.category === "unsafe package manifest"));
+});
+
+test("the continuity boundary keeps strategy checks generic", async (t) => {
+  const checkerSource = await readFile(
+    path.join(labRoot, "tools", "check-public-boundary.mjs"),
+    "utf8",
+  );
+  const continuityValidator = checkerSource.slice(
+    checkerSource.indexOf("async function validateContinuityRuntime"),
+    checkerSource.indexOf("function scanInstructionText"),
+  );
+  assert.equal(
+    /\/\\b\(\?:[A-Za-z_$][A-Za-z0-9_$|]+\)\\b\/u/u.test(continuityValidator),
+    false,
+  );
+
+  const sourcePackage = path.join(labRoot, "packages", "dubsar-project-continuity");
+  for (const [name, declaration] of [
+    ["weighted", "export const syntheticPolicy = { score: 1 };"],
+    ["automatic", "export const syntheticPolicy = { auto_execute: true };"],
+  ]) {
+    await t.test(name, async (subtest) => {
+      const tempRoot = await mkdtemp(path.join(tmpdir(), `dubsar-generic-${name}-`));
+      subtest.after(async () => {
+        await rm(tempRoot, { recursive: true, force: true });
+      });
+      const packageRoot = path.join(tempRoot, "package");
+      await cp(sourcePackage, packageRoot, { recursive: true });
+      const routerPath = path.join(packageRoot, "runtime", "memory-router.mjs");
+      const routerSource = await readFile(routerPath, "utf8");
+      await writeFile(routerPath, `${routerSource}\n${declaration}\n`, "utf8");
+
+      const result = await checkBoundary(packageRoot, "development");
+      assert.equal(result.status, "fail");
+      assert.ok(result.findings.some((finding) =>
+        finding.rule === "PB130" &&
+        finding.path === "runtime/memory-router.mjs" &&
+        finding.category === "protected routing or automatic execution primitive"));
+    });
+  }
 });
 
 test("host manifests expose exactly resume and checkpoint", async () => {

@@ -33,7 +33,7 @@ Translate one candidate lot into an explicit, reviewable local work agreement.
 ## Review gate
 
 For material boundaries, permissions, migrations, deployments, or recovery
-choices, follow [the common review protocol](../dubsar-project-continuity/references/review-protocol.md).
+choices, follow [the common review protocol](../../hermes-skills/dubsar-project-continuity/references/review-protocol.md).
 Select the smallest relevant set, one reviewer by default and at most three
 only for cross-cutting current-scope risk. Use a challenger only when the
 bounded execution decision remains contested.

@@ -2,7 +2,9 @@
 
 ## Supported version
 
-Security fixes target the latest release on the default branch.
+While DUBSAR Memory is a public technical preview, security fixes target the
+current default branch. A versioned support policy will be documented before a
+stable release.
 
 ## Reporting
 
@@ -15,10 +17,11 @@ impact, and whether the report involves a generated audit bundle.
 
 ## Security boundary
 
-The public memory engine and Workbench do not require credentials, network
-access, hooks, MCP servers, or access to a private DUBSAR service. Treat any
-contribution that adds one of those capabilities as a security-sensitive design
-change requiring explicit maintainer review.
+The public memory engine and Workbench do not require credentials, outbound or
+remote network access, hooks, MCP servers, or access to a private DUBSAR
+service. The optional Workbench uses a local loopback HTTP session. Treat any
+contribution that adds remote connectivity or one of the other capabilities as
+a security-sensitive design change requiring explicit maintainer review.
 
 Project memory is not a secrets vault. Do not record credentials, private keys,
 access tokens, customer data, or unnecessary personal data in Work, Knowledge,

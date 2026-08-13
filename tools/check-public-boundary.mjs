@@ -607,7 +607,6 @@ async function validateContinuityRuntime(files, findings) {
       addFinding(findings, "PB130", relative, "private or network component reference");
     }
   }
-  const protectedStrategy = /\b(?:STATIONS|PATHS|CHANNELS|ChannelAddress|TransitionRecord|MathScoreBundle|PostureResult|POSTURE_RANK|ReplayReport|TrustLedger|HumanGate|path_id|channel_ids|A_ctx|S_eff|I_final)\b/u;
   const weightedOutput = /\b(?:score|rank|weight|threshold)\s*:/iu;
   for (const relative of [
     "runtime/artifact-lifecycle.mjs",
@@ -618,7 +617,7 @@ async function validateContinuityRuntime(files, findings) {
     "runtime/memory-vnext-evaluator.mjs",
   ]) {
     const source = await read(relative);
-    if (protectedStrategy.test(source) || weightedOutput.test(source) || /auto_execute\s*:\s*true/u.test(source)) {
+    if (weightedOutput.test(source) || /auto_execute\s*:\s*true/u.test(source)) {
       addFinding(findings, "PB130", relative, "protected routing or automatic execution primitive");
     }
   }
@@ -677,7 +676,10 @@ function inspectJson(text, relative, findings) {
     addFinding(findings, "PB010", relative, "forbidden manifest key");
   }
   if (relative === "package.json") {
-    const expectedKeys = ["bin", "engines", "files", "name", "type", "version"];
+    const expectedKeys = [
+      "bin", "description", "engines", "files", "homepage", "license", "name",
+      "repository", "type", "version",
+    ];
     const expectedFiles = [
       ".claude-plugin", ".codex-plugin", ".cursor-plugin", "bin", "runtime",
       "skills/checkpoint-project-context", "skills/resume-project-context",
@@ -686,6 +688,13 @@ function inspectJson(text, relative, findings) {
     if (
       !exactKeys(value, expectedKeys) ||
       value.name !== "@dubsar/project-continuity" ||
+      value.description !== "Local, deterministic project-memory engine with a bounded Continuity CLI and optional thin host adapters." ||
+      value.license !== "MIT" ||
+      value.homepage !== "https://github.com/kotnisofiane-bit/dubsar-memory#readme" ||
+      !exactKeys(value.repository, ["directory", "type", "url"]) ||
+      value.repository.type !== "git" ||
+      value.repository.url !== "git+https://github.com/kotnisofiane-bit/dubsar-memory.git" ||
+      value.repository.directory !== "packages/dubsar-project-continuity" ||
       value.type !== "module" ||
       typeof value.version !== "string" ||
       !/^\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?$/iu.test(value.version) ||

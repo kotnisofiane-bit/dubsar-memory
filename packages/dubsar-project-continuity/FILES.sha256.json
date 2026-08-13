@@ -1,6 +1,6 @@
 {
   "format": "dubsar.public-file-inventory/1",
-  "root_sha256": "6d118bbc4894a4436f36c76c009234a1addddc67ee1c15a2fa9ba349e77d7d33",
+  "root_sha256": "156538210aacd805f4f96cbc5a865c356e40858e0fe6e4591100be1f37971644",
   "files": [
     {
       "path": ".claude-plugin/plugin.json",
@@ -24,7 +24,7 @@
     },
     {
       "path": "package.json",
-      "sha256": "a7d945891303042969ae8964558ed44e1a17d883a6818caca36b73113e556f74"
+      "sha256": "d0617c21a23ff9af57b7974fbf36e2f7005c827d1ff0f4bba6ca368c1fae01e6"
     },
     {
       "path": "PROVENANCE.json",

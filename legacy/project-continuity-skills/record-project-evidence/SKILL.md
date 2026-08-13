@@ -45,7 +45,7 @@ actually exercises that workflow.
 
 Routine evidence append needs no reviewer. If interpreting the evidence would
 change a material completion, release, or recovery decision, follow [the common
-review protocol](../dubsar-project-continuity/references/review-protocol.md)
+review protocol](../../hermes-skills/dubsar-project-continuity/references/review-protocol.md)
 with one verification reviewer. Add a challenger only if the evidence-backed
 decision remains materially contested; do not review the append itself twice.
 
