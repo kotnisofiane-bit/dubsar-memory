@@ -1,0 +1,54 @@
+{
+  "authority": "local_preparation_record",
+  "blockers": [],
+  "decisions": [],
+  "evidence": [
+    {
+      "content_redacted": false,
+      "id": "evidence-example-001",
+      "statement": "The synthetic fixture was reported as inspected.",
+      "status": "reported"
+    }
+  ],
+  "format": "dubsar.workbench-view/1",
+  "integrity": {
+    "diagnostics": [],
+    "status": "valid"
+  },
+  "next_action": {
+    "code": "prepare_approved_lot",
+    "label": "Prepare the approved lot within its recorded contract."
+  },
+  "overview": {
+    "counts": {
+      "complete_lots": 0,
+      "evidence_entries": 1,
+      "lots": 1
+    },
+    "summary": "Produce a user-visible synthetic proof.",
+    "title": "Synthetic portal proof"
+  },
+  "privacy": {
+    "redacted_fields": 0,
+    "truncated_fields": 0
+  },
+  "producer": {
+    "name": "@dubsar/operator-cli",
+    "version": "0.1.0-dev"
+  },
+  "readiness": {
+    "reasons": [],
+    "status": "ready"
+  },
+  "source": {
+    "domain": "project",
+    "formats": [
+      "dubsar.execution-contract/1",
+      "dubsar.project-evidence/2",
+      "dubsar.project-lots/1",
+      "dubsar.project-mission/1"
+    ],
+    "id": "mission-example-001",
+    "snapshot_sha256": "170fa016ecb14730afad443a13a7058cbd8da6cc45e52242eae3c17952fc4d63"
+  }
+}

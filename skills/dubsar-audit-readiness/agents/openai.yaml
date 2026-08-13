@@ -1,4 +1,0 @@
-interface:
-  display_name: "DUBSAR Audit Readiness"
-  short_description: "Prepare a bounded automation audit"
-  default_prompt: "Use $dubsar-audit-readiness to automatically reuse or initialize one local audit case and prepare its automation evidence for bounded human review."

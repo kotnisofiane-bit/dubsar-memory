@@ -1,34 +1,43 @@
 {
-  "name": "dubsar-agent-skills",
-  "version": "0.1.1",
+  "name": "dubsar-continuity",
+  "version": "0.3.0-dev",
   "private": true,
   "type": "module",
-  "description": "Portable, offline Agent Skills for automation audit readiness and evidence-aware project continuity.",
+  "description": "Local, deterministic project-memory engine with an optional read-only Workbench.",
   "license": "MIT",
-  "homepage": "https://github.com/kotnisofiane-bit/dubsar-agent-skills#readme",
+  "homepage": "https://github.com/kotnisofiane-bit/dubsar-memory#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kotnisofiane-bit/dubsar-agent-skills.git"
+    "url": "git+https://github.com/kotnisofiane-bit/dubsar-memory.git"
   },
   "keywords": [
-    "agent-skills",
     "ai-agents",
-    "automation-audit",
+    "deterministic",
+    "memory-engine",
+    "offline-first",
     "project-continuity",
-    "ai-governance",
+    "project-memory",
     "claude-code",
     "codex",
-    "cursor",
-    "hermes-agent"
+    "cursor"
   ],
   "scripts": {
-    "check:boundary": "node tools/check-public-boundary.mjs --root packages/dubsar-audit-readiness --mode development && node tools/check-public-boundary.mjs --root packages/dubsar-project-continuity --mode development",
-    "check:release": "node tools/check-public-boundary.mjs --root packages/dubsar-audit-readiness --mode release && node tools/check-public-boundary.mjs --root packages/dubsar-project-continuity --mode release",
+    "check:boundary": "node tools/check-packages.mjs --mode development",
+    "check:conformance": "node tools/check-workbench-conformance.mjs --mode development",
+    "check:package-release": "node tools/check-packages.mjs --mode release",
+    "check:release": "node --input-type=module --eval \"const { spawnSync } = await import('node:child_process'); let failed = false; for (const args of [['tools/check-packages.mjs', '--mode', 'release'], ['tools/check-workbench-conformance.mjs', '--mode', 'release']]) { const result = spawnSync(process.execPath, args, { cwd: process.cwd(), stdio: 'inherit', windowsHide: true }); if (result.error || result.status !== 0) failed = true; } process.exitCode = failed ? 1 : 0;\"",
+    "check:workbench": "node tools/check-workbench-runtime.mjs",
     "demo": "node tools/run-demo.mjs",
-    "inventory": "node tools/generate-release-inventory.mjs packages/dubsar-audit-readiness packages/dubsar-project-continuity",
-    "test": "npm run check:boundary && node tools/run-tests.mjs"
+    "inventory": "node tools/check-packages.mjs --mode inventory",
+    "workbench:manage": "node packages/dubsar-workbench-launcher/bin/dubsar-workbench-open.mjs --manage",
+    "workbench:open": "node packages/dubsar-workbench-launcher/bin/dubsar-workbench-open.mjs --reviews",
+    "workbench:ui": "node packages/dubsar-operator-cli/bin/dubsar.mjs ui --start . --domain project",
+    "test": "npm run check:boundary && npm run check:workbench && npm run check:conformance && node tools/run-tests.mjs"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "acorn": "8.18.0"
   }
 }

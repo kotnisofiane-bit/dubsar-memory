@@ -12,12 +12,14 @@ import {
   rootDigest,
   sha256File,
   writeJsonExclusive,
+  writeTextExclusive,
 } from "./safe-io.mjs";
 import {
   loadAuditWorkspace,
   REQUIRED_FILES,
   validateAuditWorkspace,
 } from "./audit-model.mjs";
+import { renderAuditPreparationMarkdown } from "./render-audit-summary.mjs";
 
 export async function exportAuditBundle(input, output) {
   const sourceRoot = await openWorkspace(input);
@@ -44,6 +46,23 @@ export async function exportAuditBundle(input, output) {
   for (const file of files) {
     await copyFileExclusive(sourceRoot, file, outputRoot);
   }
+
+  const bundleValidation = await validateAuditWorkspace(outputRoot);
+  if (
+    bundleValidation.status !== "valid" ||
+    bundleValidation.preparation_status !== "ready_for_human_review"
+  ) {
+    throw new PublicPluginError("SOURCE_CHANGED_DURING_EXPORT");
+  }
+  const bundleDocuments = await loadAuditWorkspace(outputRoot);
+
+  await writeTextExclusive(
+    outputRoot,
+    "AUDIT-PREPARATION-SUMMARY.md",
+    renderAuditPreparationMarkdown(bundleDocuments, bundleValidation),
+  );
+  files.push("AUDIT-PREPARATION-SUMMARY.md");
+  files.sort();
 
   const entries = [];
   for (const file of files) {

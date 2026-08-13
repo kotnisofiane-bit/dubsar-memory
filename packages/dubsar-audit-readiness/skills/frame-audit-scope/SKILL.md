@@ -35,6 +35,15 @@ drawing conclusions.
    Record a role or pseudonymous identifier, an ISO 8601 UTC timestamp, and a
    local approval reference. Do not invent these values.
 
+## Review gate
+
+Before approval of a materially ambiguous purpose, scope, evidence boundary,
+or trust boundary, follow [the common review
+protocol](../dubsar-audit-readiness/references/review-protocol.md). Freeze its
+goal lock first. Use one product or security reviewer by default according to
+the actual ambiguity; add a challenger only if a costly boundary remains
+contested. Do not create another case from a finding.
+
 ## Output
 
 Produce `audit-scope.json` with this stable shape:
@@ -88,6 +97,9 @@ workspace.
 - Do not run or modify an automation, grant execution authority, classify legal
   compliance, certify safety, or claim that an audit was completed.
 - Preserve uncertainty and do not expand the scope without user approval.
+- Before approval, say whether anything becomes usable immediately (`no` for a
+  scope draft), what remains unauthorized, and that evidence collection will
+  not start automatically.
 
 ## Example invocation
 

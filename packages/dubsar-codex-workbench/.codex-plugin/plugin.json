@@ -1,0 +1,21 @@
+{
+  "name": "dubsar-codex-workbench",
+  "version": "0.1.0-dev",
+  "description": "Resume one explicitly selected local DUBSAR project from a verified capsule.",
+  "author": {
+    "name": "DUBSAR"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "DUBSAR Workbench Resume",
+    "shortDescription": "Resume one selected local project.",
+    "longDescription": "Private Codex adapter for reading one bounded, verified DUBSAR resume capsule without hooks, background services or network access.",
+    "developerName": "DUBSAR",
+    "category": "Productivity",
+    "capabilities": [
+      "Explicit project resume",
+      "Verified local capsule"
+    ],
+    "defaultPrompt": "Resume the explicitly selected DUBSAR project from its verified local capsule."
+  }
+}

@@ -1,21 +1,21 @@
 {
-  "format": "dubsar.project-evidence/1",
+  "format": "dubsar.project-evidence/2",
   "mission_id": "mission-example-001",
   "entries": [
     {
       "evidence_id": "evidence-example-001",
       "lot_id": "lot-example-001",
-      "claim": "The synthetic fixture was inspected.",
-      "class": "observed",
-      "artifact_refs": [
-        "fixture-example"
-      ],
+      "kind": "fact",
+      "statement": "The synthetic fixture was reported as inspected.",
+      "class": "reported",
+      "artifact_refs": [],
       "validation": [
-        "Manual inspection"
+        "Human report only"
       ],
       "limitations": [
-        "No production workflow was exercised."
-      ]
+        "No artifact digest or production workflow was observed."
+      ],
+      "resolves": null
     }
   ]
 }

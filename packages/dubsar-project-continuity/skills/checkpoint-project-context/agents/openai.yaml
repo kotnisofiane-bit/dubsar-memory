@@ -1,0 +1,4 @@
+interface:
+  display_name: "DUBSAR Project Checkpoint"
+  short_description: "Record a verified project checkpoint"
+  default_prompt: "Use $checkpoint-project-context to preview and record a bounded project checkpoint."

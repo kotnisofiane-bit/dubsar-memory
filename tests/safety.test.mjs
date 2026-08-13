@@ -15,9 +15,9 @@ import { initAuditWorkspace } from "../packages/dubsar-audit-readiness/scripts/i
 import { runAuditValidation } from "../packages/dubsar-audit-readiness/scripts/validate-audit-workspace.mjs";
 import { exportAuditBundle } from "../packages/dubsar-audit-readiness/scripts/export-audit-bundle.mjs";
 import { artifactPolicyFinding } from "../packages/dubsar-audit-readiness/skills/dubsar-audit-readiness/scripts/audit-model.mjs";
-import { initProjectWorkspace } from "../packages/dubsar-project-continuity/scripts/init-project-workspace.mjs";
-import { runProjectValidation } from "../packages/dubsar-project-continuity/scripts/validate-project-workspace.mjs";
-import { renderProjectSummary } from "../packages/dubsar-project-continuity/scripts/render-project-summary.mjs";
+import { initProjectWorkspace } from "../legacy/hermes-skills/dubsar-project-continuity/scripts/init-project-workspace.mjs";
+import { runProjectValidation } from "../legacy/hermes-skills/dubsar-project-continuity/scripts/validate-project-workspace.mjs";
+import { renderProjectSummary } from "../legacy/hermes-skills/dubsar-project-continuity/scripts/render-project-summary.mjs";
 
 async function readJson(file) {
   return JSON.parse(await readFile(file, "utf8"));
@@ -149,6 +149,42 @@ test("audit export cannot target a child of its source workspace", async (t) => 
   await assert.rejects(
     exportAuditBundle(workspace, path.join(workspace, "bundle")),
     /OUTPUT_INSIDE_WORKSPACE/u,
+  );
+});
+
+test("audit evidence cannot reserve the generated summary path", async (t) => {
+  const testRoot = await mkdtemp(path.join(tmpdir(), "dubsar-summary-collision-"));
+  t.after(async () => {
+    await rm(testRoot, { recursive: true, force: true });
+  });
+  const workspace = path.join(testRoot, "workspace");
+  const caseId = "case-summary-collision";
+  const artifactId = "artifact-summary-collision";
+  await initAuditWorkspace(workspace, caseId);
+  await prepareReadyScope(workspace, caseId, artifactId);
+  const body = "reserved collision fixture\n";
+  await writeFile(
+    path.join(workspace, "AUDIT-PREPARATION-SUMMARY.md"),
+    body,
+    "utf8",
+  );
+  await writeJson(path.join(workspace, "evidence-index.json"), {
+    format: "dubsar.evidence-index/1",
+    case_id: caseId,
+    artifacts: [
+      {
+        artifact_id: artifactId,
+        path: "AUDIT-PREPARATION-SUMMARY.md",
+        sha256: createHash("sha256").update(body, "utf8").digest("hex"),
+      },
+    ],
+  });
+  const validation = await runAuditValidation(workspace);
+  assert.equal(validation.status, "invalid");
+  assert.ok(validation.findings.includes("ARTIFACT_PATH_RESERVED"));
+  await assert.rejects(
+    exportAuditBundle(workspace, path.join(testRoot, "bundle")),
+    /WORKSPACE_NOT_READY/u,
   );
 });
 
@@ -461,23 +497,29 @@ test("observed evidence without artifact and validation support is rejected", as
         lot_id: "lot-proof",
         title: "Unsupported completion",
         depends_on: [],
+        in_scope: [],
+        excluded: [],
         expected_evidence: ["evidence-proof"],
+        validation: [],
+        stop_conditions: [],
         status: "complete",
       },
     ],
   });
   await writeJson(path.join(workspace, "evidence.json"), {
-    format: "dubsar.project-evidence/1",
+    format: "dubsar.project-evidence/2",
     mission_id: "mission-safety-002",
     entries: [
       {
         evidence_id: "evidence-proof",
         lot_id: "lot-proof",
-        claim: "The lot is complete.",
+        kind: "fact",
+        statement: "The lot is complete.",
         class: "observed",
         artifact_refs: [],
         validation: [],
         limitations: [],
+        resolves: null,
       },
     ],
   });
@@ -550,7 +592,11 @@ test("project handoff escapes remote-image Markdown and raw HTML", async (t) => 
         lot_id: "lot-markdown",
         title: "Synthetic handoff",
         depends_on: [],
+        in_scope: [],
+        excluded: [],
         expected_evidence: ["evidence-markdown"],
+        validation: [],
+        stop_conditions: [],
         status: "candidate",
       },
     ],
@@ -571,17 +617,19 @@ test("project handoff escapes remote-image Markdown and raw HTML", async (t) => 
     status: "approved",
   });
   await writeJson(path.join(workspace, "evidence.json"), {
-    format: "dubsar.project-evidence/1",
+    format: "dubsar.project-evidence/2",
     mission_id: "mission-safety-003",
     entries: [
       {
         evidence_id: "evidence-markdown",
         lot_id: "lot-markdown",
-        claim: "Synthetic evidence.",
-        class: "observed",
-        artifact_refs: ["fixture-markdown"],
-        validation: ["Manual inspection"],
+        kind: "fact",
+        statement: "Synthetic evidence was reported.",
+        class: "reported",
+        artifact_refs: [],
+        validation: ["Human report only"],
         limitations: [],
+        resolves: null,
       },
     ],
   });

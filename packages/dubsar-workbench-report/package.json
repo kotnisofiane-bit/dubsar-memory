@@ -1,0 +1,11 @@
+{
+  "name": "@dubsar/workbench-report",
+  "version": "0.1.0-dev",
+  "private": true,
+  "type": "module",
+  "description": "Pure deterministic static HTML renderer for dubsar.workbench-view/1.",
+  "exports": "./src/index.mjs",
+  "engines": {
+    "node": ">=20"
+  }
+}

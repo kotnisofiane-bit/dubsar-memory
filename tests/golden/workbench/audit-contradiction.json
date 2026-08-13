@@ -1,0 +1,81 @@
+{
+  "authority": "local_preparation_record",
+  "blockers": [
+    {
+      "code": "CONTRADICTIONS_DECLARED",
+      "severity": "warning",
+      "title": "contradictions declared"
+    },
+    {
+      "code": "READINESS_CONTRADICTS_EVIDENCE",
+      "severity": "error",
+      "title": "readiness contradicts evidence"
+    }
+  ],
+  "decisions": [
+    {
+      "content_redacted": false,
+      "id": "action-example-001",
+      "label": "Review before sending.",
+      "status": "unreviewed"
+    }
+  ],
+  "evidence": [
+    {
+      "content_redacted": false,
+      "id": "observation-001",
+      "statement": "The synthetic workflow export is indexed with a reproducible digest.",
+      "status": "supported"
+    }
+  ],
+  "format": "dubsar.workbench-view/1",
+  "integrity": {
+    "diagnostics": [
+      {
+        "code": "READINESS_CONTRADICTS_EVIDENCE",
+        "severity": "error"
+      }
+    ],
+    "status": "invalid"
+  },
+  "next_action": {
+    "code": "resolve_integrity_findings",
+    "label": "Resolve the listed local audit-record contradictions."
+  },
+  "overview": {
+    "counts": {
+      "automations": 1,
+      "evidence_artifacts": 1,
+      "sensitive_actions": 1
+    },
+    "summary": "No external system was contacted.",
+    "title": "Prepare a synthetic follow-up workflow for human review."
+  },
+  "privacy": {
+    "redacted_fields": 0,
+    "truncated_fields": 0
+  },
+  "producer": {
+    "name": "@dubsar/operator-cli",
+    "version": "0.1.0-dev"
+  },
+  "readiness": {
+    "reasons": [
+      "CONTRADICTIONS_DECLARED",
+      "INTEGRITY_INVALID"
+    ],
+    "status": "unknown"
+  },
+  "source": {
+    "domain": "audit",
+    "formats": [
+      "dubsar.audit-scope/1",
+      "dubsar.automation-inventory/1",
+      "dubsar.evidence-index/1",
+      "dubsar.evidence-review/1",
+      "dubsar.sensitive-actions/1"
+    ],
+    "id": "case-example-001",
+    "snapshot_sha256": "bfab0b77e2e473d9cc9cc4191a015ef999ab96d310d14bb6262e119d40db9335"
+  }
+}

@@ -1,13 +1,13 @@
 {
   "name": "dubsar-project-continuity",
   "displayName": "DUBSAR Project Continuity",
-  "description": "Keep project intent, lots, execution boundaries, evidence, and handoffs explicit.",
-  "version": "0.1.1",
+  "description": "Local project-memory runtime with optional resume and checkpoint adapters.",
+  "version": "0.3.0-dev",
   "author": {
     "name": "DUBSAR"
   },
-  "homepage": "https://github.com/kotnisofiane-bit/dubsar-agent-skills/tree/main/packages/dubsar-project-continuity",
-  "repository": "https://github.com/kotnisofiane-bit/dubsar-agent-skills",
+  "homepage": "https://github.com/kotnisofiane-bit/dubsar-memory/tree/main/packages/dubsar-project-continuity",
+  "repository": "https://github.com/kotnisofiane-bit/dubsar-memory",
   "license": "MIT",
   "keywords": [
     "project",

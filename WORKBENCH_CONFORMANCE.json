@@ -1,0 +1,839 @@
+{
+  "format": "dubsar.workbench-conformance/1",
+  "authority": "local_preparation_record",
+  "scope": "local_workbench_with_explicit_checkpoint",
+  "source": {
+    "kind": "working_tree",
+    "commit": null
+  },
+  "review": {
+    "status": "pending"
+  },
+  "policy": {
+    "path": "tools/check-workbench-runtime.mjs",
+    "sha256": "2e4cba7a26910e22b825af67b464738739b283a33368e61f9acd62a88f5f296e"
+  },
+  "components": [
+    {
+      "key": "cli",
+      "name": "@dubsar/operator-cli",
+      "version": "0.1.0-dev",
+      "root": "packages/dubsar-operator-cli",
+      "entrypoint": "packages/dubsar-operator-cli/bin/dubsar.mjs",
+      "package_interface": {
+        "kind": "bin",
+        "target": "./bin/dubsar.mjs"
+      },
+      "capability_profile": "local_cli_with_explicit_project_memory_writes_and_human_close",
+      "effects": {
+        "filesystem_read": "explicit_registry_workspace_init_migration_checkpoint_or_memory_proposal_and_opt_in_fixed_memory_scoped",
+        "filesystem_write": "one_staged_continuity_directory_or_one_confirmed_allowlisted_project_memory_file_or_one_fixed_personal_memory_file_after_exact_confirmation",
+        "environment": "localappdata_for_explicit_personal_memory_only",
+        "subprocess": "none",
+        "inbound_network": "foreground_ipv4_loopback_listener_via_ui_only",
+        "outbound_network": "none",
+        "output": "stdout_stderr_and_ui_url"
+      },
+      "formats": [
+        "dubsar.checkpoint-apply/1",
+        "dubsar.checkpoint-preview/1",
+        "dubsar.checkpoint-proposal/1",
+        "dubsar.cli-error/1",
+        "dubsar.close-result/1",
+        "dubsar.continuity-checkpoint-proposal/1",
+        "dubsar.continuity-checkpoints/1",
+        "dubsar.continuity-checkpoints/2",
+        "dubsar.continuity-init-apply/1",
+        "dubsar.continuity-init-preview/1",
+        "dubsar.continuity-state/1",
+        "dubsar.doctor/1",
+        "dubsar.inbox-note/1",
+        "dubsar.knowledge/1",
+        "dubsar.local-state/1",
+        "dubsar.location/1",
+        "dubsar.memory-change-apply/1",
+        "dubsar.memory-change-preview/1",
+        "dubsar.memory-change-proposal/1",
+        "dubsar.memory-context/1",
+        "dubsar.memory-inbox-view/1",
+        "dubsar.memory-init-apply/1",
+        "dubsar.memory-init-preview/1",
+        "dubsar.memory-knowledge-view/1",
+        "dubsar.memory-migration-apply/1",
+        "dubsar.memory-migration-preview/1",
+        "dubsar.memory-project/1",
+        "dubsar.memory-snapshot/1",
+        "dubsar.memory-work-view/1",
+        "dubsar.personal-memory-command-result/1",
+        "dubsar.project-evidence/2",
+        "dubsar.resume-capsule/3",
+        "dubsar.review-ledger-ui-session/1",
+        "dubsar.ui-session/1",
+        "dubsar.validation/1",
+        "dubsar.work/1"
+      ]
+    },
+    {
+      "key": "codex-adapter",
+      "name": "@dubsar/codex-workbench-adapter",
+      "version": "0.1.0-dev",
+      "root": "packages/dubsar-codex-workbench",
+      "entrypoint": "packages/dubsar-codex-workbench/skills/resume-dubsar-workbench/scripts/read-capsule.mjs",
+      "package_interface": {
+        "kind": "exports",
+        "target": "./src/index.mjs"
+      },
+      "capability_profile": "explicit_one_shot_resume_capsule_adapter",
+      "effects": {
+        "filesystem_read": "explicit_registry_and_workspace_via_cli",
+        "filesystem_write": "none",
+        "environment": "localappdata_default_registry_only",
+        "subprocess": "fixed_node_cli_without_shell",
+        "inbound_network": "none",
+        "outbound_network": "none",
+        "output": "validated_capsule_or_closed_error"
+      },
+      "formats": [
+        "dubsar.codex-capsule-error/1"
+      ]
+    },
+    {
+      "key": "core",
+      "name": "@dubsar/operator-core",
+      "version": "0.1.0-dev",
+      "root": "packages/dubsar-operator-core",
+      "entrypoint": "packages/dubsar-operator-core/src/index.mjs",
+      "package_interface": {
+        "kind": "exports",
+        "target": "./src/index.mjs"
+      },
+      "capability_profile": "deterministic_workspace_reader",
+      "effects": {
+        "filesystem_read": "workspace_scoped",
+        "filesystem_write": "none",
+        "environment": "none",
+        "subprocess": "none",
+        "inbound_network": "none",
+        "outbound_network": "none",
+        "output": "return_values"
+      },
+      "formats": [
+        "dubsar.artifact-lifecycle/1",
+        "dubsar.memory-route/2",
+        "dubsar.project-history/1",
+        "dubsar.project-lots-view/1",
+        "dubsar.project-precedents/1",
+        "dubsar.resume-capsule/1",
+        "dubsar.resume-capsule/2",
+        "dubsar.resume-capsule/3",
+        "dubsar.review-ledger-view/1",
+        "dubsar.workbench-catalog/1",
+        "dubsar.workbench-continuity-data/3",
+        "dubsar.workbench-graph/1",
+        "dubsar.workbench-projects/1",
+        "dubsar.workbench-view/1",
+        "dubsar.workspace-snapshot/1"
+      ]
+    },
+    {
+      "key": "personal-memory",
+      "name": "@dubsar/personal-memory",
+      "version": "0.1.0-dev",
+      "root": "packages/dubsar-personal-memory",
+      "entrypoint": "packages/dubsar-personal-memory/src/index.mjs",
+      "package_interface": {
+        "kind": "exports",
+        "target": "./src/index.mjs"
+      },
+      "capability_profile": "fixed_windows_personal_advisory_memory",
+      "effects": {
+        "filesystem_read": "fixed_localappdata_dubsar_memory_five_markdown_files_only",
+        "filesystem_write": "initialize_exact_directory_or_append_one_confirmed_markdown_entry",
+        "environment": "localappdata_only",
+        "subprocess": "none",
+        "inbound_network": "none",
+        "outbound_network": "none",
+        "output": "bounded_preview_and_path_free_receipt"
+      },
+      "formats": [
+        "dubsar.personal-memory-init-apply/1",
+        "dubsar.personal-memory-init-preview/1",
+        "dubsar.personal-memory-update-apply/1",
+        "dubsar.personal-memory-update-preview/1"
+      ]
+    },
+    {
+      "key": "report",
+      "name": "@dubsar/workbench-report",
+      "version": "0.1.0-dev",
+      "root": "packages/dubsar-workbench-report",
+      "entrypoint": "packages/dubsar-workbench-report/src/index.mjs",
+      "package_interface": {
+        "kind": "exports",
+        "target": "./src/index.mjs"
+      },
+      "capability_profile": "pure_static_renderer",
+      "effects": {
+        "filesystem_read": "none",
+        "filesystem_write": "none",
+        "environment": "none",
+        "subprocess": "none",
+        "inbound_network": "none",
+        "outbound_network": "none",
+        "output": "html_and_manifest_return_values"
+      },
+      "formats": [
+        "dubsar.review-ledger-report/1",
+        "dubsar.workbench-catalog-interactive-data/1",
+        "dubsar.workbench-catalog-interactive-report/1",
+        "dubsar.workbench-continuity-interactive-data/2",
+        "dubsar.workbench-continuity-interactive-data/3",
+        "dubsar.workbench-continuity-interactive-data/4",
+        "dubsar.workbench-continuity-interactive-report/2",
+        "dubsar.workbench-continuity-interactive-report/3",
+        "dubsar.workbench-continuity-interactive-report/4",
+        "dubsar.workbench-interactive-data/2",
+        "dubsar.workbench-interactive-report/2",
+        "dubsar.workbench-report/1"
+      ]
+    },
+    {
+      "key": "launcher",
+      "name": "@dubsar/workbench-launcher",
+      "version": "0.1.0-dev",
+      "root": "packages/dubsar-workbench-launcher",
+      "entrypoint": "packages/dubsar-workbench-launcher/bin/dubsar-workbench-open.mjs",
+      "package_interface": {
+        "kind": "exports",
+        "target": "./src/index.mjs"
+      },
+      "capability_profile": "explicit_local_report_launcher",
+      "effects": {
+        "filesystem_read": "explicit_registry_workspaces_and_optional_five_file_memory",
+        "filesystem_write": "fixed_localappdata_registry_single_html_and_explicit_desktop_start_menu_shortcuts",
+        "environment": "windows_known_folders_and_allowlisted_installation_paths",
+        "subprocess": "fixed_windows_powershell_bootstrap_picker_and_google_chrome_without_shell",
+        "inbound_network": "temporary_live_or_one_shot_ipv4_loopback_via_server_only",
+        "outbound_network": "none",
+        "output": "atomic_registry_html_shortcuts_error_dialog_and_chrome_via_loopback_or_file"
+      },
+      "formats": [
+        "dubsar.personal-memory-snapshot/1",
+        "dubsar.workbench-catalog-launch/1",
+        "dubsar.workbench-launch-check/1",
+        "dubsar.workbench-launch-error/1",
+        "dubsar.workbench-launch/1",
+        "dubsar.workbench-project-management/1"
+      ]
+    },
+    {
+      "key": "server",
+      "name": "@dubsar/workbench-server",
+      "version": "0.1.0-dev",
+      "root": "packages/dubsar-workbench-server",
+      "entrypoint": "packages/dubsar-workbench-server/src/index.mjs",
+      "package_interface": {
+        "kind": "exports",
+        "target": "./src/index.mjs"
+      },
+      "capability_profile": "foreground_live_and_one_shot_loopback_transport",
+      "effects": {
+        "filesystem_read": "none",
+        "filesystem_write": "none",
+        "environment": "none",
+        "subprocess": "none",
+        "inbound_network": "foreground_live_or_one_shot_ipv4_loopback_listener",
+        "outbound_network": "none",
+        "output": "loopback_http_response_and_session_state"
+      },
+      "formats": [
+        "dubsar.workbench-session-closed/1"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": "packages/dubsar-codex-workbench/.codex-plugin/plugin.json",
+      "bytes": 773,
+      "sha256": "fd026f2f6bd2b72a343c057d43f7f6e35583dd6ebceafae0d72201cf17e15b4b",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-codex-workbench/CAPABILITIES.json",
+      "bytes": 516,
+      "sha256": "a46e07dd846214a57f83e226557d1c65031107877819c5002a6f92a453c6f818",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-codex-workbench/README.md",
+      "bytes": 593,
+      "sha256": "cc29f189b760169858036347158ad07e625ca93302b45e891d4d26866aed024a",
+      "role": "documentation"
+    },
+    {
+      "path": "packages/dubsar-codex-workbench/package.json",
+      "bytes": 269,
+      "sha256": "9ce176797514114330b9dd8231e4dbf0b3fd3aaf5d05dbae9f13cf26af84826d",
+      "role": "metadata"
+    },
+    {
+      "path": "packages/dubsar-codex-workbench/skills/resume-dubsar-workbench/SKILL.md",
+      "bytes": 2249,
+      "sha256": "1276dee216123ceb40e70340bf80dfd97054a2a4d81b847a0bc5b90cccbab6f9",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-codex-workbench/skills/resume-dubsar-workbench/agents/openai.yaml",
+      "bytes": 276,
+      "sha256": "6b8ddc1b33a2defa4268118cb00abfd5ff80e64c7c6a351498840b2c4dc0f284",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-codex-workbench/skills/resume-dubsar-workbench/scripts/read-capsule.mjs",
+      "bytes": 2414,
+      "sha256": "3ff36782908d68368245db5a5e2bb439ba987ad2ada04a28993012090c58db30",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-codex-workbench/src/index.mjs",
+      "bytes": 210,
+      "sha256": "520bff9ee50d9ce54d9db6cb67a0681309d7e46b382b2942f8a157a5d5421ca9",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-cli/README.md",
+      "bytes": 4046,
+      "sha256": "124a28f32effd83beb5d7703f151c8c2430f0915ced6db8e82edcf097281f738",
+      "role": "documentation"
+    },
+    {
+      "path": "packages/dubsar-operator-cli/bin/dubsar.mjs",
+      "bytes": 775,
+      "sha256": "dca7e0c409e598c6dc6182403eaa3467ee760021346e94011b0634bc207c5511",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-cli/package.json",
+      "bytes": 295,
+      "sha256": "f218e4bb6122b1c1db0aa45a20378c637dacaafca3cbe29552ce5fbca0d1f6e8",
+      "role": "metadata"
+    },
+    {
+      "path": "packages/dubsar-operator-cli/src/checkpoint-writer.mjs",
+      "bytes": 79,
+      "sha256": "3abef662462c99fd837334d01f690130086e1678b602162f4fedadaac4b519c9",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-cli/src/cli.mjs",
+      "bytes": 24354,
+      "sha256": "6fd5f118813c6f60edb453aff5db2a5d4bd4f174a089099a5ce729bcfa2a23a2",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-cli/src/close-session.mjs",
+      "bytes": 75,
+      "sha256": "be5736af847a84ea2701cc3470acc3e7c4a24e2559a22e228b96791afa1c9d36",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-cli/src/memory-session.mjs",
+      "bytes": 76,
+      "sha256": "80234e3888ae3f522917d831fcd11c181872c05616da242185ff61b6998d2fe0",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/README.md",
+      "bytes": 2060,
+      "sha256": "bf0138ca94308cc47156cbb4cd3ea2836eb3b9a895d5ff9c2f9e7d571af51adc",
+      "role": "documentation"
+    },
+    {
+      "path": "packages/dubsar-operator-core/package.json",
+      "bytes": 270,
+      "sha256": "7a0d1eb3bf020a4bfcf26a6d681976d1bfecc978fc452c38cc58c66d928cb9a8",
+      "role": "metadata"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/audit.mjs",
+      "bytes": 11619,
+      "sha256": "d2369ec5bac0a9706f8c9ab8633f3dff71727a568ec407ff251291c0883be37e",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/capsule.mjs",
+      "bytes": 13627,
+      "sha256": "4438b308f0292871710b808de5911ecf7a9b8ad2babfaab5fd59861e1b59cf04",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/catalog.mjs",
+      "bytes": 15231,
+      "sha256": "260ffe2dbd3cc2484bdffb6d0c632fddcdcd5a24903f33df0c52bacc7e7f659f",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/continuity-views.mjs",
+      "bytes": 78,
+      "sha256": "bcdf8d7e682f391335a1a1c602883077aea9745da83341bf234504ca530d8ef4",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/continuity.mjs",
+      "bytes": 72,
+      "sha256": "caddc3dda3c014d172246b645ec289dd5a3e80f23b30392dd2e6966a0d4babea",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/contracts.mjs",
+      "bytes": 71,
+      "sha256": "107b34fbdb5d21e9db9f7ab0e39f953bd72eae7f7e6e974588b82c933b51eaee",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/display-safety.mjs",
+      "bytes": 3644,
+      "sha256": "017adb50463d73d0c4c1572bd5b1eb1e4b78b13850749f9516af84626ee7043e",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/graph-model.mjs",
+      "bytes": 8265,
+      "sha256": "b29f3f205120f196db58cd154b46444a593a4431c2f3db2ea04bfa074ee8a0ed",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/index.mjs",
+      "bytes": 5827,
+      "sha256": "0eaad856cc5e39f49649a2acccb9f60c8b4e520e3b088421859ff5bc010c8fd5",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/locate.mjs",
+      "bytes": 2249,
+      "sha256": "b6e8eff1d344bf0f1287e88d07e00a3363b407e7e30560314c9d30a6acac2e26",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/path-safety.mjs",
+      "bytes": 73,
+      "sha256": "29867526db9d7d2eb6bc57372b8687a23661fb3eb1a4b9422b964344b6931382",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/project-identifiers.mjs",
+      "bytes": 153,
+      "sha256": "f8a0affd250025d4a29b6bc3ef5af2dcaaecad51d6609e10c43a70b33b7b553a",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/project-registry.mjs",
+      "bytes": 3731,
+      "sha256": "638a9e41ec3673b0614729c478b74398937ee8a4868f878f62ac39f81360628a",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/project.mjs",
+      "bytes": 69,
+      "sha256": "630b63bb15eed3b3a2b83ab6c239773469d1afdbae9af0cf9cb768a4f4110436",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/review-ledger.mjs",
+      "bytes": 45560,
+      "sha256": "5a56758052f79936c09e06ab016ec7dfa69ec3c9fc1b91d91c72c2d77d4b4800",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/safe-capture.mjs",
+      "bytes": 74,
+      "sha256": "3e2555244e8fdb2531aa2ed4d477d40d1ce2afa8700f8fea02ea7e03a5460520",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/sensitive-content.mjs",
+      "bytes": 79,
+      "sha256": "e410f3b159418c3766bc3386db6efc7421c69b0ce247bf37d6fe5aa9ac095eb0",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/snapshot.mjs",
+      "bytes": 8776,
+      "sha256": "84bf871ea3a77753083eb2b73456590bee8110b3c6e30b16f134394dc891de41",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-operator-core/src/view-model.mjs",
+      "bytes": 12215,
+      "sha256": "25074716abc6b6efaaa731138015ae59e36b818657eec8a21d21b75128706324",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-personal-memory/README.md",
+      "bytes": 738,
+      "sha256": "c5d8f23f069a3739252d264e1a52a6c6e118dac9decc4bfca8568fd01d9590c6",
+      "role": "documentation"
+    },
+    {
+      "path": "packages/dubsar-personal-memory/package.json",
+      "bytes": 268,
+      "sha256": "a1020bff69f560a631b9b9b160314bb6c849db3d0e22fb6529925eb07553b358",
+      "role": "metadata"
+    },
+    {
+      "path": "packages/dubsar-personal-memory/src/index.mjs",
+      "bytes": 77,
+      "sha256": "239840808d264f9507a35713e42d4a0c3edc69f929f16ea6e07a141b8c778059",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/artifact-lifecycle.mjs",
+      "bytes": 966,
+      "sha256": "53e204a2fb4a39bbc0272bcd1bce1a5d1f560b84a0e065a98278fbfae5e182d6",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/capsule.mjs",
+      "bytes": 8642,
+      "sha256": "8e83fb4b02fb162072c9c7fb2c8028b25c7b26d4a43720aa20b616bce3e6c1ad",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/checkpoint-writer.mjs",
+      "bytes": 20504,
+      "sha256": "0710159f581a40c0ada9dae57b6ba03a2dec9ea73f96752bd670516f3ba0e432",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/cli.mjs",
+      "bytes": 26945,
+      "sha256": "0d92c9ae8deb0c5252b44d8cf0bdf7ea0d30ac6e5cbe58f9e4a56dab3bb8baff",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/close-session.mjs",
+      "bytes": 21402,
+      "sha256": "5c1197532990a38756c02fa39d22a49bcf89328a87ab59646d642812ed3d331b",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/continuity-facts.mjs",
+      "bytes": 7700,
+      "sha256": "6f5c47b26e59681c243c1276a1b01ea1c9f1f8c5e0c2ed135ed0938e5467a94d",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/continuity-views.mjs",
+      "bytes": 14605,
+      "sha256": "b9858433e2eb8a73c0d1a490b929bcb48df8cac54c25f0c014463a9eb8ef5c1a",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/continuity.mjs",
+      "bytes": 7576,
+      "sha256": "e591628e13a0033cbb6e169cb78eda84df8b6447da68f347d4ef0cdb5aac3365",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/contracts.mjs",
+      "bytes": 4161,
+      "sha256": "932425bc1d77cf320eccecce97f856c75474780cea93164c0911d34e8eb45b02",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/display-safety.mjs",
+      "bytes": 3855,
+      "sha256": "777aa7ea3009c598c5ffda409a834bdab2d0157fd897c59bdcd02aac4f620e14",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/index.mjs",
+      "bytes": 4135,
+      "sha256": "83b2dd41a1c367f029631f38a27824c7d66e8b5a2b265a2ed81c3feb0c36ee64",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/lite-initializer.mjs",
+      "bytes": 6066,
+      "sha256": "d48a6496fa5afb1f95950e428666bff36cc4dbc35eea5a3019b82624a31a53ad",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/lite.mjs",
+      "bytes": 19346,
+      "sha256": "ff9f82465b103b0b4d1d039aa66b72d1121583bb80154ed8d061b9915ee0b758",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/locate.mjs",
+      "bytes": 2154,
+      "sha256": "4db99d9cf6b1cbecfda479e52de86bd98e0eede7403780b391523334362af8a1",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/memory-context.mjs",
+      "bytes": 4408,
+      "sha256": "2b78d3a88612cf30de883cc41b0040435079d28454c77fcf4dd442ff9354ee2e",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/memory-router.mjs",
+      "bytes": 4780,
+      "sha256": "5bc2f27caf54639fc638d5c4802fa5d6323c9a6180a577eee395bf4495f2ce4f",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/memory-session.mjs",
+      "bytes": 3847,
+      "sha256": "cf2bc7608d3d0a33737c714631e191a3c34be081fe6188614aa8f49eccf4a964",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/memory-snapshot-compiler.mjs",
+      "bytes": 2908,
+      "sha256": "131d0b7f5f92e4010e4d63687988a1d24ec75493e078412f17069f9df3931b65",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/memory-vnext-capsule.mjs",
+      "bytes": 8944,
+      "sha256": "7af9ae782410066bcaa5e3c41333abdb16f4cfc2498739627a4118dc1859321a",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/memory-vnext-contracts.mjs",
+      "bytes": 10524,
+      "sha256": "352a49dbc0280fe6021fad1478ed8df966b6ba48ae569f122ff6651fab03d44b",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/memory-vnext-evaluator.mjs",
+      "bytes": 4869,
+      "sha256": "feb126cac3eb019aeaa725614c1bef536db329c204e06f46bc96f061366bbeaa",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/memory-vnext-initializer.mjs",
+      "bytes": 8135,
+      "sha256": "67ad971c015f6b4335f2dc0dbd1bc5aa70f9139b7941cffb181f64fd0926c408",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/memory-vnext-markdown.mjs",
+      "bytes": 1394,
+      "sha256": "3d33d141d1a5a26e7e47b183446723b445daaeb2f2616236bd8409f9f2065800",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/memory-vnext-migration.mjs",
+      "bytes": 10384,
+      "sha256": "c7cdb4c3f047864fbf09b326d058b0196c21e7d2335bca799cb9046284263600",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/memory-vnext-snapshot.mjs",
+      "bytes": 9318,
+      "sha256": "ea7ab84cd16b4b9a9cc0d89f7c857f7bf1f106cb8665466e3faa52b50ad86fba",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/memory-vnext-views.mjs",
+      "bytes": 4939,
+      "sha256": "7b0a656c11e80c7f6093870ca244fd99a0df742069e0a5771dccd73fd75b1508",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/memory-vnext-writer.mjs",
+      "bytes": 18956,
+      "sha256": "82fa405506030c9f8da066b3eb041982b131d598e0df5b7551288a46e0bf235a",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/path-safety.mjs",
+      "bytes": 3770,
+      "sha256": "0989b4aa2a993a0e8224a0de11ec706993800068f9c8990cfdce96c127c3e963",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/personal-memory.mjs",
+      "bytes": 18347,
+      "sha256": "e9f2b2def3ef11e4cf78a694bc5ecfaed11992776afeed7774b8233a2465144d",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/project.mjs",
+      "bytes": 16131,
+      "sha256": "8028b8151c5f6b51a2d993226ea77bf981509599504575a50c8fefb9ce8669e8",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/safe-capture.mjs",
+      "bytes": 2678,
+      "sha256": "3e52358476b5c3b52306234f56a8d6b48932fb1c002e1c396317ae8733bbd71b",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/sensitive-content.mjs",
+      "bytes": 2292,
+      "sha256": "c89cf03219f2a37d1b8c7c5f477f966a09538231e8d46290e1d0f41f5e77b46f",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/snapshot.mjs",
+      "bytes": 6402,
+      "sha256": "5208c56b3412cf612078cc3bd4f1955b39b3e688b7d1e08744f66b24add393de",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-launcher/README.md",
+      "bytes": 2212,
+      "sha256": "97ff1a98d0a29fefae4728a4426df698c5988c082c982f236501d64e7b316cc3",
+      "role": "documentation"
+    },
+    {
+      "path": "packages/dubsar-workbench-launcher/bin/dubsar-workbench-open.mjs",
+      "bytes": 4530,
+      "sha256": "04034af24129eb2c76a7863dfac0dbaa0f565345abe836ba3f1d09d2f1228bfc",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-launcher/package.json",
+      "bytes": 347,
+      "sha256": "c887984cc0d35e7626a65a938fe5cb0aa92b2ba06c6c90a59d35d8afca40eef3",
+      "role": "metadata"
+    },
+    {
+      "path": "packages/dubsar-workbench-launcher/scripts/install-shortcut.ps1",
+      "bytes": 2767,
+      "sha256": "9f57fa42429d45441a225714177beb0d13f0cfcc63234fbe891e38472da75051",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-launcher/scripts/open-workbench.ps1",
+      "bytes": 4924,
+      "sha256": "78747d535b9c27ca7287f90bfc1415d694ddf98a3f5e156d305fc4da589ba7a8",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-launcher/scripts/select-project-folder.ps1",
+      "bytes": 337,
+      "sha256": "4e8247323ef510cbcb8926303a883fe545753595375d23177cea33367c254ea1",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-launcher/src/folder-picker.mjs",
+      "bytes": 3349,
+      "sha256": "10ee0f900d13da8b7e00ad50ee4db11611e0ec10d0003dd2c6ee6ddc5e210250",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-launcher/src/index.mjs",
+      "bytes": 304,
+      "sha256": "0f961a308d6666bd0e7001621cf18d78da017d224d9297344bc3f734e174ddeb",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-launcher/src/launcher-error.mjs",
+      "bytes": 161,
+      "sha256": "f1f832195a8973e1874f40bb21737dc8a69e94284aa8176e4ba3ba62a17d2731",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-launcher/src/launcher.mjs",
+      "bytes": 19324,
+      "sha256": "2556130e4d279fa31a5ae861d7107363d78f408f48d632a437c00361fbcc3dcb",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-launcher/src/personal-memory.mjs",
+      "bytes": 4037,
+      "sha256": "906c621ab7301368d2af2cfb8992e116a56f11757abcbf1e42cb663c0a8950e1",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-launcher/src/registry-store.mjs",
+      "bytes": 3915,
+      "sha256": "8a5020bc0a4c4753eed5b6eee97dc97e5467d86e33231039d967d9758fc5987d",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-report/README.md",
+      "bytes": 2318,
+      "sha256": "fab20342e1d8cea3173e34a4a05066d3c2e72ca7dbdb5851f954f89aed42b0c2",
+      "role": "documentation"
+    },
+    {
+      "path": "packages/dubsar-workbench-report/package.json",
+      "bytes": 266,
+      "sha256": "eda61ba5fe69b38bfa3956d0e9a9f465d2c5df6f81ca8e2e8175d002b17c021f",
+      "role": "metadata"
+    },
+    {
+      "path": "packages/dubsar-workbench-report/src/catalog-interactive-assets.mjs",
+      "bytes": 110779,
+      "sha256": "6609c2d5c2b6bf8ba6bce4c4dffb67f42ed2cee2931ed0d78cb740e26f589a39",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-report/src/catalog-interactive.mjs",
+      "bytes": 72705,
+      "sha256": "5b2262cbd9055ca85d03d67f4d39a23f27a1bb810c13ac36ec1f96aa144740fe",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-report/src/index.mjs",
+      "bytes": 722,
+      "sha256": "b80a5316b189d0aace77b1ebe8b7920bf7d7ecb5a1b74ed7e2670e669106add7",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-report/src/interactive-assets.mjs",
+      "bytes": 37190,
+      "sha256": "88c24bfd0c2fe87583bfa922f1f204b78064cd8c98dadfa07351be5a376e3396",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-report/src/interactive.mjs",
+      "bytes": 29625,
+      "sha256": "0c14d472ec36f8c7fdf406e21b1f5b01d087ce068fd3f0ab31df7fd859053f1e",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-report/src/render.mjs",
+      "bytes": 17959,
+      "sha256": "f35ceb061e38d82b7d6a1cd640fcdb56fbf8c3535286ac2218493c58fb1d762a",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-report/src/review-ledger.mjs",
+      "bytes": 15867,
+      "sha256": "fb46bc59c9ed1d6a101de3f9d5ef289f7f96c42197c3190c20e1c4313a60e90a",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-server/README.md",
+      "bytes": 1067,
+      "sha256": "f40d181fe8df2055ca8692c04fb4420dd8724ecf3acaf59fbd891e2e52686997",
+      "role": "documentation"
+    },
+    {
+      "path": "packages/dubsar-workbench-server/package.json",
+      "bytes": 287,
+      "sha256": "4ee6fa63630d96cc37b7dbcc7b8b2ab731e2f4d45b111ce9d4d2cd5cf0901ad6",
+      "role": "metadata"
+    },
+    {
+      "path": "packages/dubsar-workbench-server/src/index.mjs",
+      "bytes": 217,
+      "sha256": "9324bcfa2bb70ff71a9be5bbc2954f6b4ecc19a33d5fee0eb65a71ddc6408101",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-workbench-server/src/server.mjs",
+      "bytes": 25746,
+      "sha256": "dcf7cdbffa01d9c355760d17d28ba496b45dbebb6b6e730f14393a4d5b210d8f",
+      "role": "runtime"
+    }
+  ],
+  "content_root_sha256": "35c8f0d9fac9b2e5e2d2bb91170679ea90fc0a9b66de79a1ac1ff75c23b4a49b"
+}

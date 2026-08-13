@@ -2,7 +2,7 @@
   "format": "dubsar.public-provenance/1",
   "status": "approved",
   "package": "dubsar-audit-readiness",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "license_spdx": "MIT",
   "source_code_origin": "clean-room-original",
   "sources": [

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const INVENTORY_NAME = "FILES.sha256.json";
 
@@ -30,7 +31,7 @@ async function collectFiles(root, current = root) {
   return files;
 }
 
-async function generate(rootInput) {
+export async function generateReleaseInventory(rootInput) {
   const root = path.resolve(rootInput);
   const info = await lstat(root);
   if (!info.isDirectory() || info.isSymbolicLink()) {
@@ -68,12 +69,22 @@ async function generate(rootInput) {
   return { root, output, files: entries.length, root_sha256: inventory.root_sha256 };
 }
 
-if (process.argv.length < 3) {
-  throw new Error("USAGE: node tools/generate-release-inventory.mjs <package>...");
-}
+const isMain =
+  process.argv[1] !== undefined &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
-const results = [];
-for (const packageRoot of process.argv.slice(2)) {
-  results.push(await generate(packageRoot));
+if (isMain) {
+  if (process.argv.length < 3) {
+    throw new Error(
+      "USAGE: node tools/generate-release-inventory.mjs <package>...",
+    );
+  }
+
+  const results = [];
+  for (const packageRoot of process.argv.slice(2)) {
+    results.push(await generateReleaseInventory(packageRoot));
+  }
+  process.stdout.write(
+    `${JSON.stringify({ status: "pass", results }, null, 2)}\n`,
+  );
 }
-process.stdout.write(`${JSON.stringify({ status: "pass", results }, null, 2)}\n`);

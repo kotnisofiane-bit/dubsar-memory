@@ -15,7 +15,12 @@ impact, and whether the report involves a generated audit bundle.
 
 ## Security boundary
 
-The published packs are offline preparation tools. They do not require
-credentials, network access, hooks, MCP servers, or access to a private DUBSAR
-service. Treat any contribution that adds one of those capabilities as a
-security-sensitive design change requiring explicit maintainer review.
+The public memory engine and Workbench do not require credentials, network
+access, hooks, MCP servers, or access to a private DUBSAR service. Treat any
+contribution that adds one of those capabilities as a security-sensitive design
+change requiring explicit maintainer review.
+
+Project memory is not a secrets vault. Do not record credentials, private keys,
+access tokens, customer data, or unnecessary personal data in Work, Knowledge,
+Inbox, checkpoints, proposals, or generated views. Built-in filters reduce
+accidental disclosure but are not a substitute for proper secret management.

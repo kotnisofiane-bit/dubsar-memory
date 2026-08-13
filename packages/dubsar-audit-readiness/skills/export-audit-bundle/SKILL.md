@@ -38,10 +38,19 @@ check to force an export.
 4. Report the file count and root SHA-256 from the generated manifest.
 5. Label the result `prepared for human review`.
 
+## Review gate
+
+Deterministic export needs no new reviewer when the reviewed root digest is
+unchanged. If reviewed decision-relevant canonical fields changed or
+release-readiness is newly asserted, route the state through [the common review
+protocol](../dubsar-audit-readiness/references/review-protocol.md) before export.
+Receipt or audit-log appends outside the canonical root do not start another
+review wave.
+
 ## Output
 
-Produce a copied local bundle plus `MANIFEST.sha256.json` containing the case
-ID, sorted file digests, file count, `root_sha256`, label
+Produce a copied local bundle, `AUDIT-PREPARATION-SUMMARY.md`, and
+`MANIFEST.sha256.json` containing the case ID, sorted file digests, file count, `root_sha256`, label
 `prepared_for_human_review`, and a non-certification disclaimer. Report the
 output path, count, root digest, and any failure without masking it.
 

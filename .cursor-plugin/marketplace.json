@@ -1,11 +1,6 @@
 {
-  "name": "dubsar-agent-skills",
+  "name": "dubsar-continuity",
   "plugins": [
-    {
-      "name": "dubsar-audit-readiness",
-      "source": "./packages/dubsar-audit-readiness",
-      "description": "Offline preparation for bounded automation audits."
-    },
     {
       "name": "dubsar-project-continuity",
       "source": "./packages/dubsar-project-continuity",

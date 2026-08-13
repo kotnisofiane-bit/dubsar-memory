@@ -1,21 +1,9 @@
 {
-  "name": "dubsar-agent-skills",
+  "name": "dubsar-continuity",
   "interface": {
-    "displayName": "DUBSAR Agent Skills"
+      "displayName": "DUBSAR Continuity"
   },
   "plugins": [
-    {
-      "name": "dubsar-audit-readiness",
-      "source": {
-        "source": "local",
-        "path": "./packages/dubsar-audit-readiness"
-      },
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_USE"
-      },
-      "category": "Productivity"
-    },
     {
       "name": "dubsar-project-continuity",
       "source": {

@@ -1,0 +1,6 @@
+interface:
+  display_name: "DUBSAR Workbench Resume"
+  short_description: "Resume a selected local DUBSAR project"
+  default_prompt: "Use $resume-dubsar-workbench to resume a selected local DUBSAR project from its verified capsule."
+policy:
+  allow_implicit_invocation: false

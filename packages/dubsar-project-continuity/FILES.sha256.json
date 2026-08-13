@@ -1,122 +1,186 @@
 {
   "format": "dubsar.public-file-inventory/1",
-  "root_sha256": "467675e8ed0818e0e8b5975977f02fa850a01d74614bb79abe1930eeaa1b8097",
+  "root_sha256": "6d118bbc4894a4436f36c76c009234a1addddc67ee1c15a2fa9ba349e77d7d33",
   "files": [
     {
       "path": ".claude-plugin/plugin.json",
-      "sha256": "2349870bb05dea54d5e917aa168e6055c10faffceab12b89c19f0f695ef28e77"
+      "sha256": "028adccc8ca73b49b0a7ce6eb16fe253e30e8442fdd07ce3733d28dc2b08a461"
     },
     {
       "path": ".codex-plugin/plugin.json",
-      "sha256": "24ddcabf59ab27b89e21b78abad7d5a9fed94ce988cdacc7d23128714348245f"
+      "sha256": "16988dd334cd861d9412791d360e5ad386d011847b1271df16721a3d16f9c033"
     },
     {
       "path": ".cursor-plugin/plugin.json",
-      "sha256": "d5c844ed5ac2c026fd56b9318012e296156c813cf99e6b797b968c3f08d5cf11"
+      "sha256": "7eb8ad55f5483bed5d2c0985061ebbe7e30dab0fdf936602d682d661a9291b14"
+    },
+    {
+      "path": "bin/dubsar.mjs",
+      "sha256": "55c97b8c72e24a6ca5a5dcdf2d01e539f6f78bd7d21cd45b99b98bdfa4c51f67"
     },
     {
       "path": "LICENSE",
       "sha256": "cbe28f6f6cebd146528ced1df3b4e93a8ff4dd1de808c4990bcb0ce9b804bc4e"
     },
     {
+      "path": "package.json",
+      "sha256": "a7d945891303042969ae8964558ed44e1a17d883a6818caca36b73113e556f74"
+    },
+    {
       "path": "PROVENANCE.json",
-      "sha256": "d853a1ffa43388406f2ecb97959a58d4ff4f74cb925d8858ad5c0f3c286e3468"
+      "sha256": "79edf185b61b74bd0511df786bd93753187c60a57088e1c5742e61d7e5303f3d"
     },
     {
       "path": "README.md",
-      "sha256": "a71a9ae59de3fc3cf0ac0f4d27b20f321cb677f01118e263eede8b47071928e1"
+      "sha256": "7de01a965bcdcb326b4eedd2a4856323cb0b14d439f815429c91dee56519a3d8"
     },
     {
-      "path": "scripts/ensure-project-workspace.mjs",
-      "sha256": "afae2104753fd9543bad4d39b88aa6e2eb80b7c7a853dc8a2ff02acb0acbae74"
+      "path": "runtime/artifact-lifecycle.mjs",
+      "sha256": "53e204a2fb4a39bbc0272bcd1bce1a5d1f560b84a0e065a98278fbfae5e182d6"
     },
     {
-      "path": "scripts/init-project-workspace.mjs",
-      "sha256": "73e68dd1c835ba4cb9e6c3bf60a4a0345339827a7c20fd85eb16961cc01a4210"
+      "path": "runtime/capsule.mjs",
+      "sha256": "8e83fb4b02fb162072c9c7fb2c8028b25c7b26d4a43720aa20b616bce3e6c1ad"
     },
     {
-      "path": "scripts/render-project-summary.mjs",
-      "sha256": "84d88d09bd62e68f7ff222ed6190953e7f914fc5f0762fce9ecba9f673fa5ba0"
+      "path": "runtime/checkpoint-writer.mjs",
+      "sha256": "0710159f581a40c0ada9dae57b6ba03a2dec9ea73f96752bd670516f3ba0e432"
     },
     {
-      "path": "scripts/validate-project-workspace.mjs",
-      "sha256": "a462b17452665ff73f92c4ab057a23f521845fb760c6a05c1a1370fbf59d8dbe"
+      "path": "runtime/cli.mjs",
+      "sha256": "0d92c9ae8deb0c5252b44d8cf0bdf7ea0d30ac6e5cbe58f9e4a56dab3bb8baff"
     },
     {
-      "path": "skills/decompose-project-lots/agents/openai.yaml",
-      "sha256": "71c762a01d9ed18a9aac4ab830eff02a3d8565e16e6effc1825eaf8b8e3b901e"
+      "path": "runtime/close-session.mjs",
+      "sha256": "5c1197532990a38756c02fa39d22a49bcf89328a87ab59646d642812ed3d331b"
     },
     {
-      "path": "skills/decompose-project-lots/SKILL.md",
-      "sha256": "3ae16dc8bf5edbb6dee4321b664942740fb55b7c28d628f09662050a833a13d4"
+      "path": "runtime/continuity-facts.mjs",
+      "sha256": "6f5c47b26e59681c243c1276a1b01ea1c9f1f8c5e0c2ed135ed0938e5467a94d"
     },
     {
-      "path": "skills/draft-execution-contract/agents/openai.yaml",
-      "sha256": "d8610da76a076a9a0199988777cb84e01a2df64503d8026d78b78309897a303e"
+      "path": "runtime/continuity-views.mjs",
+      "sha256": "b9858433e2eb8a73c0d1a490b929bcb48df8cac54c25f0c014463a9eb8ef5c1a"
     },
     {
-      "path": "skills/draft-execution-contract/SKILL.md",
-      "sha256": "f17267c37a45bbe1d159076712a2e92d2071df19915d58a30123c3e50e3ea27e"
+      "path": "runtime/continuity.mjs",
+      "sha256": "e591628e13a0033cbb6e169cb78eda84df8b6447da68f347d4ef0cdb5aac3365"
     },
     {
-      "path": "skills/dubsar-project-continuity/agents/openai.yaml",
-      "sha256": "1f2062c543b8533e729cd7e269473155b82d8bc0b7392aa11f65b116d4bf6ff5"
+      "path": "runtime/contracts.mjs",
+      "sha256": "932425bc1d77cf320eccecce97f856c75474780cea93164c0911d34e8eb45b02"
     },
     {
-      "path": "skills/dubsar-project-continuity/references/data-contracts.md",
-      "sha256": "5f1e85806e5b05213d206f3612b4244e044494928677f1cdc07bb6cab8f5be62"
+      "path": "runtime/display-safety.mjs",
+      "sha256": "777aa7ea3009c598c5ffda409a834bdab2d0157fd897c59bdcd02aac4f620e14"
     },
     {
-      "path": "skills/dubsar-project-continuity/scripts/ensure-project-workspace.mjs",
-      "sha256": "2b438100ed5155b485ed1296080d2d99ea22812f55a45cc84992e3314af077e3"
+      "path": "runtime/index.mjs",
+      "sha256": "83b2dd41a1c367f029631f38a27824c7d66e8b5a2b265a2ed81c3feb0c36ee64"
     },
     {
-      "path": "skills/dubsar-project-continuity/scripts/init-project-workspace.mjs",
-      "sha256": "4ade20d5180c238873b24a6d019e6e7012e18376b08de7b8e5653e23a8c432f6"
+      "path": "runtime/lite-initializer.mjs",
+      "sha256": "d48a6496fa5afb1f95950e428666bff36cc4dbc35eea5a3019b82624a31a53ad"
     },
     {
-      "path": "skills/dubsar-project-continuity/scripts/project-model.mjs",
-      "sha256": "a917a23f8a6f71627b8e9c465d5216f27b338e58d5e5c8b88098c5750030ae3a"
+      "path": "runtime/lite.mjs",
+      "sha256": "ff9f82465b103b0b4d1d039aa66b72d1121583bb80154ed8d061b9915ee0b758"
     },
     {
-      "path": "skills/dubsar-project-continuity/scripts/render-project-summary.mjs",
-      "sha256": "44a27e6514ce14ac60db5355a5dbd9054e77db7d9de6d01ba78db5db9ffe68a3"
+      "path": "runtime/locate.mjs",
+      "sha256": "4db99d9cf6b1cbecfda479e52de86bd98e0eede7403780b391523334362af8a1"
     },
     {
-      "path": "skills/dubsar-project-continuity/scripts/safe-io.mjs",
-      "sha256": "4674d28ac58a9de742b38ad48e2d672a3a3551f3f3dbf69d6fe58d08ef3435e0"
+      "path": "runtime/memory-context.mjs",
+      "sha256": "2b78d3a88612cf30de883cc41b0040435079d28454c77fcf4dd442ff9354ee2e"
     },
     {
-      "path": "skills/dubsar-project-continuity/scripts/validate-project-workspace.mjs",
-      "sha256": "3bd2989b9d07afa13f902f6d13d8b39865de4289e9a101e1da7f086535972e52"
+      "path": "runtime/memory-router.mjs",
+      "sha256": "5bc2f27caf54639fc638d5c4802fa5d6323c9a6180a577eee395bf4495f2ce4f"
     },
     {
-      "path": "skills/dubsar-project-continuity/SKILL.md",
-      "sha256": "0a7825bb76c45c63181235ea44ba290d6d17eb11f16f445d8cf3d66af56b5aee"
+      "path": "runtime/memory-session.mjs",
+      "sha256": "cf2bc7608d3d0a33737c714631e191a3c34be081fe6188614aa8f49eccf4a964"
     },
     {
-      "path": "skills/frame-project-mission/agents/openai.yaml",
-      "sha256": "355ebdcba08b56adf24bbf1344a679e97a5d63fe7e9f4e0a40de7d204d1b1d22"
+      "path": "runtime/memory-snapshot-compiler.mjs",
+      "sha256": "131d0b7f5f92e4010e4d63687988a1d24ec75493e078412f17069f9df3931b65"
     },
     {
-      "path": "skills/frame-project-mission/SKILL.md",
-      "sha256": "b895f00dc0bae4aefb4f8d08668c8cf2ca3d1e0325da11b759a1380680d703ec"
+      "path": "runtime/memory-vnext-capsule.mjs",
+      "sha256": "7af9ae782410066bcaa5e3c41333abdb16f4cfc2498739627a4118dc1859321a"
     },
     {
-      "path": "skills/record-project-evidence/agents/openai.yaml",
-      "sha256": "19c726c11670867e6590db709dacd5599249d991ff1573090b79010dcb478f3c"
+      "path": "runtime/memory-vnext-contracts.mjs",
+      "sha256": "352a49dbc0280fe6021fad1478ed8df966b6ba48ae569f122ff6651fab03d44b"
     },
     {
-      "path": "skills/record-project-evidence/SKILL.md",
-      "sha256": "772c23b1f50fe8e8b31c5b8704ffd9a0f721a8ce14db4bd485d3fbf3b7489b05"
+      "path": "runtime/memory-vnext-evaluator.mjs",
+      "sha256": "feb126cac3eb019aeaa725614c1bef536db329c204e06f46bc96f061366bbeaa"
+    },
+    {
+      "path": "runtime/memory-vnext-initializer.mjs",
+      "sha256": "67ad971c015f6b4335f2dc0dbd1bc5aa70f9139b7941cffb181f64fd0926c408"
+    },
+    {
+      "path": "runtime/memory-vnext-markdown.mjs",
+      "sha256": "3d33d141d1a5a26e7e47b183446723b445daaeb2f2616236bd8409f9f2065800"
+    },
+    {
+      "path": "runtime/memory-vnext-migration.mjs",
+      "sha256": "c7cdb4c3f047864fbf09b326d058b0196c21e7d2335bca799cb9046284263600"
+    },
+    {
+      "path": "runtime/memory-vnext-snapshot.mjs",
+      "sha256": "ea7ab84cd16b4b9a9cc0d89f7c857f7bf1f106cb8665466e3faa52b50ad86fba"
+    },
+    {
+      "path": "runtime/memory-vnext-views.mjs",
+      "sha256": "7b0a656c11e80c7f6093870ca244fd99a0df742069e0a5771dccd73fd75b1508"
+    },
+    {
+      "path": "runtime/memory-vnext-writer.mjs",
+      "sha256": "82fa405506030c9f8da066b3eb041982b131d598e0df5b7551288a46e0bf235a"
+    },
+    {
+      "path": "runtime/path-safety.mjs",
+      "sha256": "0989b4aa2a993a0e8224a0de11ec706993800068f9c8990cfdce96c127c3e963"
+    },
+    {
+      "path": "runtime/personal-memory.mjs",
+      "sha256": "e9f2b2def3ef11e4cf78a694bc5ecfaed11992776afeed7774b8233a2465144d"
+    },
+    {
+      "path": "runtime/project.mjs",
+      "sha256": "8028b8151c5f6b51a2d993226ea77bf981509599504575a50c8fefb9ce8669e8"
+    },
+    {
+      "path": "runtime/safe-capture.mjs",
+      "sha256": "3e52358476b5c3b52306234f56a8d6b48932fb1c002e1c396317ae8733bbd71b"
+    },
+    {
+      "path": "runtime/sensitive-content.mjs",
+      "sha256": "c89cf03219f2a37d1b8c7c5f477f966a09538231e8d46290e1d0f41f5e77b46f"
+    },
+    {
+      "path": "runtime/snapshot.mjs",
+      "sha256": "5208c56b3412cf612078cc3bd4f1955b39b3e688b7d1e08744f66b24add393de"
+    },
+    {
+      "path": "skills/checkpoint-project-context/agents/openai.yaml",
+      "sha256": "be72ac2664fbca7a3566c6bbf5ac213fb54dc843c0836c1a80b758abadb2a280"
+    },
+    {
+      "path": "skills/checkpoint-project-context/SKILL.md",
+      "sha256": "1afe3e5e5f0344e229427dfb77a9fece421c77662f61591b2e5846943269184c"
     },
     {
       "path": "skills/resume-project-context/agents/openai.yaml",
-      "sha256": "9832ce7a139cc3e5efd65c64f162e5e507aa1494acf3d412ab91594f43716032"
+      "sha256": "401d8100a39004acf5be73f54cbc12701b9cbd633455834417790f8352b2c5d4"
     },
     {
       "path": "skills/resume-project-context/SKILL.md",
-      "sha256": "bc766e611b1c9eca2b08caa49b548c33f98d1972a4a3c44601e4d27ecdf43a0d"
+      "sha256": "431d58a98d4d9c75d0f9953d3c31a05bc09bbb93d1d00333cbcca1a1215654e9"
     }
   ]
 }

@@ -4,6 +4,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   rm,
   symlink,
   writeFile,
@@ -14,8 +15,9 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { ensureAuditWorkspace } from "../packages/dubsar-audit-readiness/scripts/ensure-audit-workspace.mjs";
 import { runAuditValidation } from "../packages/dubsar-audit-readiness/scripts/validate-audit-workspace.mjs";
-import { ensureProjectWorkspace } from "../packages/dubsar-project-continuity/scripts/ensure-project-workspace.mjs";
-import { runProjectValidation } from "../packages/dubsar-project-continuity/scripts/validate-project-workspace.mjs";
+import { ensureProjectWorkspace } from "../legacy/hermes-skills/dubsar-project-continuity/scripts/ensure-project-workspace.mjs";
+import { locateProjectWorkspace } from "../legacy/hermes-skills/dubsar-project-continuity/scripts/locate-project-workspace.mjs";
+import { runProjectValidation } from "../legacy/hermes-skills/dubsar-project-continuity/scripts/validate-project-workspace.mjs";
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -68,6 +70,14 @@ test("project discovery initializes once, reuses from nested paths, and honors a
   await mkdir(path.join(projectRoot, ".git"), { recursive: true });
   await mkdir(nested, { recursive: true });
 
+  const beforeLocate = await readdir(projectRoot);
+  assert.deepEqual(await locateProjectWorkspace({ start: nested }), {
+    status: "continuity_absent",
+    mission_id: null,
+    workspace: null,
+  });
+  assert.deepEqual(await readdir(projectRoot), beforeLocate);
+
   const initialized = await ensureProjectWorkspace({ start: projectRoot });
   assert.deepEqual(Object.keys(initialized).sort(), [
     "mission_id",
@@ -86,6 +96,11 @@ test("project discovery initializes once, reuses from nested paths, and honors a
     (await runProjectValidation(path.resolve(nested, reused.workspace))).status,
     "valid",
   );
+  assert.deepEqual(await locateProjectWorkspace({ start: nested }), {
+    status: "located",
+    mission_id: initialized.mission_id,
+    workspace: "../../../.dubsar-project",
+  });
 
   const override = path.join(
     projectRoot,
@@ -107,6 +122,11 @@ test("project discovery initializes once, reuses from nested paths, and honors a
   const nearest = await ensureProjectWorkspace({ start: nested });
   assert.deepEqual(nearest, {
     status: "reused",
+    mission_id: "mission-override-001",
+    workspace: "../.dubsar-project",
+  });
+  assert.deepEqual(await locateProjectWorkspace({ start: nested }), {
+    status: "located",
     mission_id: "mission-override-001",
     workspace: "../.dubsar-project",
   });
@@ -329,10 +349,11 @@ test("linked markers are rejected during discovery", async (t) => {
   );
 });
 
-test("unknown ensure CLI options are rejected before initialization", async () => {
+test("unknown discovery CLI options are rejected before initialization", async () => {
   const projectCli = path.join(
     repositoryRoot,
-    "packages",
+    "legacy",
+    "hermes-skills",
     "dubsar-project-continuity",
     "scripts",
     "ensure-project-workspace.mjs",
@@ -344,7 +365,15 @@ test("unknown ensure CLI options are rejected before initialization", async () =
     "scripts",
     "ensure-audit-workspace.mjs",
   );
-  for (const script of [projectCli, auditCli]) {
+  const locateCli = path.join(
+    repositoryRoot,
+    "legacy",
+    "hermes-skills",
+    "dubsar-project-continuity",
+    "scripts",
+    "locate-project-workspace.mjs",
+  );
+  for (const script of [projectCli, auditCli, locateCli]) {
     const result = await runCli(script, ["--workpace", "typo"]);
     assert.equal(result.code, 1);
     assert.equal(JSON.parse(result.stderr).code, "INVALID_ARGUMENTS");

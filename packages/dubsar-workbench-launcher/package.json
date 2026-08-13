@@ -1,0 +1,14 @@
+{
+  "name": "@dubsar/workbench-launcher",
+  "version": "0.1.0-dev",
+  "private": true,
+  "type": "module",
+  "description": "Explicit local launcher for the DUBSAR single-file Workbench report.",
+  "bin": {
+    "dubsar-workbench-open": "./bin/dubsar-workbench-open.mjs"
+  },
+  "exports": "./src/index.mjs",
+  "engines": {
+    "node": ">=20"
+  }
+}

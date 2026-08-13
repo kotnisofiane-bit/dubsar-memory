@@ -205,14 +205,37 @@ export function stableJson(value) {
   return `${JSON.stringify(sortValue(value), null, 2)}\n`;
 }
 
+async function prepareWriteParent(root, target) {
+  const parent = path.dirname(target);
+  await assertNoSymlinkAncestors(parent);
+  await mkdir(parent, { recursive: true });
+  await assertNoSymlinkAncestors(parent);
+  if (!isInsideOrEqual(root, await realpath(parent))) {
+    throw new PublicPluginError("WRITE_PARENT_OUTSIDE_WORKSPACE");
+  }
+}
+
 export async function writeJsonExclusive(root, relativePath, value) {
   const target = safeChild(root, relativePath);
-  await mkdir(path.dirname(target), { recursive: true });
+  await prepareWriteParent(root, target);
   try {
     await writeFile(target, stableJson(value), {
       encoding: "utf8",
       flag: "wx",
     });
+  } catch (error) {
+    if (error?.code === "EEXIST") {
+      throw new PublicPluginError("OUTPUT_FILE_EXISTS");
+    }
+    throw new PublicPluginError("WRITE_FAILED");
+  }
+}
+
+export async function writeTextExclusive(root, relativePath, value) {
+  const target = safeChild(root, relativePath);
+  await prepareWriteParent(root, target);
+  try {
+    await writeFile(target, value, { encoding: "utf8", flag: "wx" });
   } catch (error) {
     if (error?.code === "EEXIST") {
       throw new PublicPluginError("OUTPUT_FILE_EXISTS");

@@ -5,3 +5,10 @@ dist/
 Thumbs.db
 *.tmp
 *.log
+
+# Local DUBSAR state and generated review artifacts
+.codex-preview/
+.dubsar-project/
+audits/
+design-qa.md
+.audit/

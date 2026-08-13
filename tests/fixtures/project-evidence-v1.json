@@ -1,0 +1,21 @@
+{
+  "format": "dubsar.project-evidence/1",
+  "mission_id": "mission-example-001",
+  "entries": [
+    {
+      "evidence_id": "evidence-example-001",
+      "lot_id": "lot-example-001",
+      "claim": "The synthetic fixture was inspected.",
+      "class": "observed",
+      "artifact_refs": [
+        "fixture-example"
+      ],
+      "validation": [
+        "Manual inspection"
+      ],
+      "limitations": [
+        "Legacy compatibility fixture only."
+      ]
+    }
+  ]
+}

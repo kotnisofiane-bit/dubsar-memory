@@ -13,6 +13,7 @@ import test from "node:test";
 import { initAuditWorkspace } from "../packages/dubsar-audit-readiness/scripts/init-audit-workspace.mjs";
 import { runAuditValidation } from "../packages/dubsar-audit-readiness/scripts/validate-audit-workspace.mjs";
 import { exportAuditBundle } from "../packages/dubsar-audit-readiness/scripts/export-audit-bundle.mjs";
+import { renderAuditSummary } from "../packages/dubsar-audit-readiness/scripts/render-audit-summary.mjs";
 
 async function readJson(file) {
   return JSON.parse(await readFile(file, "utf8"));
@@ -139,6 +140,13 @@ test("audit bundle is deterministic and remains non-certifying", async (t) => {
   const second = await exportAuditBundle(workspace, secondOutput);
   assert.equal(first.root_sha256, second.root_sha256);
   assert.equal(first.label, "prepared_for_human_review");
+  assert.equal(first.file_count, 7);
+  const summary = await readFile(
+    path.join(firstOutput, "AUDIT-PREPARATION-SUMMARY.md"),
+    "utf8",
+  );
+  assert.match(summary, /# Audit preparation summary/u);
+  assert.match(summary, /not an audit result/u);
 
   const firstManifest = await readFile(
     path.join(firstOutput, "MANIFEST.sha256.json"),
@@ -176,6 +184,17 @@ test("an incomplete audit workspace is valid structure but not ready", async (t)
     "SCOPE_NOT_APPROVED",
     "SENSITIVE_ACTION_REVIEW_PENDING",
   ]);
+
+  const summaryOutput = path.join(testRoot, "not-ready-summary");
+  const rendered = await renderAuditSummary(workspace, summaryOutput);
+  assert.equal(rendered.preparation_status, "not_ready");
+  assert.match(
+    await readFile(
+      path.join(summaryOutput, "AUDIT-PREPARATION-SUMMARY.md"),
+      "utf8",
+    ),
+    /SCOPE\\_NOT\\_APPROVED/u,
+  );
 
   await assert.rejects(
     exportAuditBundle(workspace, path.join(testRoot, "refused-bundle")),

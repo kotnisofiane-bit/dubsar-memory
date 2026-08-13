@@ -41,6 +41,14 @@ copy credentials or personal data.
 6. Flag duplicates and ambiguous names without merging them automatically.
 7. Record missing ownership, trigger, or destination information in `gaps`.
 
+## Review gate
+
+Factual inventory needs no reviewer. If conflicting evidence would materially
+change a system boundary, owner, or dependency, preserve the conflict and route
+the decision through [the common review
+protocol](../dubsar-audit-readiness/references/review-protocol.md). Do not expand
+discovery or initialize another case to resolve it automatically.
+
 ## Output
 
 Write `automation-inventory.json`:

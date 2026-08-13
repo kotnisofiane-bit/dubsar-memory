@@ -1,10 +1,10 @@
 {
   "format": "dubsar.public-provenance/1",
-  "status": "approved",
+  "status": "draft",
   "package": "dubsar-project-continuity",
-  "version": "0.1.1",
+  "version": "0.3.0-dev",
   "license_spdx": "MIT",
-  "source_code_origin": "clean-room-original",
+  "source_code_origin": "independent-implementation-after-internal-concept-review",
   "sources": [
     {
       "name": "Agent Skills specification",
@@ -20,14 +20,9 @@
       "name": "Cursor plugins",
       "purpose": "Cursor package manifest",
       "url": "https://cursor.com/docs/plugins"
-    },
-    {
-      "name": "Hermes Agent skills",
-      "purpose": "Hermes Agent skill compatibility",
-      "url": "https://hermes-agent.nousresearch.com/docs/user-guide/features/skills"
     }
   ],
-  "release_review": "approved",
-  "reviewed_at": "2026-07-30",
-  "reviewed_by": "DUBSAR maintainers"
+  "release_review": "pending",
+  "reviewed_at": null,
+  "reviewed_by": null
 }

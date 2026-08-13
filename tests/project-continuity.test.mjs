@@ -8,9 +8,9 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { initProjectWorkspace } from "../packages/dubsar-project-continuity/scripts/init-project-workspace.mjs";
-import { runProjectValidation } from "../packages/dubsar-project-continuity/scripts/validate-project-workspace.mjs";
-import { renderProjectSummary } from "../packages/dubsar-project-continuity/scripts/render-project-summary.mjs";
+import { initProjectWorkspace } from "../legacy/hermes-skills/dubsar-project-continuity/scripts/init-project-workspace.mjs";
+import { runProjectValidation } from "../legacy/hermes-skills/dubsar-project-continuity/scripts/validate-project-workspace.mjs";
+import { renderProjectSummary } from "../legacy/hermes-skills/dubsar-project-continuity/scripts/render-project-summary.mjs";
 
 async function readJson(file) {
   return JSON.parse(await readFile(file, "utf8"));
@@ -76,17 +76,19 @@ test("project continuity summary is deterministic and grants no authority", asyn
   });
 
   await writeJson(path.join(workspace, "evidence.json"), {
-    format: "dubsar.project-evidence/1",
+    format: "dubsar.project-evidence/2",
     mission_id: "mission-demo-001",
     entries: [
       {
         evidence_id: "evidence-demo-001",
         lot_id: "lot-demo-001",
-        claim: "The synthetic fixture was inspected.",
-        class: "observed",
-        artifact_refs: ["fixture-demo"],
-        validation: ["Manual inspection"],
+        kind: "fact",
+        statement: "The synthetic fixture was reported as inspected.",
+        class: "reported",
+        artifact_refs: [],
+        validation: ["Human report only"],
         limitations: ["No production workflow was exercised."],
+        resolves: null,
       },
     ],
   });
@@ -94,7 +96,7 @@ test("project continuity summary is deterministic and grants no authority", asyn
   const validation = await runProjectValidation(workspace);
   assert.equal(validation.status, "valid");
   assert.equal(validation.continuity_status, "continuity_valid");
-  assert.match(validation.next_preparation_step, /no execution is started/u);
+  assert.match(validation.next_preparation_step, /Prepare the approved lot/u);
 
   const firstOutput = path.join(testRoot, "summary-a");
   const secondOutput = path.join(testRoot, "summary-b");

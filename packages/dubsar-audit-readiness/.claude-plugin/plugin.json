@@ -1,11 +1,11 @@
 {
   "name": "dubsar-audit-readiness",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Prepare a bounded automation audit from local evidence without making compliance claims.",
   "author": {
     "name": "DUBSAR"
   },
-  "homepage": "https://github.com/kotnisofiane-bit/dubsar-agent-skills/tree/main/packages/dubsar-audit-readiness",
-  "repository": "https://github.com/kotnisofiane-bit/dubsar-agent-skills",
+  "homepage": "https://github.com/kotnisofiane-bit/dubsar-memory/tree/main/packages/dubsar-audit-readiness",
+  "repository": "https://github.com/kotnisofiane-bit/dubsar-memory",
   "license": "MIT"
 }
