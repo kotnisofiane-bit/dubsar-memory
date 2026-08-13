@@ -33,7 +33,7 @@ executing work.
 ## Review gate
 
 Before approval of a materially ambiguous outcome, journey, or acceptance
-boundary, follow [the common review protocol](../dubsar-project-continuity/references/review-protocol.md).
+boundary, follow [the common review protocol](../../hermes-skills/dubsar-project-continuity/references/review-protocol.md).
 Freeze its goal lock first. Use one product reviewer only when outcome or
 acceptance ambiguity is material; add the smallest other reviewer set only for
 an applicable current-scope risk. Use a challenger only if a costly decision

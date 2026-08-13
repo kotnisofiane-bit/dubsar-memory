@@ -1,6 +1,14 @@
 {
   "name": "@dubsar/project-continuity",
   "version": "0.3.0-dev",
+  "description": "Local, deterministic project-memory engine with a bounded Continuity CLI and optional thin host adapters.",
+  "license": "MIT",
+  "homepage": "https://github.com/kotnisofiane-bit/dubsar-memory#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kotnisofiane-bit/dubsar-memory.git",
+    "directory": "packages/dubsar-project-continuity"
+  },
   "type": "module",
   "bin": {
     "dubsar": "bin/dubsar.mjs"

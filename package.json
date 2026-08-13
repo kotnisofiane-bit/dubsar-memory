@@ -1,5 +1,5 @@
 {
-  "name": "dubsar-continuity",
+  "name": "dubsar-memory",
   "version": "0.3.0-dev",
   "private": true,
   "type": "module",
@@ -29,6 +29,7 @@
     "check:workbench": "node tools/check-workbench-runtime.mjs",
     "demo": "node tools/run-demo.mjs",
     "inventory": "node tools/check-packages.mjs --mode inventory",
+    "test:launcher": "node --test tests/workbench-launcher.test.mjs",
     "workbench:manage": "node packages/dubsar-workbench-launcher/bin/dubsar-workbench-open.mjs --manage",
     "workbench:open": "node packages/dubsar-workbench-launcher/bin/dubsar-workbench-open.mjs --reviews",
     "workbench:ui": "node packages/dubsar-operator-cli/bin/dubsar.mjs ui --start . --domain project",

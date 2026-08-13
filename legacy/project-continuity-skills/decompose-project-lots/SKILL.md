@@ -41,7 +41,7 @@ Each lot must:
 ## Review gate
 
 If sequencing fixes architecture, migration, deployment, or recovery choices,
-follow [the common review protocol](../dubsar-project-continuity/references/review-protocol.md).
+follow [the common review protocol](../../hermes-skills/dubsar-project-continuity/references/review-protocol.md).
 Use one relevant architecture or reliability reviewer by default. Add a
 challenger only if an irreversible sequencing choice remains contested. Do not
 add a lot solely to implement an out-of-scope reviewer suggestion.
