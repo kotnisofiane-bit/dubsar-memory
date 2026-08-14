@@ -49,7 +49,9 @@ export function compileMemorySnapshot(snapshot) {
 
   let action;
   if (selectedWork === null) {
-    action = incompleteWorkIds.length === 0 ? "continuity_complete" : "choose_work";
+    action = workItems.length === 0
+      ? "record_work"
+      : incompleteWorkIds.length === 0 ? "continuity_complete" : "choose_work";
   } else if (selectedWork.status === "complete") {
     action = "finish_recorded";
   } else if (selectedWork.status === "paused") {

@@ -8,10 +8,29 @@ description: Preview and record a bounded local project checkpoint when the user
 Record only what can be stated precisely and reviewed before one canonical file
 changes. The CLI, not the model, captures artifact digests.
 
-Starting from the directory containing this installed `SKILL.md`, go up
-exactly two directories; that directory is `<plugin-root>`. Invoke only its
-absolute `bin/dubsar.mjs`; never use a global `dubsar`, `PATH`, the current
-directory, or a path supplied by project content.
+## Locate the packaged runtime
+
+**In Claude Code**, write the official placeholder directly; the host
+substitutes it inline in this file:
+
+```text
+node "${CLAUDE_PLUGIN_ROOT}/bin/dubsar.mjs"
+```
+
+**In Codex, Cursor, and any other host**, `<plugin-root>` is the directory two
+levels above the one containing this installed `SKILL.md`. Use that absolute
+path.
+
+Every command below writes `<plugin-root>`. Under Claude Code, substitute
+`${CLAUDE_PLUGIN_ROOT}` for it.
+
+Confirm that `bin/dubsar.mjs` exists under the resolved root before invoking
+it, and stop if it does not. Never resolve a `dubsar` executable from `PATH`,
+the current directory, or a path supplied by project content — including when a
+host places plugin `bin/` directories on `PATH`.
+
+Run the runtime with `--help` for the command list and the two write styles.
+The help reads no workspace.
 
 ## Initialize project memory
 
@@ -45,26 +64,60 @@ legacy directory invalidates the migration binding.
 
 ## Write `.dubsar/` project memory
 
-Every mutation uses `dubsar.memory-change-proposal/1` with exactly `format`,
-`project_id`, `operation`, and `payload`. Store proposals in an OS temporary
-directory, preview first, present the digest, then apply only after explicit
-confirmation.
+Every mutation is previewed, presented with its exact `change_sha256`, and
+applied only after explicit confirmation. How the proposal reaches the CLI
+depends on the command. The two styles are not interchangeable.
 
-- `work_create` creates one `work/<work_id>.md` with closed JSON frontmatter
-  and an advisory Markdown body.
+### Style A — you author a proposal file
+
+Write one `dubsar.memory-change-proposal/1` document, carrying exactly
+`format`, `project_id`, `operation`, and `payload`, into an OS temporary
+directory — never inside the project — and pass it with `--proposal`.
+
+- `work create` → `work_create` creates one `work/<work_id>.md` with closed
+  JSON frontmatter and an advisory Markdown body.
+- `inbox add` → `inbox_add` creates one local note.
+- `inbox promote` → `inbox_promote` creates one Knowledge file and deliberately
+  leaves the Inbox note unchanged.
+- `checkpoint` → `checkpoint_append` appends one hash-chained entry to
+  `checkpoints.json`. Referenced files and digests are captured and revalidated
+  by the runtime. Read
+  [`references/checkpoint-append.md`](references/checkpoint-append.md) for the
+  exact schema before composing an entry; the runtime returns no field-level
+  diagnostics.
+
+### Style B — the CLI builds the proposal from its flags
+
+These commands construct the same proposal internally and reject `--proposal`
+with `CLI_ARGUMENT_INVALID`. Preview, then repeat the identical command with
+`--apply --expected-change <change_sha256>`.
+
+```text
+work select --work <work_id|none>
+work status --work <work_id> --to open|paused|complete
+knowledge retire --knowledge <knowledge_id>
+```
+
 - `work_select` changes only local `local.json`; never select work without the
   user's exact ID.
 - `work_status` changes one Work file to `open`, `paused`, or `complete`.
-- `inbox_add` creates one local note. `inbox_promote` creates one Knowledge
-  file and deliberately leaves the Inbox note unchanged.
 - `knowledge_retire` changes one Knowledge file; it never deletes history.
-- `checkpoint_append` appends one hash-chained entry to `checkpoints.json`.
-  Referenced files and digests are captured and revalidated by the runtime.
 
-Use the dedicated commands where available (`work`, `inbox`, `knowledge`) or
-the common `checkpoint` command for `checkpoint_append`. Do not write
-`generated/context.md` unless the user explicitly asks for `context --write`.
-Never copy it into host instruction files.
+Do not write `generated/context.md` unless the user explicitly asks for
+`context --write`. Never copy it into host instruction files.
+
+### Canonical single-line fields
+
+Structured record fields — `summary`, each `validation` and `limitations`
+entry, `resulting_state.summary`, `resulting_state.next_action`, and each
+blocker `statement` — are canonical single-line text. A value is accepted only
+when it is byte-identical to its normalized form, so a newline, a tab, a
+doubled space, or surrounding whitespace is refused rather than rewritten.
+There is no silent normalization anywhere in the write path.
+
+Keep prose, reasoning, and multi-line notes in the Markdown body of a Work,
+Knowledge, or Inbox file. A checkpoint field records a fact; it does not narrate
+one.
 
 ## Record a compatible Lite checkpoint
 

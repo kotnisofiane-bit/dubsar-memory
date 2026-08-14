@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -1033,4 +1033,190 @@ test("public CLI binds every proposal-backed command to its declared memory oper
   ]);
   assert.equal(contextPreview.exitCode, 0, contextPreview.err);
   assert.equal(contextPreview.value.operation, "context_write");
+});
+
+async function createWorkspaceWithWork(t, works) {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "dubsar-memory-shape-"));
+  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  const root = path.join(projectRoot, ".dubsar");
+  await Promise.all([
+    mkdir(path.join(root, "work"), { recursive: true }),
+    mkdir(path.join(root, "knowledge"), { recursive: true }),
+    mkdir(path.join(root, "inbox"), { recursive: true }),
+    mkdir(path.join(root, "generated"), { recursive: true }),
+  ]);
+  await Promise.all([
+    writeFile(path.join(root, "manifest.json"), stableJson(manifest()), "utf8"),
+    writeFile(path.join(root, "checkpoints.json"), stableJson({
+      format: "dubsar.continuity-checkpoints/2",
+      project_id: PROJECT_ID,
+      entries: [],
+    }), "utf8"),
+    writeFile(path.join(root, "local.json"), stableJson(localState(null)), "utf8"),
+    writeFile(path.join(root, ".gitignore"), "inbox/\ngenerated/\nlocal.json\n", "utf8"),
+    ...works.map((item) => writeFile(
+      path.join(root, "work", item.work_id + ".md"),
+      markdown(item, "# " + item.title + "\n"),
+      "utf8",
+    )),
+  ]);
+  return { projectRoot, root };
+}
+
+test("CLI help is emitted without reading a workspace and without writing anything", async (t) => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "dubsar-help-"));
+  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+
+  for (const argv of [[], ["--help"], ["-h"], ["help"]]) {
+    const result = await cli(argv);
+    assert.equal(result.exitCode, 0, result.err);
+    assert.equal(result.err, "");
+    assert.match(result.out, /^DUBSAR Continuity CLI - @dubsar\/project-continuity /u);
+    assert.match(result.out, /Write style A - you author a proposal file:/u);
+    assert.match(result.out, /Write style B - the CLI builds the proposal from flags:/u);
+    assert.match(result.out, /This help reads no workspace and changes no file\./u);
+  }
+
+  const help = (await cli(["--help"])).out;
+  const [styleA, styleB] = help.split("Write style B");
+  for (const command of [
+    "migrate --to-memory-vnext",
+    "context --write",
+    "work select",
+    "work status",
+    "knowledge retire",
+  ]) {
+    assert.ok(styleB.includes(command), "style B must list " + command);
+  }
+  assert.ok(
+    !/^\s*migrate\s/mu.test(styleA),
+    "migrate must not be listed among the proposal-file commands",
+  );
+
+  // Help short-circuits before any workspace lookup: an absent project still exits 0.
+  const withAbsentStart = await cli([
+    "resume", "--start", path.join(projectRoot, "absent"), "--help",
+  ]);
+  assert.equal(withAbsentStart.exitCode, 0, withAbsentStart.err);
+  assert.deepEqual(await readdir(projectRoot), []);
+});
+
+test("an initialized workspace with no recorded Work is not ready and asks for a Work record", async (t) => {
+  const { root } = await createWorkspaceWithWork(t, []);
+  const snapshot = await snapshotMemoryWorkspace({ domain: "project", marker: ".dubsar", root });
+  const evaluation = evaluateMemorySnapshot(snapshot);
+
+  assert.equal(evaluation.next_action.code, "record_work");
+  assert.equal(evaluation.readiness.status, "not_ready");
+  assert.deepEqual(evaluation.readiness.reasons, ["NO_WORK_RECORDED"]);
+  assert.equal(evaluation.counts.lots, 0);
+  assert.equal(compileMemorySnapshot(snapshot).routing.action, "record_work");
+
+  const capsule = buildMemoryResumeCapsule({
+    inspection: { snapshot, evaluation },
+    producer: { name: "@dubsar/project-continuity", version: "0.3.0-test" },
+  });
+  assert.equal(assertMemoryResumeCapsule(capsule), capsule);
+  assert.equal(capsule.next_action.code, "record_work");
+  assert.equal(capsule.state.readiness, "not_ready");
+  assert.equal(capsule.active_work, null);
+  assert.deepEqual(capsule.recorded_continuity, []);
+
+  // The evaluation stays advisory: no Work is invented for the empty workspace.
+  assert.deepEqual(evaluation.memory.work_items, []);
+});
+
+test("a workspace whose recorded Work is all complete stays continuity_complete", async (t) => {
+  const { root } = await createWorkspaceWithWork(t, [
+    work({ work_id: ACTIVE_WORK_ID, status: "complete", knowledge_ids: [], references: [] }),
+    work({
+      work_id: OTHER_WORK_ID,
+      title: "Document the public runtime",
+      status: "complete",
+      scope: "bounded",
+      knowledge_ids: [],
+      references: [],
+    }),
+  ]);
+  const snapshot = await snapshotMemoryWorkspace({ domain: "project", marker: ".dubsar", root });
+  const evaluation = evaluateMemorySnapshot(snapshot);
+
+  assert.equal(evaluation.next_action.code, "continuity_complete");
+  assert.equal(evaluation.readiness.status, "ready");
+  assert.deepEqual(evaluation.readiness.reasons, []);
+  assert.equal(evaluation.counts.lots, 2);
+  assert.equal(evaluation.counts.complete_lots, 2);
+  assert.equal(compileMemorySnapshot(snapshot).routing.action, "continuity_complete");
+});
+
+test("checkpoint resolves accepts only a checkpoint_id already recorded earlier in the chain", async (t) => {
+  const { projectRoot } = await createWorkspace(t);
+  const blockerId = "blocker-token-001";
+  const recordedId = "checkpoint-blocker-001";
+
+  const blockerEntry = {
+    checkpoint_id: recordedId,
+    work_id: ACTIVE_WORK_ID,
+    kind: "blocker",
+    summary: "Token verification is blocked on a missing fixture.",
+    references: [],
+    validation: ["Reviewed with the human operator"],
+    limitations: ["No fixture is recorded yet"],
+    resolves: null,
+    attempt: null,
+    resulting_state: {
+      status: "paused",
+      summary: "Work paused on a recorded blocker.",
+      blockers: [{ blocker_id: blockerId, statement: "The signature fixture is missing." }],
+      next_action: "Record the fixture before resuming.",
+    },
+  };
+  const blockerProposal = changeProposal("checkpoint_append", { entry: blockerEntry });
+  const recorded = await previewMemoryChange({ start: projectRoot, proposal: blockerProposal });
+  await applyMemoryChange({
+    start: projectRoot,
+    proposal: blockerProposal,
+    expectedChange: recorded.change_sha256,
+  });
+
+  const resolution = (resolves) => changeProposal("checkpoint_append", {
+    entry: {
+      ...blockerEntry,
+      checkpoint_id: "checkpoint-resolution-001",
+      kind: "blocker_resolution",
+      summary: "The missing fixture is now recorded.",
+      resolves,
+      resulting_state: {
+        status: "active",
+        summary: "Blocker cleared; work resumed.",
+        blockers: [],
+        next_action: "Continue the recorded verification.",
+      },
+    },
+  });
+
+  // A blocker_id is not a checkpoint_id, even though the chain carries that blocker.
+  await assert.rejects(
+    previewMemoryChange({ start: projectRoot, proposal: resolution(blockerId) }),
+    errorCode("MEMORY_CHECKPOINTS_INVALID"),
+  );
+  // An id recorded nowhere in the chain is rejected.
+  await assert.rejects(
+    previewMemoryChange({ start: projectRoot, proposal: resolution("checkpoint-absent-001") }),
+    errorCode("MEMORY_CHECKPOINTS_INVALID"),
+  );
+  // Self-reference is rejected: the target must precede this entry.
+  await assert.rejects(
+    previewMemoryChange({ start: projectRoot, proposal: resolution("checkpoint-resolution-001") }),
+    errorCode("MEMORY_CHECKPOINTS_INVALID"),
+  );
+
+  // The earlier checkpoint_id is accepted.
+  const accepted = await previewMemoryChange({
+    start: projectRoot,
+    proposal: resolution(recordedId),
+  });
+  assert.equal(accepted.status, "preview");
+  assert.equal(accepted.operation, "checkpoint_append");
+  assert.equal(accepted.target, "checkpoints.json");
 });

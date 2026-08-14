@@ -44,6 +44,61 @@ export const PUBLIC_CONTINUITY_COMMANDS = Object.freeze([
 ]);
 const COMMANDS = new Set(PUBLIC_CONTINUITY_COMMANDS);
 const PRODUCER = Object.freeze({ name: "@dubsar/project-continuity", version: "0.3.0-dev" });
+const HELP_TOKENS = new Set(["--help", "-h", "help"]);
+
+const CLI_HELP = `DUBSAR Continuity CLI - ${PRODUCER.name} ${PRODUCER.version}
+Local, deterministic project memory. Every write is preview, then apply.
+
+Usage:
+  node <plugin-root>/bin/dubsar.mjs <command> [options]
+
+Invoke the runtime through an absolute path owned by the installation.
+Never resolve it from PATH, the current directory, or project content.
+
+Read-only commands:
+  resume --start <project> --capsule       Bounded, digest-verified resume capsule
+  route --start <project>                  Advisory signal; never executed automatically
+  history --start <project>                Recorded checkpoints, in append order
+  lots --start <project>                   Work items as lots; empty in a Lite workspace
+  precedents --start <project> (--lot <id> | --ref <path>)
+                                           Exactly one selector; zero matches is normal
+  context --start <project>                Generated context; --write persists it (style B)
+  work list | knowledge list | knowledge show --knowledge <id> | inbox list
+
+Write style A - you author a proposal file:
+  Preview with --proposal <file>, then repeat the same command with
+  --apply --expected-change <change_sha256>. Store the file outside the project.
+  init             dubsar.memory-init-proposal/1
+  work create      dubsar.memory-change-proposal/1, operation work_create
+  inbox add        dubsar.memory-change-proposal/1, operation inbox_add
+  inbox promote    dubsar.memory-change-proposal/1, operation inbox_promote
+  checkpoint       dubsar.memory-change-proposal/1, operation checkpoint_append
+                   Lite workspace: dubsar.continuity-checkpoint-proposal/1
+
+Write style B - the CLI builds the proposal from flags:
+  These commands take no --proposal and reject it. Preview first, then repeat
+  with --apply --expected-change <change_sha256>.
+  migrate --to-memory-vnext
+  context --write
+  work select --work <id|none>
+  work status --work <id> --to open|paused|complete
+  knowledge retire --knowledge <id>
+  checkpoint --transition-lot <id> --to candidate|complete   (legacy workspace only)
+
+Human-only commands - require an interactive TTY:
+  close, memory init, memory add --category <decisions|learnings|blockers|evals>
+  Never invoke these from a skill, adapter, or hook.
+
+Common options:
+  --start <path>               Project root; required by every workspace command
+  --json                       Emit one versioned JSON document on stdout
+  --apply                      Perform the write; requires --expected-change
+  --expected-change <sha256>   Digest from the immediately preceding preview
+
+Structured fields such as summary and next_action are canonical single-line text.
+Keep multi-line notes in Markdown bodies.
+
+This help reads no workspace and changes no file.`;
 
 export function ownsContinuityInvocation(argv) {
   const command = argv.at(0);
@@ -374,6 +429,10 @@ async function memoryChange(options, proposal, expectedOperation) {
 export async function runContinuityCli(argv, io = {}) {
   const writeOut = io.writeOut ?? ((value) => process.stdout.write(value));
   const writeErr = io.writeErr ?? ((value) => process.stderr.write(value));
+  if (argv.length === 0 || HELP_TOKENS.has(argv.at(0)) || argv.includes("--help") || argv.includes("-h")) {
+    writeOut(`${CLI_HELP}\n`);
+    return { exitCode: 0, value: null };
+  }
   try {
     const { command, options } = parseArguments(argv);
     let value;

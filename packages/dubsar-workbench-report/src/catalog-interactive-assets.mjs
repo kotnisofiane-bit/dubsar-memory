@@ -933,6 +933,7 @@ export const CATALOG_INTERACTIVE_SCRIPT = String.raw`
       select_candidate_lot: "Choose an eligible work package.",
       verify_project_root: "Check the project folder.",
       continuity_complete: "All recorded Work items are complete.",
+      record_work: "No Work item is recorded yet; record one explicitly. DUBSAR will not create it for you.",
       choose_work: "Choose an open Work item explicitly; DUBSAR will not choose it for you.",
       finish_recorded: "The selected Work item is recorded as complete.",
       reframe_recommended: "Reframe the approach before repeating the same failed attempt.",
@@ -942,6 +943,7 @@ export const CATALOG_INTERACTIVE_SCRIPT = String.raw`
     }),
     fr: Object.freeze({
       continuity_complete: "Tous les travaux enregistrés sont terminés.",
+      record_work: "Aucun travail n’est encore enregistré ; enregistrez-en un explicitement. DUBSAR ne le crée pas à votre place.",
       choose_work: "Choisissez explicitement un travail ouvert ; DUBSAR ne le choisit pas à votre place.",
       finish_recorded: "Le travail sélectionné est enregistré comme terminé.",
       reframe_recommended: "Recadrer l’approche avant de répéter le même essai en échec.",
