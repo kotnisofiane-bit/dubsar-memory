@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: dubsar
   name: "DUBSAR Memory"
-  version: "0.1.0"
+  version: "0.1.1"
   description: "Local execution memory for Spec Kit: checkpoints, decisions, blockers, and SHA-256 freshness of the documents you recorded"
   author: DUBSAR
   repository: https://github.com/kotnisofiane-bit/dubsar-memory

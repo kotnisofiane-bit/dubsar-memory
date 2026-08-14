@@ -16,8 +16,8 @@ the extension never writes into `.specify/` or `specs/`.
 
 ## Why the runtime is embedded
 
-The extension ships the sealed DUBSAR runtime under `runtime/`, and the status
-script resolves it from its own location:
+The extension ships the sealed DUBSAR **JavaScript** runtime under `runtime/`,
+and the status script resolves it from its own location:
 
 ```js
 path.join(here, "..", "runtime", "bin", "dubsar.mjs")
@@ -26,10 +26,32 @@ path.join(here, "..", "runtime", "bin", "dubsar.mjs")
 Never through `PATH`. A `dubsar` binary found on `PATH` could be anything; a
 runtime shipped inside the artifact is the one that was reviewed and sealed.
 
+This is not an embedded Node binary. The host must provide `node` ≥ 20, as
+declared under `requires.tools` in `extension.yml`. The packaged files are the
+DUBSAR continuity CLI and its modules; they are executed with the system Node.
+
 The extension source in this repository contains **no copy** of the runtime.
 `tools/build-spec-kit-extension.mjs` copies it in at packaging time, verifying
 each file against `FILES.sha256.json` on the way, so there is one source of
 truth and a build fails loudly if the package drifts.
+
+## Spec Kit root isolation
+
+The general DUBSAR locator may walk parent directories until it finds `.dubsar`
+or `.dubsar-project` (or hits a `.git` boundary). That remains useful for
+ordinary DUBSAR checkouts.
+
+The Spec Kit status adapter is stricter. It treats the directory that owns the
+nearest `.specify/` as the only allowed `project_root`. If locate returns a
+workspace whose `project_root` is not exactly that directory, the adapter
+reports `dubsar.present: false` with `reason: WORKSPACE_NOT_FOUND`, exposes no
+foreign `project_id` / mission / path, and does not spawn `resume`, `route`, or
+`precedents` against the ignored workspace. Explicit `init` must target that
+same Spec Kit root so `.dubsar/` is created beside `.specify/`, not in a parent.
+
+Cursor skills installed for this extension are provided by Spec Kit's extension
+registry integration. Their absence from `cursor-agent.manifest.json` (which
+lists core Spec Kit skills) is expected, not a packaging defect.
 
 ## Why there is no `link` command
 

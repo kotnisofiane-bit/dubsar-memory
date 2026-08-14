@@ -49,6 +49,8 @@ A checkpoint records an already-supported fact or an already-made human decision
    node "<extension-root>/runtime/bin/dubsar.mjs" init --start <project> --proposal <temp.json> --json
    ```
 
+   `<project>` must be exactly the Spec Kit root discovered by the status script (the directory that owns `.specify/`). Never initialize in a parent directory that happens to hold another `.dubsar` or `.dubsar-project`.
+
    Present the exact `change_sha256` and apply only after confirmation, with `--apply --expected-change <change_sha256>`.
 
    **(b) No Work recorded** — the capsule reports `next_action.code` of `record_work` and readiness `not_ready`. **Do not attempt a checkpoint: it would be refused, because a checkpoint must name an existing `work_id`.** Say plainly that the workspace holds no Work, and offer to create one. Ask the user for the Work title and objective; never invent them. Then preview `work create` with a `dubsar.memory-change-proposal/1` carrying `operation: "work_create"`, present the digest, and apply only after confirmation.
