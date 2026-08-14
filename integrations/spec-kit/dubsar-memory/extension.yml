@@ -1,0 +1,49 @@
+schema_version: "1.0"
+
+extension:
+  id: dubsar
+  name: "DUBSAR Memory"
+  version: "0.1.0"
+  description: "Local execution memory for Spec Kit: checkpoints, decisions, blockers, and SHA-256 freshness of the documents you recorded"
+  author: DUBSAR
+  repository: https://github.com/kotnisofiane-bit/dubsar-memory
+  license: MIT
+
+requires:
+  # Verified by installing and running the packaged artifact on 0.16.4, the
+  # newest stable release, across the claude, codex, and cursor-agent
+  # integrations. Nothing older is claimed.
+  speckit_version: ">=0.16.4"
+  tools:
+    - name: node
+      version: ">=20"
+      required: true
+
+provides:
+  commands:
+    - name: speckit.dubsar.resume
+      file: commands/speckit.dubsar.resume.md
+      description: "Read the recorded project state and report whether the Spec Kit documents you recorded are still fresh"
+    - name: speckit.dubsar.checkpoint
+      file: commands/speckit.dubsar.checkpoint.md
+      description: "Record one verified fact, decision, or blocker, optionally referencing the current feature's spec, plan, and tasks"
+
+  scripts:
+    - name: dubsar-speckit-status
+      file: scripts/dubsar-speckit-status.mjs
+      # `runtimes` accepts only bash, powershell, or python, so it is omitted:
+      # this script runs on Node 20+, which the extension declares under
+      # requires.tools instead.
+      description: "Read-only status on Node 20+: locates the current Spec Kit feature and reports each document as unlinked, fresh, stale, missing, or unknown"
+
+# No hooks. DUBSAR never runs on a Spec Kit lifecycle event: a checkpoint is a
+# human gesture, and a resume is something you ask for. Recording state as a
+# side effect of another command is precisely the behaviour this extension
+# exists to avoid.
+
+tags:
+  - memory
+  - continuity
+  - checkpoints
+  - resume
+  - offline
