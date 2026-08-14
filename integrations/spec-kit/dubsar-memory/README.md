@@ -19,8 +19,10 @@ For a local checkout of the built artifact:
 specify extension add --dev path/to/extracted-extension
 ```
 
-Requires Node 20 or later. No Python is added to your project, no server runs,
-and nothing reaches the network.
+Requires Node 20 or later on the host. The extension embeds the DUBSAR
+JavaScript runtime under `runtime/`, but it does **not** ship a Node binary —
+`node` remains a system dependency declared in `extension.yml`. No Python is
+added to your project, no server runs, and nothing reaches the network.
 
 ## Commands
 
@@ -75,6 +77,16 @@ written.
 | `.dubsar/` | DUBSAR — Spec Kit never touches it |
 
 One source of authority per piece of data, in both directions.
+
+The status adapter binds memory to the Spec Kit root (the directory that owns
+the nearest `.specify/`). A `.dubsar` or `.dubsar-project` found only in a
+parent directory is reported as `WORKSPACE_NOT_FOUND` for that Spec Kit project.
+Ordinary DUBSAR usage may still walk parents; this isolation is Spec Kit
+adapter policy, not a change to the general locator.
+
+Cursor skills for the two DUBSAR commands come from Spec Kit's extension
+registry. Their absence from `cursor-agent.manifest.json` (core Spec Kit skills
+only) is expected, not a packaging defect.
 
 ## Known limit
 

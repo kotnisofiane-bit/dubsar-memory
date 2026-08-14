@@ -30,7 +30,9 @@ It reads. It never writes, never initializes a workspace, and never runs a Spec 
 
 4. If `dubsar.present` is `false`, report that no DUBSAR workspace exists for this project and stop. **Do not initialize one.** Tell the user that `speckit.dubsar.checkpoint` can create it, and that doing so is their explicit decision. The exact shapes for that first journey are in `<extension-root>/docs/contracts/write-operations.md`.
 
-5. Read the recorded state from the same runtime, read-only:
+   The status script accepts only a workspace whose `project_root` is exactly the Spec Kit root (the directory that owns the nearest `.specify/`). A parent `.dubsar` or `.dubsar-project` is reported as `WORKSPACE_NOT_FOUND` and must not be presented as this project's memory.
+
+5. Read the recorded state from the same runtime, read-only, using that same Spec Kit root as `--start`:
 
    ```text
    node "<extension-root>/runtime/bin/dubsar.mjs" resume --start <project> --capsule --json

@@ -20,11 +20,15 @@ function sha256(value) {
 
 /**
  * The status script resolves its runtime at <extension>/runtime/bin/dubsar.mjs.
- * In the working tree that directory does not exist — the packaging step
- * creates it — so tests run the script from a staged copy that links the
+ * In the working tree that directory does not exist â€” the packaging step
+ * creates it â€” so tests run the script from a staged copy that links the
  * repository runtime into place.
+ *
+ * When `invokeLog` is set, the staged bin records every CLI argv line before
+ * delegating, so isolation tests can prove resume / route / precedents were
+ * never aimed at a foreign parent workspace.
  */
-async function stageExtension(t) {
+async function stageExtension(t, { invokeLog = null } = {}) {
   const staged = await mkdtemp(path.join(os.tmpdir(), "dubsar-ext-"));
   t.after(() => rm(staged, { recursive: true, force: true }));
   await mkdir(path.join(staged, "scripts"), { recursive: true });
@@ -38,11 +42,46 @@ async function stageExtension(t) {
   // Mirror the packaged layout exactly: the script imports DUBSAR's own
   // safe-capture and path-safety modules from runtime/runtime/.
   const packageRoot = path.join(REPOSITORY_ROOT, "packages", "dubsar-project-continuity");
+  const realBin = path.join(staged, "runtime", "bin", "dubsar.real.mjs");
   await writeFile(
-    path.join(staged, "runtime", "bin", "dubsar.mjs"),
+    realBin,
     await readFile(path.join(packageRoot, "bin", "dubsar.mjs"), "utf8"),
     "utf8",
   );
+  if (invokeLog === null) {
+    await writeFile(
+      path.join(staged, "runtime", "bin", "dubsar.mjs"),
+      await readFile(path.join(packageRoot, "bin", "dubsar.mjs"), "utf8"),
+      "utf8",
+    );
+  } else {
+    await writeFile(invokeLog, "", "utf8");
+    await writeFile(
+      path.join(staged, "runtime", "bin", "dubsar.mjs"),
+      [
+        "#!/usr/bin/env node",
+        "import { appendFileSync } from \"node:fs\";",
+        "import { spawnSync } from \"node:child_process\";",
+        "import path from \"node:path\";",
+        "import { fileURLToPath } from \"node:url\";",
+        "const here = path.dirname(fileURLToPath(import.meta.url));",
+        "const logPath = process.env.DUBSAR_INVOKE_LOG;",
+        "if (typeof logPath === \"string\" && logPath.length > 0) {",
+        "  appendFileSync(logPath, `${JSON.stringify(process.argv.slice(2))}\\n`);",
+        "}",
+        "const result = spawnSync(",
+        "  process.execPath,",
+        "  [path.join(here, \"dubsar.real.mjs\"), ...process.argv.slice(2)],",
+        "  { encoding: \"utf8\", windowsHide: true, maxBuffer: 16 * 1024 * 1024 },",
+        ");",
+        "if (result.stdout) process.stdout.write(result.stdout);",
+        "if (result.stderr) process.stderr.write(result.stderr);",
+        "process.exit(result.status ?? 1);",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+  }
   for (const name of await readdir(path.join(packageRoot, "runtime"))) {
     if (!name.endsWith(".mjs")) continue;
     await writeFile(
@@ -50,7 +89,10 @@ async function stageExtension(t) {
       await readFile(path.join(packageRoot, "runtime", name)),
     );
   }
-  return path.join(staged, "scripts", "dubsar-speckit-status.mjs");
+  return {
+    script: path.join(staged, "scripts", "dubsar-speckit-status.mjs"),
+    invokeLog,
+  };
 }
 
 function status(script, projectRoot) {
@@ -180,7 +222,7 @@ async function linkDocument(t, root, helpers, relativePath, checkpointId = "cp-l
 }
 
 test("a valid Spec Kit project is detected with its three canonical documents", async (t) => {
-  const script = await stageExtension(t);
+  const { script } = await stageExtension(t);
   const root = await specKitProject(t);
   const { value } = status(script, root);
 
@@ -200,7 +242,7 @@ test("a valid Spec Kit project is detected with its three canonical documents", 
 });
 
 test("a project without Spec Kit stops cleanly and is not an error state", async (t) => {
-  const script = await stageExtension(t);
+  const { script } = await stageExtension(t);
   const root = await mkdtemp(path.join(os.tmpdir(), "dubsar-plain-"));
   t.after(() => rm(root, { recursive: true, force: true }));
 
@@ -211,7 +253,7 @@ test("a project without Spec Kit stops cleanly and is not an error state", async
 });
 
 test("a malformed or absent feature pointer is reported, never guessed", async (t) => {
-  const script = await stageExtension(t);
+  const { script } = await stageExtension(t);
 
   const missing = await specKitProject(t, { pointer: JSON.stringify({ feature_directory: "specs/999-gone" }) });
   assert.equal(status(script, missing).value.spec_kit.feature_issue, "FEATURE_DIRECTORY_MISSING");
@@ -231,7 +273,7 @@ test("a malformed or absent feature pointer is reported, never guessed", async (
 });
 
 test("a document present but never recorded is unlinked, never fresh", async (t) => {
-  const script = await stageExtension(t);
+  const { script } = await stageExtension(t);
   const root = await specKitProject(t);
   await initialiseMemory(t, root);
 
@@ -244,7 +286,7 @@ test("a document present but never recorded is unlinked, never fresh", async (t)
 });
 
 test("a recorded document is fresh, then stale when changed, then missing when removed", async (t) => {
-  const script = await stageExtension(t);
+  const { script } = await stageExtension(t);
   const root = await specKitProject(t);
   const helpers = await initialiseMemory(t, root);
   const relative = "specs/003-auth/spec.md";
@@ -268,7 +310,7 @@ test("a recorded document is fresh, then stale when changed, then missing when r
 });
 
 test("reading the status writes nothing into the project", async (t) => {
-  const script = await stageExtension(t);
+  const { script } = await stageExtension(t);
   const root = await specKitProject(t);
   const helpers = await initialiseMemory(t, root);
   await linkDocument(t, root, helpers, "specs/003-auth/spec.md");
@@ -421,7 +463,7 @@ test("the packaged artifact is deterministic and carries no accidental file", as
 });
 
 test("SPECIFY_FEATURE_DIRECTORY takes priority over .specify/feature.json", async (t) => {
-  const script = await stageExtension(t);
+  const { script } = await stageExtension(t);
   const root = await specKitProject(t);
   await mkdir(path.join(root, "specs", "004-billing"), { recursive: true });
   await writeFile(path.join(root, "specs", "004-billing", "spec.md"), "# Billing\n", "utf8");
@@ -449,7 +491,7 @@ test("SPECIFY_FEATURE_DIRECTORY takes priority over .specify/feature.json", asyn
 });
 
 test("the first journey runs init, work, selection, and checkpoint as four separate writes", async (t) => {
-  const script = await stageExtension(t);
+  const { script } = await stageExtension(t);
   const root = await specKitProject(t);
   const temp = await mkdtemp(path.join(os.tmpdir(), "dubsar-first-"));
   t.after(() => rm(temp, { recursive: true, force: true }));
@@ -505,7 +547,7 @@ test("the first journey runs init, work, selection, and checkpoint as four separ
   assert.equal(refused.exitCode, 1);
   assert.equal(refused.value.code, "MEMORY_WORK_NOT_FOUND");
 
-  // 3. Create the Work — its own preview and apply.
+  // 3. Create the Work â€” its own preview and apply.
   const workFile = await write("work.json", {
     format: "dubsar.memory-change-proposal/1",
     project_id: "first-journey",
@@ -583,7 +625,7 @@ test("the first journey runs init, work, selection, and checkpoint as four separ
 });
 
 test("the most recent checkpoint speaks for a reference", async (t) => {
-  const script = await stageExtension(t);
+  const { script } = await stageExtension(t);
   const root = await specKitProject(t);
   const helpers = await initialiseMemory(t, root);
   const relative = "specs/003-auth/spec.md";
@@ -602,7 +644,7 @@ test("the most recent checkpoint speaks for a reference", async (t) => {
 });
 
 test("an aliased path is refused rather than captured", async (t) => {
-  const script = await stageExtension(t);
+  const { script } = await stageExtension(t);
   const root = await specKitProject(t);
   const relative = "specs/003-auth/spec.md";
   const target = path.join(root, relative);
@@ -633,7 +675,7 @@ test("an aliased path is refused rather than captured", async (t) => {
 });
 
 test("reading never modifies .specify, specs, or .dubsar", async (t) => {
-  const script = await stageExtension(t);
+  const { script } = await stageExtension(t);
   const root = await specKitProject(t);
   const helpers = await initialiseMemory(t, root);
   await linkDocument(t, root, helpers, "specs/003-auth/spec.md");
@@ -754,4 +796,232 @@ test("the contract reference ships in the artifact and reaches every integration
   // The corrected boundary: four distinct mutations, not one file.
   assert.match(checkpoint, /Each mutation is separate, previewed, and confirmed on its own/u);
   assert.match(checkpoint, /work select` writes `\.dubsar\/local\.json/u);
+});
+
+function statusWithLog(script, projectRoot, invokeLog) {
+  const result = spawnSync(process.execPath, [script, projectRoot], {
+    encoding: "utf8",
+    windowsHide: true,
+    maxBuffer: 16 * 1024 * 1024,
+    env: { ...process.env, DUBSAR_INVOKE_LOG: invokeLog },
+  });
+  return { exitCode: result.status, value: JSON.parse(result.stdout) };
+}
+
+function assertNoForeignLeak(serialized, secrets) {
+  for (const secret of secrets) {
+    assert.equal(serialized.includes(secret), false,
+      `status output must not disclose foreign token ${secret}`);
+  }
+  assert.equal(/[A-Za-z]:\\{1,2}Users/u.test(serialized), false, "no Windows home path leak");
+  assert.equal(/\/home\/[a-z]|\/Users\/[A-Za-z]/u.test(serialized), false, "no Unix home path leak");
+}
+
+async function fingerprintTree(root) {
+  const seen = [];
+  const walk = async (directory) => {
+    for (const entry of (await readdir(directory, { withFileTypes: true })).sort(
+      (left, right) => (left.name < right.name ? -1 : 1),
+    )) {
+      const absolute = path.join(directory, entry.name);
+      if (entry.isDirectory()) { await walk(absolute); continue; }
+      seen.push(`${path.relative(root, absolute).replaceAll("\\", "/")}:${sha256(await readFile(absolute))}`);
+    }
+  };
+  await walk(root);
+  return seen.join("\n");
+}
+
+test("a Spec Kit child without .git ignores a parent .dubsar-project workspace", async (t) => {
+  const invokeLog = path.join(await mkdtemp(path.join(os.tmpdir(), "dubsar-ilog-")), "invokes.log");
+  t.after(() => rm(path.dirname(invokeLog), { recursive: true, force: true }));
+  const { script } = await stageExtension(t, { invokeLog });
+
+  const parent = await mkdtemp(path.join(os.tmpdir(), "dubsar-parent-legacy-"));
+  t.after(() => rm(parent, { recursive: true, force: true }));
+  await mkdir(path.join(parent, ".dubsar-project"), { recursive: true });
+  await writeFile(
+    path.join(parent, ".dubsar-project", "mission.json"),
+    JSON.stringify({
+      mission_id: "PARENT_LEGACY_SECRET_ID",
+      title: "Parent Legacy Contaminant Mission",
+    }),
+    "utf8",
+  );
+
+  const child = path.join(parent, "cursor-child");
+  await mkdir(path.join(child, ".specify"), { recursive: true });
+  await mkdir(path.join(child, "specs", "001-demo"), { recursive: true });
+  for (const [name, body] of Object.entries({
+    "spec.md": "# Child Spec\n",
+    "plan.md": "# Child Plan\n",
+    "tasks.md": "# Child Tasks\n",
+  })) {
+    await writeFile(path.join(child, "specs", "001-demo", name), body, "utf8");
+  }
+  await writeFile(
+    path.join(child, ".specify", "feature.json"),
+    JSON.stringify({ feature_directory: "specs/001-demo" }),
+    "utf8",
+  );
+
+  const beforeParent = await fingerprintTree(parent);
+  const beforeChild = await fingerprintTree(child);
+  const { exitCode, value } = statusWithLog(script, child, invokeLog);
+  assert.equal(exitCode, 0);
+  assert.equal(value.status, "ok");
+  assert.equal(value.dubsar.present, false);
+  assert.equal(value.dubsar.reason, "WORKSPACE_NOT_FOUND");
+  assert.equal(value.dubsar.project_id, undefined);
+  assertNoForeignLeak(JSON.stringify(value), [
+    "PARENT_LEGACY_SECRET_ID",
+    "Parent Legacy Contaminant Mission",
+    parent,
+    ".dubsar-project",
+  ]);
+  assert.equal(await readFile(invokeLog, "utf8"), "",
+    "resume / route / precedents must not run against the ignored parent");
+  assert.equal(await fingerprintTree(parent), beforeParent, "parent tree stays read-only");
+  assert.equal(await fingerprintTree(child), beforeChild, "child tree stays read-only");
+  assert.equal(await readdir(child).then((names) => names.includes(".git")), false,
+    "the fixture must not invent a .git boundary");
+});
+
+test("a Spec Kit child without .git ignores a parent .dubsar workspace", async (t) => {
+  const invokeLog = path.join(await mkdtemp(path.join(os.tmpdir(), "dubsar-ilog-")), "invokes.log");
+  t.after(() => rm(path.dirname(invokeLog), { recursive: true, force: true }));
+  const { script } = await stageExtension(t, { invokeLog });
+
+  const parent = await mkdtemp(path.join(os.tmpdir(), "dubsar-parent-vnext-"));
+  t.after(() => rm(parent, { recursive: true, force: true }));
+  await initialiseMemory(t, parent, { workId: "w-parent" });
+  const projectMeta = path.join(parent, ".dubsar", "manifest.json");
+  const meta = JSON.parse(await readFile(projectMeta, "utf8"));
+  meta.title = "Parent VNext Contaminant Mission";
+  meta.project_id = "PARENT_VNEXT_SECRET_ID";
+  await writeFile(projectMeta, JSON.stringify(meta, null, 2), "utf8");
+
+  const child = path.join(parent, "cursor-child");
+  await mkdir(path.join(child, ".specify"), { recursive: true });
+  await mkdir(path.join(child, "specs", "001-demo"), { recursive: true });
+  await writeFile(path.join(child, "specs", "001-demo", "spec.md"), "# Child\n", "utf8");
+  await writeFile(path.join(child, "specs", "001-demo", "plan.md"), "# Child\n", "utf8");
+  await writeFile(path.join(child, "specs", "001-demo", "tasks.md"), "# Child\n", "utf8");
+  await writeFile(
+    path.join(child, ".specify", "feature.json"),
+    JSON.stringify({ feature_directory: "specs/001-demo" }),
+    "utf8",
+  );
+
+  const before = await fingerprintTree(parent);
+  const { value } = statusWithLog(script, child, invokeLog);
+  assert.equal(value.dubsar.present, false);
+  assert.equal(value.dubsar.reason, "WORKSPACE_NOT_FOUND");
+  assertNoForeignLeak(JSON.stringify(value), [
+    "PARENT_VNEXT_SECRET_ID",
+    "Parent VNext Contaminant Mission",
+    parent,
+  ]);
+  assert.equal(await readFile(invokeLog, "utf8"), "");
+  assert.equal(await fingerprintTree(parent), before);
+});
+
+test("a Spec Kit root with its own .dubsar is recognized locally", async (t) => {
+  const invokeLog = path.join(await mkdtemp(path.join(os.tmpdir(), "dubsar-ilog-")), "invokes.log");
+  t.after(() => rm(path.dirname(invokeLog), { recursive: true, force: true }));
+  const { script } = await stageExtension(t, { invokeLog });
+  const root = await specKitProject(t);
+  await initialiseMemory(t, root);
+
+  const { value } = statusWithLog(script, root, invokeLog);
+  assert.equal(value.dubsar.present, true);
+  assert.equal(value.dubsar.project_id, "speckit-project");
+  const log = await readFile(invokeLog, "utf8");
+  assert.match(log, /"resume"/u, "local resume is allowed");
+  assert.equal(log.includes("route"), false, "status never invokes route");
+  assert.match(log, /"precedents"/u, "local precedents run for document freshness");
+});
+
+test("two Spec Kit projects under one monorepo do not cross-contaminate", async (t) => {
+  const invokeLog = path.join(await mkdtemp(path.join(os.tmpdir(), "dubsar-ilog-")), "invokes.log");
+  t.after(() => rm(path.dirname(invokeLog), { recursive: true, force: true }));
+  const { script } = await stageExtension(t, { invokeLog });
+
+  const mono = await mkdtemp(path.join(os.tmpdir(), "dubsar-mono-"));
+  t.after(() => rm(mono, { recursive: true, force: true }));
+
+  const alpha = path.join(mono, "alpha");
+  const beta = path.join(mono, "beta");
+  for (const project of [alpha, beta]) {
+    await mkdir(path.join(project, ".specify"), { recursive: true });
+    await mkdir(path.join(project, "specs", "001-demo"), { recursive: true });
+    for (const name of ["spec.md", "plan.md", "tasks.md"]) {
+      await writeFile(path.join(project, "specs", "001-demo", name), `# ${path.basename(project)}\n`, "utf8");
+    }
+    await writeFile(
+      path.join(project, ".specify", "feature.json"),
+      JSON.stringify({ feature_directory: "specs/001-demo" }),
+      "utf8",
+    );
+  }
+
+  // Contaminating parent workspace at the monorepo root.
+  await initialiseMemory(t, mono, { workId: "w-mono" });
+  const monoMeta = JSON.parse(await readFile(path.join(mono, ".dubsar", "manifest.json"), "utf8"));
+  monoMeta.project_id = "MONOREPO_PARENT_SECRET";
+  monoMeta.title = "Monorepo Parent Contaminant";
+  await writeFile(path.join(mono, ".dubsar", "manifest.json"), JSON.stringify(monoMeta, null, 2), "utf8");
+
+  // Alpha gets its own local workspace; beta does not.
+  await initialiseMemory(t, alpha, { workId: "w-alpha" });
+
+  await writeFile(invokeLog, "", "utf8");
+  const alphaStatus = statusWithLog(script, alpha, invokeLog).value;
+  assert.equal(alphaStatus.dubsar.present, true);
+  assert.equal(alphaStatus.dubsar.project_id, "speckit-project");
+  assertNoForeignLeak(JSON.stringify(alphaStatus), [
+    "MONOREPO_PARENT_SECRET",
+    "Monorepo Parent Contaminant",
+  ]);
+
+  await writeFile(invokeLog, "", "utf8");
+  const betaStatus = statusWithLog(script, beta, invokeLog).value;
+  assert.equal(betaStatus.dubsar.present, false);
+  assert.equal(betaStatus.dubsar.reason, "WORKSPACE_NOT_FOUND");
+  assertNoForeignLeak(JSON.stringify(betaStatus), [
+    "MONOREPO_PARENT_SECRET",
+    "Monorepo Parent Contaminant",
+    "speckit-project",
+    alpha,
+    mono,
+  ]);
+  assert.equal(await readFile(invokeLog, "utf8"), "",
+    "beta must not resume the monorepo parent or alpha");
+});
+
+test("explicit init targets exactly the Spec Kit root, not a parent", async (t) => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), "dubsar-init-parent-"));
+  t.after(() => rm(parent, { recursive: true, force: true }));
+  await mkdir(path.join(parent, ".dubsar-project"), { recursive: true });
+
+  const child = path.join(parent, "spec-kit-app");
+  await mkdir(path.join(child, ".specify"), { recursive: true });
+  await mkdir(path.join(child, "specs", "001-demo"), { recursive: true });
+  await writeFile(path.join(child, "specs", "001-demo", "spec.md"), "# Spec\n", "utf8");
+  await writeFile(path.join(child, "specs", "001-demo", "plan.md"), "# Plan\n", "utf8");
+  await writeFile(path.join(child, "specs", "001-demo", "tasks.md"), "# Tasks\n", "utf8");
+  await writeFile(
+    path.join(child, ".specify", "feature.json"),
+    JSON.stringify({ feature_directory: "specs/001-demo" }),
+    "utf8",
+  );
+
+  const { script } = await stageExtension(t);
+  assert.equal(status(script, child).value.dubsar.reason, "WORKSPACE_NOT_FOUND");
+
+  await initialiseMemory(t, child);
+  assert.equal(await readdir(child).then((names) => names.includes(".dubsar")), true);
+  assert.equal(await readdir(parent).then((names) => names.includes(".dubsar")), false,
+    "init must land on the Spec Kit root, never the contaminating parent");
+  assert.equal(status(script, child).value.dubsar.present, true);
 });

@@ -5,13 +5,17 @@
  * Locates the current Spec Kit feature and reports each canonical document as
  * absent, unsafe, unlinked, fresh, stale, missing, or unknown.
  *
- * Two rules shape this file:
+ * Three rules shape this file:
  *
  *   - Files are opened only through DUBSAR's own safe-capture primitives, which
  *     reject symlinks, junctions, hardlinks, traversal, and anything outside the
  *     project root. No plain existence check ever decides that a path is usable.
  *   - Freshness always comes from DUBSAR's observation. This script reports the
  *     digest it captured, never the content it read.
+ *   - Only a DUBSAR workspace whose project_root is exactly the nearest
+ *     `.specify/` directory is accepted. Parent workspaces found by the general
+ *     locator are ignored as WORKSPACE_NOT_FOUND, with no foreign fields exposed
+ *     and no resume / route / precedents against them.
  *
  * Writes nothing.
  */
@@ -52,15 +56,64 @@ async function loadRuntime() {
     const safety = await import(
       pathToFileURL(path.join(runtimeRoot, "runtime", "path-safety.mjs")).href
     );
+    const locate = await import(
+      pathToFileURL(path.join(runtimeRoot, "runtime", "locate.mjs")).href
+    );
     return {
       bin: path.join(runtimeRoot, "bin", "dubsar.mjs"),
       captureRegularFile: capture.captureRegularFile,
       resolveSafeChild: safety.resolveSafeChild,
       assertNoSymbolicComponents: safety.assertNoSymbolicComponents,
+      openDirectory: safety.openDirectory,
+      isInsideOrEqual: safety.isInsideOrEqual,
+      locateProjectWorkspace: locate.locateProjectWorkspace,
     };
   } catch {
     return null;
   }
+}
+
+/**
+ * Spec Kit authority stops at the nearest `.specify/`. A DUBSAR workspace is
+ * accepted only when its `project_root` is exactly that directory. Parent
+ * `.dubsar` / `.dubsar-project` markers remain findable by the general locator
+ * for ordinary DUBSAR use, but this adapter must not present them as the
+ * Spec Kit project's memory.
+ *
+ * When a foreign workspace is ignored, return WORKSPACE_NOT_FOUND without
+ * disclosing its project_id, mission, or path. Callers must not run resume,
+ * route, or precedents against that workspace.
+ */
+function sameCanonicalRoot(runtime, left, right) {
+  return runtime.isInsideOrEqual(left, right) && runtime.isInsideOrEqual(right, left);
+}
+
+async function resolveBoundMemory(runtime, specKitRoot) {
+  let location;
+  try {
+    location = await runtime.locateProjectWorkspace({ start: specKitRoot });
+  } catch (error) {
+    return {
+      present: false,
+      reason: typeof error?.code === "string" ? error.code : "WORKSPACE_NOT_FOUND",
+    };
+  }
+
+  let canonicalSpecRoot;
+  try {
+    canonicalSpecRoot = await runtime.openDirectory(specKitRoot);
+  } catch (error) {
+    return {
+      present: false,
+      reason: typeof error?.code === "string" ? error.code : "DIRECTORY_UNSAFE",
+    };
+  }
+
+  if (!sameCanonicalRoot(runtime, location.project_root, canonicalSpecRoot)) {
+    return { present: false, reason: "WORKSPACE_NOT_FOUND" };
+  }
+
+  return { present: true, project_root: canonicalSpecRoot };
 }
 
 /**
@@ -257,18 +310,27 @@ if (runtime === null) {
     }));
   } else {
     const feature = await resolveFeature(runtime, root);
-    const capsule = runDubsar(runtime, ["resume", "--start", root, "--capsule", "--json"]);
-    const memory = capsule.ok
-      ? {
-          present: true,
-          capsule_format: capsule.value.format,
-          project_id: capsule.value.project?.project_id ?? null,
-          active_work: capsule.value.active_work?.work_id ?? null,
-          readiness: capsule.value.state?.readiness ?? null,
-          next_action: capsule.value.next_action?.code ?? null,
-          evidence_freshness: capsule.value.evidence_freshness ?? null,
-        }
-      : { present: false, reason: capsule.code };
+    // Bind memory to this Spec Kit root before any resume/precedents spawn.
+    const bound = await resolveBoundMemory(runtime, root);
+    let memory;
+    if (!bound.present) {
+      memory = { present: false, reason: bound.reason };
+    } else {
+      const capsule = runDubsar(runtime, [
+        "resume", "--start", bound.project_root, "--capsule", "--json",
+      ]);
+      memory = capsule.ok
+        ? {
+            present: true,
+            capsule_format: capsule.value.format,
+            project_id: capsule.value.project?.project_id ?? null,
+            active_work: capsule.value.active_work?.work_id ?? null,
+            readiness: capsule.value.state?.readiness ?? null,
+            next_action: capsule.value.next_action?.code ?? null,
+            evidence_freshness: capsule.value.evidence_freshness ?? null,
+          }
+        : { present: false, reason: capsule.code };
+    }
 
     const documents = [];
     if (feature.directory !== null && feature.reason === null) {
@@ -276,7 +338,7 @@ if (runtime === null) {
         const relative = `${feature.directory}/${file}`;
         const capture = await captureDocument(runtime, root, relative);
         const recorded = memory.present
-          ? recordedStatus(runtime, root, relative, capture)
+          ? recordedStatus(runtime, bound.project_root, relative, capture)
           : {
               status: capture.ok ? "unlinked" : "absent",
               linked_by: [],
