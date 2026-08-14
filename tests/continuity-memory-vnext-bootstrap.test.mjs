@@ -230,7 +230,6 @@ test("memory bootstrap refuses selection mismatch, non-null resolves, and in-pro
 
 test("shared init lock blocks bootstrap apply and init publish", async (t) => {
   const projectRoot = await mkdtemp(path.join(os.tmpdir(), "dubsar-memory-bootstrap-held-lock-"));
-  t.after(() => rm(projectRoot, { recursive: true, force: true }));
   const proposal = bootstrapProposal();
   const preview = await previewMemoryBootstrap({ start: projectRoot, proposal });
   const lockPath = path.join(projectRoot, INIT_LOCK);
@@ -238,6 +237,7 @@ test("shared init lock blocks bootstrap apply and init publish", async (t) => {
   t.after(async () => {
     await lockHandle.close().catch(() => {});
     await unlink(lockPath).catch(() => {});
+    await rm(projectRoot, { recursive: true, force: true });
   });
 
   await assert.rejects(
