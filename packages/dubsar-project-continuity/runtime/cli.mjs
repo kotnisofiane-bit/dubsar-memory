@@ -574,7 +574,13 @@ export async function runContinuityCli(argv, io = {}) {
         },
       });
     } else {
-      const inspection = await inspectWorkspace({ start: options.start, domain: "project" });
+      // Reference freshness is observed only where it is displayed. route,
+      // lots, and context stay pure reads of the recorded workspace.
+      const inspection = await inspectWorkspace({
+        start: options.start,
+        domain: "project",
+        observeReferences: new Set(["history", "precedents", "resume"]).has(command),
+      });
       value = command === "history"
         ? buildProjectHistory({
             inspection,

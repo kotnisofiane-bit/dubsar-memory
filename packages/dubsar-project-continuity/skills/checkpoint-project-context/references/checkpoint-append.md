@@ -98,6 +98,13 @@ Each item is exactly `{ "path": <project-relative>, "sha256": <64 hex> }`.
 An entry with zero references is valid and is recorded as `reported` /
 `unsupported` rather than `observed` / `supported`.
 
+Recorded digests are re-verified on later reads. `resume --capsule`, `history`,
+and `precedents` re-read each referenced file and classify it `fresh`, `stale`,
+`missing`, or `unknown`; a checkpoint whose file changed after recording
+becomes `unsupported`. Writes are unaffected — a preview or apply never depends
+on another checkpoint's references, so a checkpoint can still be recorded while
+an older reference is stale or missing.
+
 ## `resolves`
 
 `resolves` points at a **`checkpoint_id` that already exists earlier in the

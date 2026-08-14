@@ -70,7 +70,8 @@ try {
       const candidate = JSON.parse(result.stdout);
       capsule = candidate?.format === "dubsar.resume-capsule/2"
         ? assertProjectResumeCapsule(candidate)
-        : candidate?.format === "dubsar.resume-capsule/3"
+        : new Set(["dubsar.resume-capsule/3", "dubsar.resume-capsule/4"])
+          .has(candidate?.format)
           ? assertMemoryResumeCapsule(candidate)
           : undefined;
       if (capsule === undefined) throw new Error("CAPSULE_FORMAT_UNSUPPORTED");

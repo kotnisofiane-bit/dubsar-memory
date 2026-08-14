@@ -77,6 +77,7 @@ export const WORKBENCH_COMPONENTS = freeze([
       "dubsar.personal-memory-command-result/1",
       "dubsar.project-evidence/2",
       "dubsar.resume-capsule/3",
+      "dubsar.resume-capsule/4",
       "dubsar.review-ledger-ui-session/1",
       "dubsar.ui-session/1",
       "dubsar.validation/1",
@@ -128,6 +129,7 @@ export const WORKBENCH_COMPONENTS = freeze([
       "dubsar.resume-capsule/1",
       "dubsar.resume-capsule/2",
       "dubsar.resume-capsule/3",
+      "dubsar.resume-capsule/4",
       "dubsar.review-ledger-view/1",
       "dubsar.workbench-catalog/1",
       "dubsar.workbench-continuity-data/3",
@@ -340,6 +342,10 @@ const formatBindings = freeze({
       binding: "MEMORY_RESUME_CAPSULE_FORMAT",
     },
     {
+      path: "packages/dubsar-project-continuity/runtime/memory-vnext-capsule.mjs",
+      binding: "MEMORY_RESUME_CAPSULE_V4_FORMAT",
+    },
+    {
       path: "packages/dubsar-project-continuity/runtime/memory-vnext-contracts.mjs",
       binding: "MEMORY_CHECKPOINTS_FORMAT",
     },
@@ -430,6 +436,10 @@ const formatBindings = freeze({
     {
       path: "packages/dubsar-project-continuity/runtime/memory-vnext-capsule.mjs",
       binding: "MEMORY_RESUME_CAPSULE_FORMAT",
+    },
+    {
+      path: "packages/dubsar-project-continuity/runtime/memory-vnext-capsule.mjs",
+      binding: "MEMORY_RESUME_CAPSULE_V4_FORMAT",
     },
     {
       path: "packages/dubsar-operator-core/src/capsule.mjs",
@@ -646,8 +656,8 @@ const formatProducers = freeze({
       path: "packages/dubsar-project-continuity/runtime/memory-vnext-capsule.mjs",
       function: "buildMemoryResumeCapsule",
       exported: true,
-      occurrences: 1,
-      formats: ["dubsar.resume-capsule/3"],
+      occurrences: 2,
+      formats: ["dubsar.resume-capsule/3", "dubsar.resume-capsule/4"],
     },
     {
       path: "packages/dubsar-project-continuity/runtime/memory-vnext-contracts.mjs",
@@ -814,8 +824,8 @@ const formatProducers = freeze({
       path: "packages/dubsar-project-continuity/runtime/memory-vnext-capsule.mjs",
       function: "buildMemoryResumeCapsule",
       exported: true,
-      occurrences: 1,
-      formats: ["dubsar.resume-capsule/3"],
+      occurrences: 2,
+      formats: ["dubsar.resume-capsule/3", "dubsar.resume-capsule/4"],
     },
     {
       path: "packages/dubsar-operator-core/src/catalog.mjs",

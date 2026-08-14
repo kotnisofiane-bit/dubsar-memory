@@ -1,3 +1,4 @@
+import path from "node:path";
 import { WorkbenchError, deepFreeze, resolveLimits } from "./contracts.mjs";
 import { locateProjectWorkspace } from "./locate.mjs";
 import { snapshotProjectWorkspace } from "./snapshot.mjs";
@@ -7,8 +8,12 @@ import {
   evaluateLiteSnapshot,
   snapshotLiteWorkspace,
 } from "./lite.mjs";
-import { snapshotMemoryWorkspace } from "./memory-vnext-snapshot.mjs";
+import {
+  revalidateMemorySnapshot,
+  snapshotMemoryWorkspace,
+} from "./memory-vnext-snapshot.mjs";
 import { evaluateMemorySnapshot } from "./memory-vnext-evaluator.mjs";
+import { observeMemoryReferences } from "./memory-vnext-freshness.mjs";
 
 export const CONTINUITY_RUNTIME_IDENTITY = Object.freeze({
   name: "@dubsar/project-continuity-runtime",
@@ -116,6 +121,7 @@ export async function inspectWorkspace({
   start,
   domain = "project",
   limits: limitOverrides,
+  observeReferences = false,
 } = {}) {
   if (domain !== "project") throw new WorkbenchError("DOMAIN_INVALID");
   const limits = resolveLimits(limitOverrides);
@@ -124,8 +130,20 @@ export async function inspectWorkspace({
   const snapshot = mode === "memory_vnext"
     ? await snapshotMemoryWorkspace(location, limits)
     : mode === "lite" ? await snapshotLiteWorkspace(location, limits) : await snapshotProjectWorkspace(location, limits);
+  // Reference observation is opt-in and memory-vNext only. Writers never ask
+  // for it, so a preview or apply stays independent of external artifacts.
+  let observation = null;
+  if (observeReferences === true && mode === "memory_vnext") {
+    observation = await observeMemoryReferences({
+      projectRoot: location.project_root ?? path.dirname(location.root),
+      snapshot,
+      limits,
+    });
+    // Re-snapshot the canonical workspace after reading outside it.
+    await revalidateMemorySnapshot(location, limits, snapshot.snapshot_sha256);
+  }
   const evaluation = mode === "memory_vnext"
-    ? evaluateMemorySnapshot(snapshot)
+    ? evaluateMemorySnapshot(snapshot, observation)
     : mode === "lite" ? evaluateLiteSnapshot(snapshot) : evaluateProjectSnapshot(snapshot);
-  return deepFreeze({ location, snapshot, evaluation });
+  return deepFreeze({ location, snapshot, evaluation, observation });
 }

@@ -126,6 +126,26 @@ async function recaptureAll(root, captures, maxBytes) {
   }
 }
 
+/**
+ * Re-read the canonical workspace and require it to still digest to
+ * `expectedSnapshotSha256`. Used after reading files outside `.dubsar/`, so a
+ * capsule can never mix freshness observed against one snapshot with
+ * checkpoints read from another. Any divergence, or any failure to re-read, is
+ * reported as SNAPSHOT_CAPTURE_RACE.
+ */
+export async function revalidateMemorySnapshot(location, limits, expectedSnapshotSha256) {
+  let after;
+  try {
+    after = await snapshotMemoryWorkspace(location, limits);
+  } catch {
+    throw new WorkbenchError("SNAPSHOT_CAPTURE_RACE");
+  }
+  if (after.snapshot_sha256 !== expectedSnapshotSha256) {
+    throw new WorkbenchError("SNAPSHOT_CAPTURE_RACE");
+  }
+  return after;
+}
+
 export async function snapshotMemoryWorkspace(location, overrides = {}) {
   assertLocation(location);
   const limits = resolveLimits(overrides);

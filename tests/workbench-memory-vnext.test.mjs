@@ -276,7 +276,14 @@ test("Dashboard projects the selected Work, linked Knowledge, and one vNext snap
   assert.equal(continuity.source.workspace_mode, "memory_vnext");
   assert.equal(continuity.memory_route.native_guidance.plan.recommendation, "consider");
   assert.equal(continuity.memory_route.native_guidance.goal.recommendation, "not_indicated");
-  assert.equal(continuity.freshness.status, "unknown");
+  // The fixture writes src/slug.mjs with exactly the recorded digest, so the
+  // Dashboard must observe it as fresh rather than abstaining.
+  assert.equal(continuity.freshness.status, "fresh");
+  assert.deepEqual(continuity.freshness.counts, { fresh: 1, missing: 0, stale: 0, unknown: 0 });
+  assert.equal(continuity.history.entries.at(0).freshness, "fresh");
+  assert.equal(continuity.history.entries.at(0).support, "supported");
+  // The embedded capsule keeps its historical /3 shape in this report.
+  assert.equal(continuity.capsule.format, "dubsar.resume-capsule/3");
   assert.deepEqual(continuity.health, {
     work_scope: "multi_step",
     stagnation: "clear",
@@ -469,4 +476,47 @@ test("Dashboard rejects a mixed vNext snapshot before rendering", async (t) => {
   const mixed = JSON.parse(JSON.stringify(catalog));
   mixed.projects[0].continuity.history.source.snapshot_sha256 = "0".repeat(64);
   assert.throws(() => renderWorkbenchContinuityInteractiveReport(mixed));
+});
+
+test("Dashboard reports stale after an external change, with the embedded capsule still /3", async (t) => {
+  const { projectRoot } = await createMemoryProject(t);
+
+  // The fixture records src/slug.mjs at its exact digest. Change it afterwards:
+  // the canonical .dubsar/ snapshot is untouched, only the referenced artifact
+  // moved, which is precisely the drift a resume must surface.
+  await writeFile(
+    path.join(projectRoot, "src", "slug.mjs"),
+    "export function normalizeSlug(value) { return value.trim().toLowerCase(); }\n",
+    "utf8",
+  );
+
+  const catalog = await inspectProjectContinuityCatalog({
+    entries: [{ project_id: "dashboard-memory-project", root: projectRoot }],
+    includeReviews: false,
+    producer,
+  });
+  const project = catalog.projects[0];
+  const continuity = project.continuity;
+
+  assert.equal(continuity.freshness.status, "stale");
+  assert.deepEqual(continuity.freshness.counts, { fresh: 0, missing: 0, stale: 1, unknown: 0 });
+
+  const recorded = continuity.history.entries.at(0);
+  assert.equal(recorded.freshness, "stale");
+  assert.equal(recorded.support, "unsupported");
+  // The record was still captured with a reference; only its freshness changed.
+  assert.equal(recorded.class, "observed");
+
+  // This historical report keeps its embedded capsule at /3.
+  assert.equal(continuity.capsule.format, "dubsar.resume-capsule/3");
+  assert.equal(continuity.capsule.evidence_freshness, undefined);
+  assert.equal(catalog.format, "dubsar.workbench-continuity-data/3");
+
+  const report = renderWorkbenchContinuityInteractiveReport(catalog);
+  assert.equal(report.manifest.format, "dubsar.workbench-continuity-interactive-report/4");
+  // The stale state reaches the rendered page …
+  assert.match(report.html, /stale/u);
+  // … and no absolute path leaks with it.
+  assert.equal(report.html.includes(projectRoot), false);
+  assert.equal(/[A-Za-z]:\\\\Users/u.test(report.html), false);
 });

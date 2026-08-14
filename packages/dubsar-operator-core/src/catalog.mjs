@@ -19,8 +19,10 @@ import { MAX_PROJECTS } from "./project-registry.mjs";
 import { createProjectRegistry } from "./project-registry.mjs";
 import { buildProjectResumeCapsule } from "../../dubsar-project-continuity/runtime/capsule.mjs";
 import {
+  aggregateFreshness,
   buildProjectHistory,
   buildProjectLotsView,
+  checkpointFreshness,
 } from "../../dubsar-project-continuity/runtime/continuity-views.mjs";
 import {
   buildMemoryRoute,
@@ -129,6 +131,7 @@ async function inspectEntry(entry, { includeReviews, limits, producer }) {
         start: entry.root,
         domain: "project",
         limits,
+        observeReferences: true,
       });
       const { snapshot, evaluation } = continuityInspection;
       const view = buildWorkbenchView({ snapshot, evaluation, limits, producer });
@@ -212,7 +215,7 @@ function continuityRoutes() {
   };
 }
 
-function memoryWorkHistory(inspection, capsule) {
+function memoryWorkHistory(inspection, capsule, observation) {
   const allEntries = inspection.snapshot.documents.checkpoints.entries;
   const indexedById = new Map(allEntries.map((entry, recordIndex) => [
     entry.checkpoint_id,
@@ -242,21 +245,32 @@ function memoryWorkHistory(inspection, capsule) {
         ? selected.at(-1)?.indexed.recordIndex ?? null
         : null,
     },
-    entries: selected.map(({ capsule: item, indexed: { entry, recordIndex } }) => ({
-      record_index: recordIndex,
-      evidence_id: item.checkpoint_id,
-      lot_id: item.work_id,
-      type: item.kind,
-      class: entry.references.length > 0 ? "observed" : "reported",
-      support: entry.references.length > 0 ? "supported" : "unsupported",
-      freshness: entry.references.length > 0 ? "unknown" : "none",
-      statement: item.summary,
-    })),
+    entries: selected.map(({ capsule: item, indexed: { entry, recordIndex } }) => {
+      const freshness = checkpointFreshness(entry, observation);
+      return {
+        record_index: recordIndex,
+        evidence_id: item.checkpoint_id,
+        lot_id: item.work_id,
+        type: item.kind,
+        class: entry.references.length > 0 ? "observed" : "reported",
+        support: freshness.length > 0 && freshness.every((status) => status === "fresh")
+          ? "supported"
+          : "unsupported",
+        freshness: aggregateFreshness(freshness),
+        statement: item.summary,
+      };
+    }),
   };
 }
 
 function continuityProjection(inspection, producer) {
-  const capsule = buildProjectResumeCapsule({ inspection, producer });
+  // This report keeps its historical shape: the embedded capsule stays /3.
+  // Freshness reaches the report through its own freshness and history fields,
+  // and the CTA performs a fresh read that receives /4.
+  const capsule = buildProjectResumeCapsule({
+    inspection: { ...inspection, observation: null },
+    producer,
+  });
   const memoryRoute = buildMemoryRoute({ inspection });
   const lots = buildProjectLotsView({ inspection });
   if (lots.lots.length > 256) {
@@ -265,7 +279,7 @@ function continuityProjection(inspection, producer) {
   const snapshotSha256 = inspection.snapshot.snapshot_sha256;
   const memoryVnext = inspection.snapshot.workspace_mode === "memory_vnext";
   const history = memoryVnext
-    ? memoryWorkHistory(inspection, capsule)
+    ? memoryWorkHistory(inspection, capsule, inspection.observation)
     : buildProjectHistory({ inspection, limit: 8 });
   const workspaceMode = memoryVnext
     ? "memory_vnext"

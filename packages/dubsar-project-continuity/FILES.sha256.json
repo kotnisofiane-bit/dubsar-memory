@@ -1,6 +1,6 @@
 {
   "format": "dubsar.public-file-inventory/1",
-  "root_sha256": "576cfa50c7a7e8cc56c7b64481592cba303f7e1a612b44b1009d7f77cc0fb9c9",
+  "root_sha256": "179ec8fd225803d1012da7c4c11479ce7a19507eaeebf7e5bf4c50e8559e8658",
   "files": [
     {
       "path": ".claude-plugin/plugin.json",
@@ -48,7 +48,7 @@
     },
     {
       "path": "runtime/cli.mjs",
-      "sha256": "b85d1ebd9cc518a8e18deee30bef4bc84f3a59b09228ddd73b71a56d4ecf831b"
+      "sha256": "a041251252fdf64eb77664848f38552c15851628969b8249de1b4397aa4a371a"
     },
     {
       "path": "runtime/close-session.mjs",
@@ -60,7 +60,7 @@
     },
     {
       "path": "runtime/continuity-views.mjs",
-      "sha256": "b9858433e2eb8a73c0d1a490b929bcb48df8cac54c25f0c014463a9eb8ef5c1a"
+      "sha256": "ecc2b7010e59e0e9a1e26707d8b938517347ee6aec810f4f1932a1d4ed67b158"
     },
     {
       "path": "runtime/continuity.mjs",
@@ -68,7 +68,7 @@
     },
     {
       "path": "runtime/contracts.mjs",
-      "sha256": "932425bc1d77cf320eccecce97f856c75474780cea93164c0911d34e8eb45b02"
+      "sha256": "31fbf4d8f410126805721ccfc7476dbf4635b147d40e80e3b8dec945c3082a4c"
     },
     {
       "path": "runtime/display-safety.mjs",
@@ -76,7 +76,7 @@
     },
     {
       "path": "runtime/index.mjs",
-      "sha256": "83b2dd41a1c367f029631f38a27824c7d66e8b5a2b265a2ed81c3feb0c36ee64"
+      "sha256": "bf75d255df87a010d3b408972c7f0cd9ec53d9fe2f5579b5654fc51bed188ba0"
     },
     {
       "path": "runtime/lite-initializer.mjs",
@@ -108,7 +108,7 @@
     },
     {
       "path": "runtime/memory-vnext-capsule.mjs",
-      "sha256": "7af9ae782410066bcaa5e3c41333abdb16f4cfc2498739627a4118dc1859321a"
+      "sha256": "af3564f1bf72f96db6c4956cb28ede6eb1d817593ad14a9d499533eca0b97d61"
     },
     {
       "path": "runtime/memory-vnext-contracts.mjs",
@@ -116,7 +116,11 @@
     },
     {
       "path": "runtime/memory-vnext-evaluator.mjs",
-      "sha256": "903224662e28e2e6720737d9873730a7ccb927a1b9d160499a47fc50df0d74ad"
+      "sha256": "83d2ef27b19cce882af97f1d80474b7ac4eec1a7229754c47ede6f9c2d903723"
+    },
+    {
+      "path": "runtime/memory-vnext-freshness.mjs",
+      "sha256": "87979f2ec04f91912386f6d354250bd09d7e918353c20cac39d286b034c825a8"
     },
     {
       "path": "runtime/memory-vnext-initializer.mjs",
@@ -132,7 +136,7 @@
     },
     {
       "path": "runtime/memory-vnext-snapshot.mjs",
-      "sha256": "ea7ab84cd16b4b9a9cc0d89f7c857f7bf1f106cb8665466e3faa52b50ad86fba"
+      "sha256": "ab8df59ac28f51f239b6e4f27611a81e176d6eeebdb189b9a3b79303447145a7"
     },
     {
       "path": "runtime/memory-vnext-views.mjs",
@@ -172,7 +176,7 @@
     },
     {
       "path": "skills/checkpoint-project-context/references/checkpoint-append.md",
-      "sha256": "d9d6b5dd19ce6fc282b75cf9b4911fa96c5ffd0fbdcf84a522d218743be4a068"
+      "sha256": "8c491e151d423a8e9bfffdce1f4b235e3bbd6182a7183cb4188d2a1cb083ff5d"
     },
     {
       "path": "skills/checkpoint-project-context/SKILL.md",
@@ -184,7 +188,7 @@
     },
     {
       "path": "skills/resume-project-context/SKILL.md",
-      "sha256": "293df97b0f64864ea28ace9a6ad918b79188011a2c33fa99f0a36fdc32e2a799"
+      "sha256": "3f36652f8887b26de9a75aaa70340c0955fc79c7fbaa57ebb4277ad740049dea"
     }
   ]
 }
