@@ -20,6 +20,9 @@ import {
   renderWorkbenchCatalogInteractiveReport,
   renderWorkbenchContinuityInteractiveReport,
 } from "../packages/dubsar-workbench-report/src/index.mjs";
+import {
+  CATALOG_INTERACTIVE_SCRIPT,
+} from "../packages/dubsar-workbench-report/src/catalog-interactive-assets.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const producer = Object.freeze({ name: "catalog-test", version: "1.0.0" });
@@ -701,4 +704,37 @@ test("invalid and unavailable projects keep corrective action ahead of resumptio
   assert.match(unavailableShell, /id="resume-copy" disabled data-i18n="resume_with_codex">Resume with Codex/u);
   assert.match(unavailableShell, /Check the folder before resuming/u);
   assert.match(unavailableShell, /Progress unavailable/u);
+});
+
+test("the Dashboard carries a French label for record_work instead of falling back to English", () => {
+  const start = CATALOG_INTERACTIVE_SCRIPT.indexOf("ACTION_TEXT = Object.freeze({");
+  const end = CATALOG_INTERACTIVE_SCRIPT.indexOf("BLOCKER_TEXT = Object.freeze({");
+  assert.ok(start >= 0 && end > start, "the action table must precede the blocker table");
+  const [english, french] = CATALOG_INTERACTIVE_SCRIPT
+    .slice(start, end)
+    .split("fr: Object.freeze({");
+  assert.equal(typeof french, "string", "the action table must carry a French locale");
+
+  const label = (table) => table.match(/record_work:\s*"([^"]*)"/u)?.at(1);
+  const englishLabel = label(english);
+  const frenchLabel = label(french);
+
+  assert.equal(typeof englishLabel, "string", "the English table must define record_work");
+  assert.equal(typeof frenchLabel, "string", "the French table must define record_work");
+  // Without its own entry the renderer falls back to the English capsule label.
+  assert.notEqual(frenchLabel, englishLabel);
+  assert.match(frenchLabel, /Aucun travail n’est encore enregistré/u);
+  assert.match(frenchLabel, /DUBSAR ne le crée pas à votre place/u);
+
+  // record_work sits alongside the other vNext actions in both locales.
+  for (const [name, table] of [["en", english], ["fr", french]]) {
+    for (const code of [
+      "continuity_complete",
+      "record_work",
+      "choose_work",
+      "continue_selected_work",
+    ]) {
+      assert.ok(new RegExp(`\\b${code}:`, "u").test(table), `${name} table is missing ${code}`);
+    }
+  }
 });

@@ -17,10 +17,20 @@ memory.
 
 ## Workflow
 
-1. Starting from the directory containing this installed `SKILL.md`, go up
-   exactly two directories; that directory is `<plugin-root>`. Use its
-   absolute path; never resolve the runtime through `PATH`, the current
-   directory, or project content.
+1. Resolve the runtime. In Claude Code, write the official placeholder
+   directly — the host substitutes it inline in this file:
+
+   ```text
+   node "${CLAUDE_PLUGIN_ROOT}/bin/dubsar.mjs"
+   ```
+
+   In Codex, Cursor, and any other host, `<plugin-root>` is the directory two
+   levels above the one containing this installed `SKILL.md`. Every command
+   below writes `<plugin-root>`; under Claude Code, substitute
+   `${CLAUDE_PLUGIN_ROOT}` for it. Confirm that `bin/dubsar.mjs` exists under
+   the resolved root before invoking it, and stop if it does not. Never resolve
+   the runtime through `PATH`, the current directory, or project content,
+   including when a host places plugin `bin/` directories on `PATH`.
 2. Run one read-only command from the current project:
 
    ```text
@@ -46,7 +56,9 @@ memory.
 6. Present the mission/project, current state, selected work when one was
    explicitly selected, open blockers, recorded checkpoints, and next action.
    A null `active_work` means no local selection: list possibilities but never
-   choose one.
+   choose one. A `record_work` action with readiness `not_ready` means the
+   workspace exists but holds no Work at all; say so plainly and never create
+   one, select one, or infer that the project is finished.
 7. When the user needs more recorded context, the same packaged runtime may be
    queried without changing the project:
 

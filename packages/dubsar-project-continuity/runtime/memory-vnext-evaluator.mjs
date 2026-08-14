@@ -51,15 +51,21 @@ export function evaluateMemorySnapshot(snapshot) {
   const current = latestWorkState(selectedEntries, work);
   const repeated = work !== null && repeatedAttempt(selectedEntries, work.work_id);
   const workItems = Array.isArray(compiled.work_items) ? compiled.work_items : [];
+  const noWorkRecorded = workItems.length === 0;
   const openItems = workItems.filter((item) => item.status !== "complete");
   const blockers = current?.blockers ?? [];
   const nextAction = work === null
-    ? {
-        code: openItems.length === 0 ? "continuity_complete" : "choose_work",
-        label: openItems.length === 0
-          ? "All recorded work items are complete."
-          : "Choose an open work item; DUBSAR will not choose it for you.",
-      }
+    ? noWorkRecorded
+      ? {
+          code: "record_work",
+          label: "No work item is recorded; record one before continuing. DUBSAR will not create it for you.",
+        }
+      : {
+          code: openItems.length === 0 ? "continuity_complete" : "choose_work",
+          label: openItems.length === 0
+            ? "All recorded work items are complete."
+            : "Choose an open work item; DUBSAR will not choose it for you.",
+        }
     : work.status === "complete"
       ? { code: "finish_recorded", label: "The selected work item is recorded as complete." }
     : repeated
@@ -85,8 +91,10 @@ export function evaluateMemorySnapshot(snapshot) {
     workspace_mode: "memory_vnext",
     integrity: { status: "valid", diagnostics: [] },
     readiness: {
-      status: work === null && openItems.length > 0 ? "not_ready" : "ready",
-      reasons: work === null && openItems.length > 0 ? ["WORK_SELECTION_REQUIRED"] : [],
+      status: noWorkRecorded || (work === null && openItems.length > 0) ? "not_ready" : "ready",
+      reasons: noWorkRecorded
+        ? ["NO_WORK_RECORDED"]
+        : work === null && openItems.length > 0 ? ["WORK_SELECTION_REQUIRED"] : [],
     },
     counts: {
       lots: workItems.length,

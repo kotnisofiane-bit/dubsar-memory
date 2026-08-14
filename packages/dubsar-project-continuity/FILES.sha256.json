@@ -1,6 +1,6 @@
 {
   "format": "dubsar.public-file-inventory/1",
-  "root_sha256": "156538210aacd805f4f96cbc5a865c356e40858e0fe6e4591100be1f37971644",
+  "root_sha256": "576cfa50c7a7e8cc56c7b64481592cba303f7e1a612b44b1009d7f77cc0fb9c9",
   "files": [
     {
       "path": ".claude-plugin/plugin.json",
@@ -48,7 +48,7 @@
     },
     {
       "path": "runtime/cli.mjs",
-      "sha256": "0d92c9ae8deb0c5252b44d8cf0bdf7ea0d30ac6e5cbe58f9e4a56dab3bb8baff"
+      "sha256": "b85d1ebd9cc518a8e18deee30bef4bc84f3a59b09228ddd73b71a56d4ecf831b"
     },
     {
       "path": "runtime/close-session.mjs",
@@ -104,7 +104,7 @@
     },
     {
       "path": "runtime/memory-snapshot-compiler.mjs",
-      "sha256": "131d0b7f5f92e4010e4d63687988a1d24ec75493e078412f17069f9df3931b65"
+      "sha256": "af1b7b9b7a8db863fa60e4d836481fd95e8b71494348e7c3bd85e394c6cef9bb"
     },
     {
       "path": "runtime/memory-vnext-capsule.mjs",
@@ -116,7 +116,7 @@
     },
     {
       "path": "runtime/memory-vnext-evaluator.mjs",
-      "sha256": "feb126cac3eb019aeaa725614c1bef536db329c204e06f46bc96f061366bbeaa"
+      "sha256": "903224662e28e2e6720737d9873730a7ccb927a1b9d160499a47fc50df0d74ad"
     },
     {
       "path": "runtime/memory-vnext-initializer.mjs",
@@ -171,8 +171,12 @@
       "sha256": "be72ac2664fbca7a3566c6bbf5ac213fb54dc843c0836c1a80b758abadb2a280"
     },
     {
+      "path": "skills/checkpoint-project-context/references/checkpoint-append.md",
+      "sha256": "d9d6b5dd19ce6fc282b75cf9b4911fa96c5ffd0fbdcf84a522d218743be4a068"
+    },
+    {
       "path": "skills/checkpoint-project-context/SKILL.md",
-      "sha256": "1afe3e5e5f0344e229427dfb77a9fece421c77662f61591b2e5846943269184c"
+      "sha256": "9388f7a523af504425a84fe2ae7697595278bd89e085f2ff82ff6720be2577a7"
     },
     {
       "path": "skills/resume-project-context/agents/openai.yaml",
@@ -180,7 +184,7 @@
     },
     {
       "path": "skills/resume-project-context/SKILL.md",
-      "sha256": "431d58a98d4d9c75d0f9953d3c31a05bc09bbb93d1d00333cbcca1a1215654e9"
+      "sha256": "293df97b0f64864ea28ace9a6ad918b79188011a2c33fa99f0a36fdc32e2a799"
     }
   ]
 }
