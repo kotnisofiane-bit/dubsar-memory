@@ -11,7 +11,7 @@
   },
   "policy": {
     "path": "tools/check-workbench-runtime.mjs",
-    "sha256": "2e4cba7a26910e22b825af67b464738739b283a33368e61f9acd62a88f5f296e"
+    "sha256": "cfb4f8b5f7e65c81706aee94e7b8edf2d549c35a79f36131959dd62863fedddc"
   },
   "components": [
     {
@@ -51,6 +51,8 @@
         "dubsar.knowledge/1",
         "dubsar.local-state/1",
         "dubsar.location/1",
+        "dubsar.memory-bootstrap-apply/1",
+        "dubsar.memory-bootstrap-preview/1",
         "dubsar.memory-change-apply/1",
         "dubsar.memory-change-preview/1",
         "dubsar.memory-change-proposal/1",
@@ -508,8 +510,8 @@
     },
     {
       "path": "packages/dubsar-project-continuity/runtime/cli.mjs",
-      "bytes": 30221,
-      "sha256": "a041251252fdf64eb77664848f38552c15851628969b8249de1b4397aa4a371a",
+      "bytes": 31315,
+      "sha256": "319c6c1e90a48df3b447e01eecb7af94ddc1159f8c15cacfbcbec20fa82745a9",
       "role": "runtime"
     },
     {
@@ -594,6 +596,12 @@
       "path": "packages/dubsar-project-continuity/runtime/memory-snapshot-compiler.mjs",
       "bytes": 2961,
       "sha256": "af1b7b9b7a8db863fa60e4d836481fd95e8b71494348e7c3bd85e394c6cef9bb",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/memory-vnext-bootstrap.mjs",
+      "bytes": 13741,
+      "sha256": "cbd6312e4fae8cf7d1b833ce046b9b2cb40ea64388f9f85a2e1a3f61c6a39a95",
       "role": "runtime"
     },
     {
@@ -843,5 +851,5 @@
       "role": "runtime"
     }
   ],
-  "content_root_sha256": "98ce537d06743fdf09bcfcc9e91ab831d8d70ac96eabd7d3ef905f2e3f8c57bf"
+  "content_root_sha256": "ecdbc213a1a8ee351fbc6f16126c88627c6e74749ad7044212407db3e2057bd8"
 }

@@ -52,10 +52,16 @@ This command writes nothing and initializes nothing.
 Records one verified fact, decision, or blocker. It can reference the current
 feature's `spec.md`, `plan.md`, and `tasks.md` — only those that actually exist.
 
+When the project has no local DUBSAR memory yet and you provide the Work and
+First recorded checkpoint details up front, the skill can use one atomic
+**Create project memory** (`bootstrap`) preview instead of four separate
+writes. Otherwise it keeps the advanced granular path: init → Work create →
+Work select → checkpoint.
+
 Every write is preview, then confirmation, then apply against the exact digest
-you saw. Recording a checkpoint changes one canonical file,
-`.dubsar/checkpoints.json`. Nothing under `.specify/` or `specs/` is ever
-written.
+you saw. A granular checkpoint changes one canonical file,
+`.dubsar/checkpoints.json`. Bootstrap publishes the whole `.dubsar/` directory
+atomically. Nothing under `.specify/` or `specs/` is ever written.
 
 ## What this extension deliberately does not do
 

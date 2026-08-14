@@ -26,6 +26,10 @@ import {
   previewLiteInitialization,
 } from "./lite-initializer.mjs";
 import {
+  applyMemoryBootstrap,
+  previewMemoryBootstrap,
+} from "./memory-vnext-bootstrap.mjs";
+import {
   applyMemoryInitialization,
   previewMemoryInitialization,
 } from "./memory-vnext-initializer.mjs";
@@ -39,7 +43,7 @@ import {
 } from "./memory-vnext-migration.mjs";
 
 export const PUBLIC_CONTINUITY_COMMANDS = Object.freeze([
-  "checkpoint", "close", "context", "history", "inbox", "init", "knowledge", "lots",
+  "bootstrap", "checkpoint", "close", "context", "history", "inbox", "init", "knowledge", "lots",
   "memory", "migrate", "precedents", "resume", "route", "work",
 ]);
 const COMMANDS = new Set(PUBLIC_CONTINUITY_COMMANDS);
@@ -69,6 +73,9 @@ Write style A - you author a proposal file:
   Preview with --proposal <file>, then repeat the same command with
   --apply --expected-change <change_sha256>. Store the file outside the project.
   init             dubsar.memory-init-proposal/1
+  bootstrap        dubsar.memory-bootstrap-proposal/1
+                   Optional first-run: Create project memory with Active work
+                   and First recorded checkpoint in one atomic publish
   work create      dubsar.memory-change-proposal/1, operation work_create
   inbox add        dubsar.memory-change-proposal/1, operation inbox_add
   inbox promote    dubsar.memory-change-proposal/1, operation inbox_promote
@@ -241,7 +248,7 @@ function parseArguments(argv) {
       "apply", "capsule", "expected_change", "json", "proposal", "start", "to", "transition_lot",
     ]);
     if (Object.keys(options).some((key) => !allowed.has(key))) throw new WorkbenchError("CLI_ARGUMENT_INVALID");
-  } else if (command === "init") {
+  } else if (command === "init" || command === "bootstrap") {
     const allowed = new Set(["apply", "capsule", "expected_change", "json", "proposal", "start"]);
     if (
       options.proposal === undefined || options.capsule ||
@@ -339,6 +346,14 @@ function humanOutput(command, value) {
   if (command === "init") return [
     value.status === "applied" ? "DUBSAR project memory initialized" : "DUBSAR project-memory initialization preview",
     `Target: ${value.target}`,
+    `Change SHA-256: ${value.change_sha256}`,
+    ...(value.summary ? [`Summary: ${value.summary}`] : []),
+  ].join("\n");
+  if (command === "bootstrap") return [
+    value.status === "applied" ? "DUBSAR Create project memory applied" : "DUBSAR Create project memory preview",
+    `Target: ${value.target}`,
+    `Active work: ${value.work_id}`,
+    `First recorded checkpoint: ${value.checkpoint_id}`,
     `Change SHA-256: ${value.change_sha256}`,
     ...(value.summary ? [`Summary: ${value.summary}`] : []),
   ].join("\n");
@@ -447,6 +462,14 @@ export async function runContinuityCli(argv, io = {}) {
           ? await applyLiteInitialization({ start: options.start, proposalPath: options.proposal, expectedChange: options.expected_change })
           : await previewLiteInitialization({ start: options.start, proposalPath: options.proposal });
       }
+    } else if (command === "bootstrap") {
+      value = options.apply
+        ? await applyMemoryBootstrap({
+            start: options.start,
+            proposalPath: options.proposal,
+            expectedChange: options.expected_change,
+          })
+        : await previewMemoryBootstrap({ start: options.start, proposalPath: options.proposal });
     } else if (command === "checkpoint") {
       const inspection = await inspectWorkspace({ start: options.start, domain: "project" });
       if (inspection.snapshot.workspace_mode === "memory_vnext") {

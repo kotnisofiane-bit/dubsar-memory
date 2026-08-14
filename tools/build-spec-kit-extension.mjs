@@ -150,17 +150,27 @@ export async function buildExtensionArtifact({ outputDirectory } = {}) {
   }
   if (copied === 0) throw new Error("RUNTIME_EMPTY");
 
-  // 2b. The canonical checkpoint contract has exactly one source: the sealed
-  // package. It is copied beside the extension's own write reference so the two
-  // documents can never drift apart.
-  const canonical = "skills/checkpoint-project-context/references/checkpoint-append.md";
-  const canonicalDigest = declared.get(canonical);
-  if (canonicalDigest === undefined) throw new Error(`CANONICAL_REFERENCE_MISSING:${canonical}`);
-  const canonicalBytes = await readFile(path.join(RUNTIME_SOURCE, canonical));
-  if (sha256(canonicalBytes) !== canonicalDigest) {
-    throw new Error(`RUNTIME_DIGEST_MISMATCH:${canonical}`);
+  // 2b. Canonical write contracts have exactly one source: the sealed package.
+  // They are copied beside the extension's own write reference so the documents
+  // can never drift apart.
+  for (const [canonical, destination] of [
+    [
+      "skills/checkpoint-project-context/references/checkpoint-append.md",
+      "docs/contracts/checkpoint-append.md",
+    ],
+    [
+      "skills/checkpoint-project-context/references/bootstrap.md",
+      "docs/contracts/bootstrap.md",
+    ],
+  ]) {
+    const canonicalDigest = declared.get(canonical);
+    if (canonicalDigest === undefined) throw new Error(`CANONICAL_REFERENCE_MISSING:${canonical}`);
+    const canonicalBytes = await readFile(path.join(RUNTIME_SOURCE, canonical));
+    if (sha256(canonicalBytes) !== canonicalDigest) {
+      throw new Error(`RUNTIME_DIGEST_MISMATCH:${canonical}`);
+    }
+    entries.push({ name: destination, bytes: canonicalBytes });
   }
-  entries.push({ name: "docs/contracts/checkpoint-append.md", bytes: canonicalBytes });
 
   entries.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
 

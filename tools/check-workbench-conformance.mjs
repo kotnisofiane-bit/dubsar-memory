@@ -61,6 +61,8 @@ export const WORKBENCH_COMPONENTS = freeze([
       "dubsar.knowledge/1",
       "dubsar.local-state/1",
       "dubsar.location/1",
+      "dubsar.memory-bootstrap-apply/1",
+      "dubsar.memory-bootstrap-preview/1",
       "dubsar.memory-change-apply/1",
       "dubsar.memory-change-preview/1",
       "dubsar.memory-change-proposal/1",
@@ -364,6 +366,14 @@ const formatBindings = freeze({
     {
       path: "packages/dubsar-project-continuity/runtime/memory-vnext-contracts.mjs",
       binding: "MEMORY_WORK_FORMAT",
+    },
+    {
+      path: "packages/dubsar-project-continuity/runtime/memory-vnext-bootstrap.mjs",
+      binding: "MEMORY_BOOTSTRAP_APPLY_FORMAT",
+    },
+    {
+      path: "packages/dubsar-project-continuity/runtime/memory-vnext-bootstrap.mjs",
+      binding: "MEMORY_BOOTSTRAP_PREVIEW_FORMAT",
     },
     {
       path: "packages/dubsar-project-continuity/runtime/memory-vnext-initializer.mjs",
@@ -693,6 +703,20 @@ const formatProducers = freeze({
       exported: true,
       occurrences: 1,
       formats: ["dubsar.continuity-checkpoints/2"],
+    },
+    {
+      path: "packages/dubsar-project-continuity/runtime/memory-vnext-bootstrap.mjs",
+      function: "buildBootstrap",
+      called_by_export: "previewMemoryBootstrap",
+      occurrences: 1,
+      formats: ["dubsar.memory-bootstrap-preview/1"],
+    },
+    {
+      path: "packages/dubsar-project-continuity/runtime/memory-vnext-bootstrap.mjs",
+      function: "applyMemoryBootstrap",
+      exported: true,
+      occurrences: 1,
+      formats: ["dubsar.memory-bootstrap-apply/1"],
     },
     {
       path: "packages/dubsar-project-continuity/runtime/memory-vnext-initializer.mjs",

@@ -765,24 +765,29 @@ test("the contract reference ships in the artifact and reaches every integration
   const archive = (await readFile(path.join(target, "dubsar-memory-extension.zip")))
     .toString("latin1");
 
-  // Both documents travel: the extension's own, and the canonical one copied
+  // Both documents travel: the extension's own, and the canonical ones copied
   // from the sealed package.
   assert.ok(archive.includes("docs/contracts/write-operations.md"));
   assert.ok(archive.includes("docs/contracts/checkpoint-append.md"));
+  assert.ok(archive.includes("docs/contracts/bootstrap.md"));
   assert.equal(built.file_count > 40, true);
 
-  // The copied contract has a single source: the sealed package. Verified by
+  // The copied contracts have a single source: the sealed package. Verified by
   // digest against the package inventory rather than by scanning the compressed
   // archive, so the check proves provenance instead of mere presence.
   const packageRoot = path.join(REPOSITORY_ROOT, "packages", "dubsar-project-continuity");
-  const canonicalPath = "skills/checkpoint-project-context/references/checkpoint-append.md";
-  const canonical = await readFile(path.join(packageRoot, ...canonicalPath.split("/")));
   const inventory = JSON.parse(await readFile(path.join(packageRoot, "FILES.sha256.json"), "utf8"));
-  const declared = inventory.files.find((item) => item.path === canonicalPath);
-  assert.equal(typeof declared?.sha256, "string", "the canonical contract is inventoried");
-  assert.equal(sha256(canonical), declared.sha256,
-    "packaging copies the sealed contract rather than maintaining a second copy");
-  assert.match(canonical.toString("utf8"), /dubsar\.memory-change-proposal\/1/u);
+  for (const [canonicalPath, pattern] of [
+    ["skills/checkpoint-project-context/references/checkpoint-append.md", /dubsar\.memory-change-proposal\/1/u],
+    ["skills/checkpoint-project-context/references/bootstrap.md", /dubsar\.memory-bootstrap-proposal\/1/u],
+  ]) {
+    const canonical = await readFile(path.join(packageRoot, ...canonicalPath.split("/")));
+    const declared = inventory.files.find((item) => item.path === canonicalPath);
+    assert.equal(typeof declared?.sha256, "string", `the canonical contract is inventoried: ${canonicalPath}`);
+    assert.equal(sha256(canonical), declared.sha256,
+      "packaging copies the sealed contract rather than maintaining a second copy");
+    assert.match(canonical.toString("utf8"), pattern);
+  }
 
   // Both installed commands point at the contracts.
   for (const name of ["speckit.dubsar.resume.md", "speckit.dubsar.checkpoint.md"]) {
@@ -793,8 +798,12 @@ test("the contract reference ships in the artifact and reaches every integration
   const checkpoint = await readFile(
     path.join(EXTENSION, "commands", "speckit.dubsar.checkpoint.md"), "utf8");
   assert.match(checkpoint, /docs\/contracts\/checkpoint-append\.md/u);
-  // The corrected boundary: four distinct mutations, not one file.
-  assert.match(checkpoint, /Each mutation is separate, previewed, and confirmed on its own/u);
+  assert.match(checkpoint, /docs\/contracts\/bootstrap\.md/u);
+  assert.match(checkpoint, /Create project memory/u);
+  assert.match(checkpoint, /Active work/u);
+  assert.match(checkpoint, /First recorded checkpoint/u);
+  // Granular path remains available as the advanced solution.
+  assert.match(checkpoint, /Advanced granular path/u);
   assert.match(checkpoint, /work select` writes `\.dubsar\/local\.json/u);
 });
 

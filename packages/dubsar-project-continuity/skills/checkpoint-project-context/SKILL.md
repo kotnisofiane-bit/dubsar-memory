@@ -37,6 +37,25 @@ The help reads no workspace.
 Only when the user explicitly asks to enable or initialize DUBSAR continuity
 for a project that has no continuity workspace:
 
+### Optional Create project memory (bootstrap)
+
+When the user wants the first Active work and First recorded checkpoint in the
+same gesture, and no `.dubsar/` exists yet, prefer one atomic bootstrap instead
+of four granular writes. Author `dubsar.memory-bootstrap-proposal/1` outside the
+project (see `references/bootstrap.md`). The proposal must declare
+`selected_work_id` explicitly and identically to `work.work_id` and
+`checkpoint.work_id`.
+
+```text
+node "<plugin-root>/bin/dubsar.mjs" bootstrap --start <project> --proposal <temporary-json> --json
+```
+
+Present Create project memory, Active work, First recorded checkpoint, and the
+exact `change_sha256`. Apply only after one confirmation of that digest. Delete
+the temporary proposal afterward.
+
+### Granular init
+
 1. Prepare `dubsar.memory-init-proposal/1` in an OS temporary directory. It
    contains exactly `format`, `project_id`, and `title`.
 2. Preview without writing:

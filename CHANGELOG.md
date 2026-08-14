@@ -5,6 +5,8 @@ separate, explicitly reviewed decision.
 
 ## Public technical preview — 0.3.0-dev
 
+- add optional Continuity CLI `bootstrap` for one atomic Create project memory
+  with Active work and First recorded checkpoint (Spec Kit extension 0.1.2);
 - add the human-readable `.dubsar/` Memory vNext format;
 - add Work, Knowledge, Inbox, checkpoint, context and explicit migration flows;
 - add Memory Guidance v2 with exact relations, artifact lifecycle and advisory

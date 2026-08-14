@@ -46,9 +46,14 @@ Initialization and changes use preview plus exact digest confirmation:
 
 ```bash
 node "<package-root>/bin/dubsar.mjs" init --start . --proposal <init.json> --json
+node "<package-root>/bin/dubsar.mjs" bootstrap --start . --proposal <bootstrap.json> --json
 node "<package-root>/bin/dubsar.mjs" checkpoint --start . --proposal <proposal.json> --json
 node "<package-root>/bin/dubsar.mjs" close --start .
 ```
+
+`bootstrap` is an optional first-run path: Create project memory with one Active
+work and one First recorded checkpoint in a single atomic publish when no
+`.dubsar/` exists yet. Granular `init` / `work` / `checkpoint` remain available.
 
 `close` requires a human interactive terminal. No command selects or executes
 Work automatically. `context` writes nothing unless `--write` is explicit, and
