@@ -476,9 +476,12 @@ export async function runCli(argv, io = {}) {
           producer: OPERATOR_CLI_IDENTITY,
         });
       } else {
+        // The Dashboard CTA reads through this path, so it observes references
+        // and receives a /4 capsule carrying evidence_freshness.
         const inspection = await inspectContinuityWorkspace({
           start: entries[0].root,
           domain: "project",
+          observeReferences: true,
         });
         value = buildProjectResumeCapsule({
           inspection,

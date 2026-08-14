@@ -9,6 +9,9 @@ import {
   normalizeProjectArtifactPath,
 } from "./continuity.mjs";
 import { safeDisplayText } from "./display-safety.mjs";
+import { checkpointFreshness } from "./memory-vnext-freshness.mjs";
+
+export { checkpointFreshness };
 import {
   buildLiteHistory,
   buildLiteLotsView,
@@ -50,7 +53,7 @@ function projectText(value, maxChars = 500) {
   return display.text || "Unavailable";
 }
 
-function aggregateFreshness(values, unavailable = false) {
+export function aggregateFreshness(values, unavailable = false) {
   if (unavailable) return "unavailable";
   if (!Array.isArray(values) || values.length === 0) return "none";
   const unique = new Set(values);
@@ -102,16 +105,21 @@ export function buildProjectHistory({ inspection, before, limit = MAX_HISTORY_PA
         next_before_index: selected.length === limit && selected.at(-1).recordIndex > 0
           ? selected.at(-1).recordIndex : null,
       },
-      entries: selected.map(({ entry, recordIndex }) => ({
-        record_index: recordIndex,
-        evidence_id: entry.checkpoint_id,
-        lot_id: entry.work_id,
-        type: entry.kind,
-        class: entry.references.length > 0 ? "observed" : "reported",
-        support: entry.references.length > 0 ? "supported" : "unsupported",
-        freshness: entry.references.length > 0 ? "unknown" : "none",
-        statement: projectText(entry.summary),
-      })),
+      entries: selected.map(({ entry, recordIndex }) => {
+        const freshness = checkpointFreshness(entry, inspection.observation);
+        return {
+          record_index: recordIndex,
+          evidence_id: entry.checkpoint_id,
+          lot_id: entry.work_id,
+          type: entry.kind,
+          class: entry.references.length > 0 ? "observed" : "reported",
+          support: freshness.length > 0 && freshness.every((status) => status === "fresh")
+            ? "supported"
+            : "unsupported",
+          freshness: aggregateFreshness(freshness),
+          statement: projectText(entry.summary),
+        };
+      }),
     });
   }
   if (inspection?.snapshot?.workspace_mode === "lite") {
@@ -285,14 +293,17 @@ export function buildProjectPrecedents({ inspection, lotId, referencePath }) {
       referencePath: normalized,
     }).slice(0, MAX_PRECEDENTS).map(({ record_index: index, match_basis }) => {
       const entry = entries.at(index);
+      const freshness = checkpointFreshness(entry, inspection.observation);
       return {
         record_index: index,
         evidence_id: entry.checkpoint_id,
         lot_id: entry.work_id,
         type: entry.kind,
         class: entry.references.length > 0 ? "observed" : "reported",
-        support: entry.references.length > 0 ? "supported" : "unsupported",
-        freshness: entry.references.length > 0 ? "unknown" : "none",
+        support: freshness.length > 0 && freshness.every((status) => status === "fresh")
+          ? "supported"
+          : "unsupported",
+        freshness: aggregateFreshness(freshness),
         statement: projectText(entry.summary),
         match_basis,
       };

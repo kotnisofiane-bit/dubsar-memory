@@ -897,7 +897,11 @@ test("public CLI resumes, routes, reads, and explicitly changes local work selec
   const { projectRoot } = await createWorkspace(t);
   const resume = await cli(["resume", "--start", projectRoot, "--capsule", "--json"]);
   assert.equal(resume.exitCode, 0, resume.err);
+  // resume --capsule observes references, but this workspace records none, so
+  // there is nothing to claim: the capsule stays /3 rather than carrying an
+  // empty freshness block.
   assert.equal(resume.value.format, "dubsar.resume-capsule/3");
+  assert.equal(resume.value.evidence_freshness, undefined);
   assert.equal(resume.value.active_work.work_id, ACTIVE_WORK_ID);
   const delegatedResume = await operatorCli([
     "resume", "--start", projectRoot, "--capsule", "--json",

@@ -126,7 +126,7 @@ test("Codex adapter emits one verified path-free continuity /2 capsule", async (
   assert.ok(Buffer.byteLength(result.stdout, "utf8") <= 8 * 1024);
 });
 
-test("Codex adapter emits one verified path-free memory vNext /3 capsule", async (t) => {
+test("Codex adapter emits one verified path-free memory vNext capsule", async (t) => {
   const item = await memoryFixture(t);
   const result = spawnSync(process.execPath, [
     script,
@@ -142,7 +142,10 @@ test("Codex adapter emits one verified path-free memory vNext /3 capsule", async
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stderr, "");
   const capsule = JSON.parse(result.stdout);
+  // The adapter reads through the observing capsule path and must accept both
+  // shapes. This fixture records no reference, so it receives /3.
   assert.equal(capsule.format, "dubsar.resume-capsule/3");
+  assert.equal(capsule.evidence_freshness, undefined);
   assert.equal(capsule.project.project_id, item.projectId);
   assert.equal(capsule.active_work.work_id, item.workId);
   assert.equal(capsule.capsule_sha256, capsuleDigest(capsule));

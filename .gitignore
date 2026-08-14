@@ -12,3 +12,6 @@ Thumbs.db
 audits/
 design-qa.md
 .audit/
+
+# Claude Code machine-local plugin configuration
+.claude/settings.local.json

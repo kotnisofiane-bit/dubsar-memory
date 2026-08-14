@@ -9,6 +9,8 @@ export const DEFAULT_LIMITS = Object.freeze({
   maxArtifactFileBytes: 25 * 1024 * 1024,
   maxSnapshotBytes: 64 * 1024 * 1024,
   maxArtifacts: 128,
+  maxFreshnessPaths: 128,
+  maxFreshnessBytes: 64 * 1024 * 1024,
   maxJsonDepth: 32,
   maxJsonNodes: 20_000,
   maxArrayItems: 2_048,

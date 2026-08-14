@@ -5,6 +5,10 @@ import {
   stableJson,
 } from "./contracts.mjs";
 import { compileMemorySnapshot } from "./memory-snapshot-compiler.mjs";
+import {
+  assertMemoryReferenceObservation,
+  checkpointFreshness,
+} from "./memory-vnext-freshness.mjs";
 
 function fail(code) {
   throw new WorkbenchError(code);
@@ -39,8 +43,16 @@ function repeatedAttempt(entries, workId) {
     stableJson(attempts[0].resulting_state) === stableJson(attempts[1].resulting_state);
 }
 
-export function evaluateMemorySnapshot(snapshot) {
+export function evaluateMemorySnapshot(snapshot, observation) {
   if (snapshot?.workspace_mode !== "memory_vnext") fail("MEMORY_SNAPSHOT_REQUIRED");
+  if (observation !== undefined && observation !== null) {
+    // Validate the observation's own shape before trusting any field of it,
+    // including the snapshot it claims to describe.
+    assertMemoryReferenceObservation(observation);
+    if (observation.source_snapshot_sha256 !== snapshot.snapshot_sha256) {
+      fail("MEMORY_OBSERVATION_SNAPSHOT_MISMATCH");
+    }
+  }
   const compiled = compileMemorySnapshot(snapshot);
   const entries = snapshot.documents?.checkpoints?.entries;
   if (!Array.isArray(entries)) fail("MEMORY_CHECKPOINTS_INVALID");
@@ -75,15 +87,20 @@ export function evaluateMemorySnapshot(snapshot) {
         : work.status === "paused"
           ? { code: "review_paused_work", label: "Review the recorded pause before resuming this work item." }
           : { code: "continue_selected_work", label: current.next_action };
-  const records = selectedEntries.map((entry) => ({
-    evidence_id: entry.checkpoint_id,
-    lot_id: entry.work_id,
-    kind: entry.kind,
-    class: entry.references.length > 0 ? "observed" : "reported",
-    statement: entry.summary,
-    supported: entry.references.length > 0,
-    freshness: entry.references.length > 0 ? ["unknown"] : [],
-  }));
+  const records = selectedEntries.map((entry) => {
+    const freshness = checkpointFreshness(entry, observation);
+    return {
+      evidence_id: entry.checkpoint_id,
+      lot_id: entry.work_id,
+      kind: entry.kind,
+      class: entry.references.length > 0 ? "observed" : "reported",
+      statement: entry.summary,
+      // Support requires every recorded reference to still match on disk. A
+      // stale, missing, or unverified reference makes the record unsupported.
+      supported: freshness.length > 0 && freshness.every((status) => status === "fresh"),
+      freshness,
+    };
+  });
   return deepFreeze({
     authority: WORKBENCH_AUTHORITY,
     domain: "project",
@@ -118,12 +135,15 @@ export function evaluateMemorySnapshot(snapshot) {
         lot_id: work?.work_id ?? null,
         statement: blocker.statement,
       })),
-      freshness: {
-        fresh: 0,
-        stale: 0,
-        missing: 0,
-        unknown: selectedEntries.flatMap((entry) => entry.references).length,
-      },
+      freshness: records.reduce((counts, record) => {
+        for (const status of record.freshness) {
+          if (status === "fresh") counts.fresh += 1;
+          else if (status === "stale") counts.stale += 1;
+          else if (status === "missing") counts.missing += 1;
+          else counts.unknown += 1;
+        }
+        return counts;
+      }, { fresh: 0, stale: 0, missing: 0, unknown: 0 }),
     },
   });
 }

@@ -9,7 +9,24 @@ import {
 import { safeDisplayText } from "./display-safety.mjs";
 
 export const MEMORY_RESUME_CAPSULE_FORMAT = "dubsar.resume-capsule/3";
+export const MEMORY_RESUME_CAPSULE_V4_FORMAT = "dubsar.resume-capsule/4";
 export const MAX_MEMORY_RESUME_CAPSULE_BYTES = 8 * 1024;
+
+const FRESHNESS_STATUS = new Set(["fresh", "stale", "missing", "unknown"]);
+
+/**
+ * Reduce reference counts to one status, using the precedence the Workbench
+ * already applies: anything worse than fresh wins, and "no observation" reads
+ * as unknown rather than fresh.
+ */
+export function freshnessStatusFromCounts(counts) {
+  const total = counts.fresh + counts.stale + counts.missing + counts.unknown;
+  if (total === 0) return "unknown";
+  if (counts.stale > 0) return "stale";
+  if (counts.missing > 0) return "missing";
+  if (counts.unknown > 0) return "unknown";
+  return "fresh";
+}
 
 const SHA256 = /^[0-9a-f]{64}$/u;
 const SAFE_ID = /^[a-z0-9][a-z0-9._-]{2,127}$/iu;
@@ -106,8 +123,19 @@ export function buildMemoryResumeCapsule({ inspection, producer } = {}) {
     : inspection.snapshot.documents.checkpoints.entries
       .filter((entry) => entry.work_id === selected.work_id);
   const blockers = inspection.evaluation.continuity.open_blockers.slice(0, 3);
+  // A capsule only claims freshness when references were observed *and* the
+  // selected Work actually records some. With nothing to verify the capsule
+  // stays /3, so /4 always carries a meaningful claim rather than an empty one.
+  const observed = inspection.observation ?? null;
+  const observedCounts = observed === null
+    ? null
+    : { ...inspection.evaluation.continuity.freshness };
+  const counts = observedCounts !== null && (
+    observedCounts.fresh + observedCounts.stale +
+    observedCounts.missing + observedCounts.unknown
+  ) > 0 ? observedCounts : null;
   const base = {
-    format: MEMORY_RESUME_CAPSULE_FORMAT,
+    format: counts === null ? MEMORY_RESUME_CAPSULE_FORMAT : MEMORY_RESUME_CAPSULE_V4_FORMAT,
     authority: WORKBENCH_AUTHORITY,
     content_trust: "untrusted_project_data",
     producer: { name: producer.name, version: producer.version },
@@ -155,17 +183,34 @@ export function buildMemoryResumeCapsule({ inspection, producer } = {}) {
       "Revalidate live project files before any material action.",
       "Do not infer approval, selection, merge, publication, or deployment.",
     ],
+    ...(counts === null ? {} : {
+      evidence_freshness: { status: freshnessStatusFromCounts(counts), counts },
+    }),
   };
   const capsule = fitCapsule(base);
   return assertMemoryResumeCapsule(capsule);
 }
 
 export function assertMemoryResumeCapsule(value) {
-  if (!exactKeys(value, [
+  const V3_KEYS = [
     "active_work", "authority", "authority_limits", "blockers", "capsule_sha256",
     "content_trust", "format", "knowledge", "next_action", "producer", "project",
     "recorded_continuity", "state",
-  ]) || value.format !== MEMORY_RESUME_CAPSULE_FORMAT || value.authority !== WORKBENCH_AUTHORITY ||
+  ];
+  // /4 is /3 plus evidence_freshness. /3 keeps its exact closed shape: a /3
+  // carrying the extra key, or a /4 missing it, is invalid.
+  const isV4 = value?.format === MEMORY_RESUME_CAPSULE_V4_FORMAT;
+  if (isV4) {
+    if (!exactKeys(value, [...V3_KEYS, "evidence_freshness"]) ||
+      !exactKeys(value.evidence_freshness, ["counts", "status"]) ||
+      !FRESHNESS_STATUS.has(value.evidence_freshness.status) ||
+      !exactKeys(value.evidence_freshness.counts, ["fresh", "missing", "stale", "unknown"]) ||
+      !Object.values(value.evidence_freshness.counts).every(
+        (item) => Number.isSafeInteger(item) && item >= 0) ||
+      freshnessStatusFromCounts(value.evidence_freshness.counts) !== value.evidence_freshness.status
+    ) fail();
+  } else if (!exactKeys(value, V3_KEYS)) fail();
+  if ((isV4 ? false : value.format !== MEMORY_RESUME_CAPSULE_FORMAT) || value.authority !== WORKBENCH_AUTHORITY ||
     value.content_trust !== "untrusted_project_data" ||
     !exactKeys(value.producer, ["name", "version"]) ||
     !textAllowed(value.producer.name, 128) || !textAllowed(value.producer.version, 64) ||
