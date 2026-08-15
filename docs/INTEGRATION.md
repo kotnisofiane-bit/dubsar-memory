@@ -16,6 +16,7 @@ A typical read-only backend flow is:
 ```text
 request for project context
   -> invoke absolute bin/dubsar.mjs path
+  -> capabilities --json
   -> resume --capsule --json
   -> validate format and exit code
   -> optionally call route/history/context
@@ -25,8 +26,15 @@ request for project context
 Example process invocation:
 
 ```bash
+node /opt/dubsar/packages/dubsar-project-continuity/bin/dubsar.mjs capabilities --json
 node /opt/dubsar/packages/dubsar-project-continuity/bin/dubsar.mjs resume --start /srv/projects/example --capsule --json
 ```
+
+`dubsar.runtime-capabilities/1` is workspace-free and reports the exact
+installed producer plus named capability tokens. Tokens are append-only within
+the format: a token may be added, but its meaning must never be changed or
+reused. Consumers must test for the token they need and must not infer a
+capability from semantic version ranges alone.
 
 Use an absolute runtime path owned by the deployment. Never resolve a `dubsar`
 executable from the project, current directory, or untrusted `PATH`.
@@ -88,3 +96,8 @@ Readers accept the current `.dubsar/` format plus documented earlier Continuity
 formats. No read command migrates a workspace. Consumers must branch on
 `format`, preserve unknown fields only as opaque data, and require an explicit
 preview/apply migration before changing canonical storage.
+
+Parallel Git worktrees do not share a writer lock. They may all read the
+project memory, but only one converged worktree should append canonical
+checkpoints. See the
+[parallel-worktree checkpoint ADR](DUBSAR_PARALLEL_WORKTREE_CHECKPOINTS_ADR.md).

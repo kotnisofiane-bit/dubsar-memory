@@ -34,6 +34,7 @@ file.
 ## CLI
 
 ```bash
+node "<package-root>/bin/dubsar.mjs" capabilities --json
 node "<package-root>/bin/dubsar.mjs" resume --start . --capsule --json
 node "<package-root>/bin/dubsar.mjs" route --start . --json
 node "<package-root>/bin/dubsar.mjs" context --start . --json
@@ -41,6 +42,10 @@ node "<package-root>/bin/dubsar.mjs" history --start . --json
 node "<package-root>/bin/dubsar.mjs" work list --start . --json
 node "<package-root>/bin/dubsar.mjs" knowledge list --start . --json
 ```
+
+`capabilities` reads no workspace. It reports the exact installed runtime
+identity and an append-only set of named feature tokens. Integrations should
+query those tokens instead of inferring support from a package version.
 
 Initialization and changes use preview plus exact digest confirmation:
 
@@ -87,6 +92,10 @@ and binds it by SHA-256. No read command migrates silently.
 
 Personal memory is optional and separate. It never changes project readiness,
 routing, snapshots, or resume capsules.
+
+Canonical checkpoint writes are scoped to one physical workspace. With
+parallel Git worktrees, use many readers and one canonical writer after source
+convergence; do not expect concurrent `checkpoints.json` appends to merge.
 
 This is a source technical preview. Package release review and provenance remain
 pending; no npm publication or stable JavaScript API is declared.

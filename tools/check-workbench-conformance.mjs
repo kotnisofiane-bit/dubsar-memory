@@ -81,6 +81,7 @@ export const WORKBENCH_COMPONENTS = freeze([
       "dubsar.resume-capsule/3",
       "dubsar.resume-capsule/4",
       "dubsar.review-ledger-ui-session/1",
+      "dubsar.runtime-capabilities/1",
       "dubsar.ui-session/1",
       "dubsar.validation/1",
       "dubsar.work/1",
@@ -562,6 +563,13 @@ const formatBindings = freeze({
 
 const formatProducers = freeze({
   cli: [
+    {
+      path: "packages/dubsar-project-continuity/runtime/cli.mjs",
+      function: "runContinuityCli",
+      exported: true,
+      occurrences: 2,
+      formats: ["dubsar.cli-error/1", "dubsar.runtime-capabilities/1"],
+    },
     {
       path: "packages/dubsar-project-continuity/runtime/checkpoint-writer.mjs",
       function: "buildCheckpointChange",

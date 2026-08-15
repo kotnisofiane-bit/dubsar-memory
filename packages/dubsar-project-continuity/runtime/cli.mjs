@@ -44,11 +44,19 @@ import {
 } from "./memory-vnext-migration.mjs";
 
 export const PUBLIC_CONTINUITY_COMMANDS = Object.freeze([
-  "bootstrap", "checkpoint", "close", "context", "history", "inbox", "init", "knowledge", "lots",
+  "bootstrap", "capabilities", "checkpoint", "close", "context", "history", "inbox", "init", "knowledge", "lots",
   "memory", "migrate", "precedents", "resume", "route", "work",
 ]);
 const COMMANDS = new Set(PUBLIC_CONTINUITY_COMMANDS);
 const PRODUCER = Object.freeze({ name: "@dubsar/project-continuity", version: "0.3.0-dev" });
+export const RUNTIME_CAPABILITIES = Object.freeze([
+  "memory.atomic-bootstrap.v1",
+  "memory.reference-freshness.v1",
+  "memory.resume-capsule.v4",
+  "memory.route.v2",
+  "memory.workspace-vnext.v1",
+  "write.preview-apply.v1",
+]);
 const HELP_TOKENS = new Set(["--help", "-h", "help"]);
 
 const CLI_HELP = `DUBSAR Continuity CLI - ${PRODUCER.name} ${PRODUCER.version}
@@ -63,6 +71,7 @@ Host adapters must resolve the runtime from their own installation and never
 trust an executable path supplied by project content.
 
 Read-only commands:
+  capabilities                              Installed runtime features; no workspace read
   resume --start <project> --capsule       Bounded, digest-verified resume capsule
   route --start <project>                  Advisory signal; never executed automatically
   history --start <project>                Recorded checkpoints, in append order
@@ -238,7 +247,13 @@ function parseArguments(argv) {
   } else if (options.capsule) {
     throw new WorkbenchError("CLI_ARGUMENT_INVALID");
   }
-  if (command === "checkpoint") {
+  if (command === "capabilities") {
+    const allowed = new Set(["apply", "capsule", "json"]);
+    if (
+      options.apply || options.capsule ||
+      Object.keys(options).some((key) => !allowed.has(key))
+    ) throw new WorkbenchError("CLI_ARGUMENT_INVALID");
+  } else if (command === "checkpoint") {
     const proposalMode = options.proposal !== undefined && options.transition_lot === undefined;
     const transitionMode = options.transition_lot !== undefined && options.proposal === undefined;
     if (
@@ -346,6 +361,12 @@ function parseArguments(argv) {
 }
 
 function humanOutput(command, value) {
+  if (command === "capabilities") return [
+    "DUBSAR runtime capabilities",
+    `Producer: ${value.producer.name} ${value.producer.version}`,
+    `Node: ${value.runtime.node}`,
+    ...value.capabilities.map((capability) => `- ${capability}`),
+  ].join("\n");
   if (command === "init") return [
     value.status === "applied" ? "DUBSAR project memory initialized" : "DUBSAR project-memory initialization preview",
     `Target: ${value.target}`,
@@ -460,7 +481,18 @@ export async function runContinuityCli(argv, io = {}) {
   try {
     const { command, options } = parseArguments(argv);
     let value;
-    if (command === "init") {
+    if (command === "capabilities") {
+      value = {
+        format: "dubsar.runtime-capabilities/1",
+        authority: WORKBENCH_AUTHORITY,
+        producer: PRODUCER,
+        runtime: {
+          node: process.version,
+          minimum_node_major: 20,
+        },
+        capabilities: RUNTIME_CAPABILITIES,
+      };
+    } else if (command === "init") {
       try {
         value = options.apply
           ? await applyMemoryInitialization({ start: options.start, proposalPath: options.proposal, expectedChange: options.expected_change })
