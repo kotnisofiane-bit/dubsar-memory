@@ -382,6 +382,43 @@ test("a checkpoint is refused without the exact confirmed digest", async (t) => 
     "the refused checkpoint was never recorded");
 });
 
+test("README Verified against matches extension.yml Spec Kit requirement", async () => {
+  const manifest = await readFile(path.join(EXTENSION, "extension.yml"), "utf8");
+  const readme = await readFile(path.join(EXTENSION, "README.md"), "utf8");
+
+  const extensionVersion = manifest.match(/^  version: "([^"]+)"$/mu)?.[1];
+  const speckitRequirement = manifest.match(/^\s*speckit_version:\s*"([^"]+)"$/mu)?.[1];
+  assert.equal(typeof extensionVersion, "string", "extension.yml must declare extension.version");
+  assert.match(extensionVersion, /^\d+\.\d+\.\d+$/u, "extension.yml version must be semver");
+  assert.equal(typeof speckitRequirement, "string", "extension.yml must declare requires.speckit_version");
+  assert.match(speckitRequirement, /^>=(\d+\.\d+\.\d+)$/u);
+
+  const floor = speckitRequirement.slice(2);
+  const verifiedIndex = readme.indexOf("### Verified against");
+  assert.notEqual(verifiedIndex, -1, "README must include Verified against");
+  const nextHeading = readme.indexOf("\n## ", verifiedIndex + 1);
+  const verifiedSection = readme.slice(
+    verifiedIndex,
+    nextHeading === -1 ? readme.length : nextHeading,
+  );
+
+  assert.equal(
+    verifiedSection.includes(`Spec Kit \`${floor}\``),
+    true,
+    `Verified against must name Spec Kit ${floor} from extension.yml ${extensionVersion}`,
+  );
+  assert.equal(
+    verifiedSection.includes(`speckit_version: "${speckitRequirement}"`),
+    true,
+    "Verified against must quote the exact extension.yml speckit_version",
+  );
+  assert.equal(
+    /0\.16\.5\.dev0|>=0\.16\.5/u.test(verifiedSection),
+    false,
+    "Verified against must not claim an unverified Spec Kit pre-release",
+  );
+});
+
 test("the extension declares no hook, server, MCP, or local path", async (t) => {
   const manifest = await readFile(path.join(EXTENSION, "extension.yml"), "utf8");
 

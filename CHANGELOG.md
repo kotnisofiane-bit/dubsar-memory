@@ -5,6 +5,8 @@ separate, explicitly reviewed decision.
 
 ## Public technical preview — 0.3.0-dev
 
+- Spec Kit extension 0.1.3 aligns compatibility documentation with the Spec Kit
+  version actually tested (`0.16.4`);
 - add optional Continuity CLI `bootstrap` for one atomic Create project memory
   with Active work and First recorded checkpoint (Spec Kit extension 0.1.2);
 - add the human-readable `.dubsar/` Memory vNext format;
