@@ -504,6 +504,7 @@ async function scanExecutableCode(
   const continuityDeletionFile = new Set([
     "runtime/checkpoint-writer.mjs",
     "runtime/lite-initializer.mjs",
+    "runtime/memory-vnext-bootstrap.mjs",
     "runtime/memory-vnext-initializer.mjs",
     "runtime/memory-vnext-migration.mjs",
     "runtime/memory-vnext-writer.mjs",
@@ -550,7 +551,7 @@ async function validateContinuityRuntime(files, findings) {
     "continuity-facts.mjs",
     "continuity-views.mjs", "continuity.mjs", "contracts.mjs", "display-safety.mjs",
     "index.mjs", "lite-initializer.mjs", "lite.mjs", "locate.mjs", "memory-context.mjs", "memory-router.mjs", "memory-session.mjs",
-    "memory-snapshot-compiler.mjs", "memory-vnext-capsule.mjs", "memory-vnext-contracts.mjs",
+    "memory-snapshot-compiler.mjs", "memory-vnext-bootstrap.mjs", "memory-vnext-capsule.mjs", "memory-vnext-contracts.mjs",
     "memory-vnext-evaluator.mjs", "memory-vnext-freshness.mjs",
     "memory-vnext-initializer.mjs", "memory-vnext-markdown.mjs",
     "memory-vnext-migration.mjs", "memory-vnext-snapshot.mjs", "memory-vnext-views.mjs", "memory-vnext-writer.mjs",
@@ -576,6 +577,7 @@ async function validateContinuityRuntime(files, findings) {
   const checkpoint = await read("runtime/checkpoint-writer.mjs");
   const memory = await read("runtime/personal-memory.mjs");
   const memoryInitializer = await read("runtime/memory-vnext-initializer.mjs");
+  const memoryBootstrap = await read("runtime/memory-vnext-bootstrap.mjs");
   const memoryMigration = await read("runtime/memory-vnext-migration.mjs");
   const memoryWriter = await read("runtime/memory-vnext-writer.mjs");
   if (
@@ -590,12 +592,14 @@ async function validateContinuityRuntime(files, findings) {
   const checkpointDeletes = [...checkpoint.matchAll(/\b(?:rm|unlink)\s*\(/gu)].length;
   const memoryDeletes = [...memory.matchAll(/\b(?:rm|unlink)\s*\(/gu)].length;
   const memoryInitializerDeletes = [...memoryInitializer.matchAll(/\b(?:rmdir|unlink)\s*\(/gu)].length;
+  const memoryBootstrapDeletes = [...memoryBootstrap.matchAll(/\b(?:rmdir|unlink)\s*\(/gu)].length;
   const memoryMigrationDeletes = [...memoryMigration.matchAll(/\b(?:rmdir|unlink)\s*\(/gu)].length;
   const memoryWriterDeletes = [...memoryWriter.matchAll(/\b(?:rmdir|unlink)\s*\(/gu)].length;
   const environmentReads = [...memory.matchAll(/process\.env\.LOCALAPPDATA/gu)].length;
   if (
     checkpointDeletes !== 2 || memoryDeletes !== 4 ||
-    memoryInitializerDeletes !== 4 || memoryMigrationDeletes !== 4 || memoryWriterDeletes !== 2 ||
+    memoryInitializerDeletes !== 4 || memoryBootstrapDeletes !== 4 ||
+    memoryMigrationDeletes !== 4 || memoryWriterDeletes !== 2 ||
     environmentReads !== 1 ||
     /process\.env\.(?!LOCALAPPDATA)/u.test(memory)
   ) {

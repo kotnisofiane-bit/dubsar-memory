@@ -182,6 +182,10 @@ const fsBindingsByFile = new Map([
     new Set(["mkdir", "open", "rename", "rmdir", "unlink"]),
   ],
   [
+    "packages/dubsar-project-continuity/runtime/memory-vnext-bootstrap.mjs",
+    new Set(["mkdir", "open", "rename", "rmdir", "unlink"]),
+  ],
+  [
     "packages/dubsar-project-continuity/runtime/memory-vnext-migration.mjs",
     new Set(["mkdir", "open", "rename", "rmdir", "unlink"]),
   ],
@@ -264,6 +268,13 @@ const exclusiveWriteOpenPolicies = new Map([
     ],
   ],
   [
+    "packages/dubsar-project-continuity/runtime/memory-vnext-bootstrap.mjs",
+    [
+      { identifier: "target", calls: 1 },
+      { identifier: "lockPath", calls: 1 },
+    ],
+  ],
+  [
     "packages/dubsar-project-continuity/runtime/memory-vnext-migration.mjs",
     [
       { identifier: "target", calls: 1 },
@@ -306,6 +317,10 @@ const allowedFilesystemMutationsByFile = new Map([
   ],
   [
     "packages/dubsar-project-continuity/runtime/memory-vnext-initializer.mjs",
+    new Set(["mkdir", "rename", "rmdir", "sync", "unlink", "writeFile"]),
+  ],
+  [
+    "packages/dubsar-project-continuity/runtime/memory-vnext-bootstrap.mjs",
     new Set(["mkdir", "rename", "rmdir", "sync", "unlink", "writeFile"]),
   ],
   [
@@ -1115,8 +1130,9 @@ function pathJoinStartsWith(node, identifier) {
 function inspectMemoryVnextMutationGraph(ast, file, findings) {
   const writer = "packages/dubsar-project-continuity/runtime/memory-vnext-writer.mjs";
   const initializer = "packages/dubsar-project-continuity/runtime/memory-vnext-initializer.mjs";
+  const bootstrap = "packages/dubsar-project-continuity/runtime/memory-vnext-bootstrap.mjs";
   const migration = "packages/dubsar-project-continuity/runtime/memory-vnext-migration.mjs";
-  if (!new Set([writer, initializer, migration]).has(file.relative)) return;
+  if (!new Set([writer, initializer, bootstrap, migration]).has(file.relative)) return;
   const stagingMode = file.relative !== writer;
   const expected = stagingMode
     ? { mkdir: 2, rename: 1, rmdir: 2, unlink: 2, writeFile: 1, sync: 1 }

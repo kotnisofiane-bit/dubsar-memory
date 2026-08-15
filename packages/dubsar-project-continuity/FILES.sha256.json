@@ -1,6 +1,6 @@
 {
   "format": "dubsar.public-file-inventory/1",
-  "root_sha256": "179ec8fd225803d1012da7c4c11479ce7a19507eaeebf7e5bf4c50e8559e8658",
+  "root_sha256": "d98c8048289aba7d768ac37a8d4a0df3efc2a9566dce9298915c29c3ed1b1165",
   "files": [
     {
       "path": ".claude-plugin/plugin.json",
@@ -32,7 +32,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "7de01a965bcdcb326b4eedd2a4856323cb0b14d439f815429c91dee56519a3d8"
+      "sha256": "9b3db322c531d63080be625ce1cc64991a4397ef1188cfdfd40d92c2830d0851"
     },
     {
       "path": "runtime/artifact-lifecycle.mjs",
@@ -48,7 +48,7 @@
     },
     {
       "path": "runtime/cli.mjs",
-      "sha256": "a041251252fdf64eb77664848f38552c15851628969b8249de1b4397aa4a371a"
+      "sha256": "319c6c1e90a48df3b447e01eecb7af94ddc1159f8c15cacfbcbec20fa82745a9"
     },
     {
       "path": "runtime/close-session.mjs",
@@ -105,6 +105,10 @@
     {
       "path": "runtime/memory-snapshot-compiler.mjs",
       "sha256": "af1b7b9b7a8db863fa60e4d836481fd95e8b71494348e7c3bd85e394c6cef9bb"
+    },
+    {
+      "path": "runtime/memory-vnext-bootstrap.mjs",
+      "sha256": "cbd6312e4fae8cf7d1b833ce046b9b2cb40ea64388f9f85a2e1a3f61c6a39a95"
     },
     {
       "path": "runtime/memory-vnext-capsule.mjs",
@@ -175,12 +179,16 @@
       "sha256": "be72ac2664fbca7a3566c6bbf5ac213fb54dc843c0836c1a80b758abadb2a280"
     },
     {
+      "path": "skills/checkpoint-project-context/references/bootstrap.md",
+      "sha256": "46aa5f9812f97d7e0c4ea5097dec31f107a6fe1dbbdaf11a75d5a1e63251f0d7"
+    },
+    {
       "path": "skills/checkpoint-project-context/references/checkpoint-append.md",
       "sha256": "8c491e151d423a8e9bfffdce1f4b235e3bbd6182a7183cb4188d2a1cb083ff5d"
     },
     {
       "path": "skills/checkpoint-project-context/SKILL.md",
-      "sha256": "9388f7a523af504425a84fe2ae7697595278bd89e085f2ff82ff6720be2577a7"
+      "sha256": "38c4735aa9cadcd0a0c860329e9067fb8712e0a8083cbc6d98026a0b53dc827c"
     },
     {
       "path": "skills/resume-project-context/agents/openai.yaml",

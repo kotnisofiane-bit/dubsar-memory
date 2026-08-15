@@ -1,13 +1,33 @@
 # Write operations reference
 
-Exact closed shapes for the three writes that precede a checkpoint. Every key
-list is `exactKeys`: an extra or missing key is a refusal, not a warning.
+Exact closed shapes for the writes that create or mutate a `.dubsar/` workspace.
+Every key list is `exactKeys`: an extra or missing key is a refusal, not a
+warning.
 
 `checkpoint_append` has its own canonical reference, copied into this directory
 at packaging time from the DUBSAR package: [`checkpoint-append.md`](checkpoint-append.md).
 
-Each operation below is a **separate mutation**, with its own preview, its own
-`change_sha256`, and its own confirmation. Never chain them.
+Optional first-run bootstrap has its own reference:
+[`bootstrap.md`](bootstrap.md).
+
+Each steady-state operation below is a **separate mutation**, with its own
+preview, its own `change_sha256`, and its own confirmation. Never chain them.
+Bootstrap is the only operation that may combine init + Work + selection + first
+checkpoint, and only when no local workspace exists yet.
+
+---
+
+## 0. `bootstrap` — optional first recording (atomic)
+
+Document: `dubsar.memory-bootstrap-proposal/1`. See [`bootstrap.md`](bootstrap.md).
+
+```text
+bootstrap --start <project> --proposal <temp.json> --json
+bootstrap --start <project> --proposal <temp.json> --apply --expected-change <change_sha256> --json
+```
+
+Publishes `.dubsar/` atomically with one Active work, an explicit selection, and
+one First recorded checkpoint. Refused when `.dubsar` already exists.
 
 ---
 

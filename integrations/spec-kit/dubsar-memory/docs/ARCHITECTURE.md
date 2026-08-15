@@ -14,6 +14,14 @@ specs/<feature>/tasks.md    |                     |  resume-capsule/3 or /4
 Every arrow points one way. Spec Kit does not know this extension exists, and
 the extension never writes into `.specify/` or `specs/`.
 
+## First recording
+
+When no local `.dubsar/` exists yet, `/speckit.dubsar.checkpoint` may offer one
+optional atomic **Create project memory** (`dubsar bootstrap`): Active work,
+explicit selection, and First recorded checkpoint in a single preview/apply.
+The advanced granular path (`init` → `work create` → `work select` →
+`checkpoint`) remains available. Existing `/1` write contracts are unchanged.
+
 ## Why the runtime is embedded
 
 The extension ships the sealed DUBSAR **JavaScript** runtime under `runtime/`,
