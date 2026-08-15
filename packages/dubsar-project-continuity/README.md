@@ -63,6 +63,7 @@ work and one First recorded checkpoint in a single atomic publish when no
 `close` requires a human interactive terminal. No command selects or executes
 Work automatically. `context` writes nothing unless `--write` is explicit, and
 then targets only `generated/context.md` through the normal preview/apply path.
+`pending record` writes only under `.dubsar-pending/` and never under `.dubsar/`.
 
 ## Memory guidance
 

@@ -45,6 +45,7 @@ meaning must never be removed, reused, or changed.
 | `inbox promote --proposal <file>` | Creates one approved Knowledge entry from an explicit proposal. |
 | `knowledge retire --knowledge <id>` | Retires one Knowledge entry. |
 | `checkpoint --proposal <file>` | Appends one canonical checkpoint. |
+| `pending record --proposal <file>` | Records one advisory candidate under `.dubsar-pending/` only. |
 | `context --write` | Writes only `.dubsar/generated/context.md`. |
 | `migrate --to-memory-vnext` | Creates `.dubsar/` and retains the valid Lite source unchanged. |
 | `close` | Human interactive checkpoint workflow. |

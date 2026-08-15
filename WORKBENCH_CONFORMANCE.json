@@ -11,7 +11,7 @@
   },
   "policy": {
     "path": "tools/check-workbench-runtime.mjs",
-    "sha256": "cfb4f8b5f7e65c81706aee94e7b8edf2d549c35a79f36131959dd62863fedddc"
+    "sha256": "123a50aebf5427e191ec7b76c51b953affc9317ec1dadc7427a92479104ba7a1"
   },
   "components": [
     {
@@ -66,6 +66,9 @@
         "dubsar.memory-project/1",
         "dubsar.memory-snapshot/1",
         "dubsar.memory-work-view/1",
+        "dubsar.pending-checkpoint-apply/1",
+        "dubsar.pending-checkpoint-preview/1",
+        "dubsar.pending-checkpoint/1",
         "dubsar.personal-memory-command-result/1",
         "dubsar.project-evidence/2",
         "dubsar.resume-capsule/3",
@@ -511,8 +514,8 @@
     },
     {
       "path": "packages/dubsar-project-continuity/runtime/cli.mjs",
-      "bytes": 32836,
-      "sha256": "738907c99fbf2a4e0d2ef2bf9114600e23d96ddd89ef7efeb07f8235b50d0b45",
+      "bytes": 34654,
+      "sha256": "a3532ec85e13395239ebd394e7b7528afba6b5648625350c358a3cbd23b2237d",
       "role": "runtime"
     },
     {
@@ -613,8 +616,8 @@
     },
     {
       "path": "packages/dubsar-project-continuity/runtime/memory-vnext-contracts.mjs",
-      "bytes": 10524,
-      "sha256": "352a49dbc0280fe6021fad1478ed8df966b6ba48ae569f122ff6651fab03d44b",
+      "bytes": 14592,
+      "sha256": "3fe6e2b12424fa2248f7ae85362d18e8d9c1548882f6262a5c873d72b9669a13",
       "role": "runtime"
     },
     {
@@ -648,6 +651,12 @@
       "role": "runtime"
     },
     {
+      "path": "packages/dubsar-project-continuity/runtime/memory-vnext-pending-writer.mjs",
+      "bytes": 16646,
+      "sha256": "a0719c2b3f47c1d9c0165e056adf185f3a454233347742c14748c00d1becf583",
+      "role": "runtime"
+    },
+    {
       "path": "packages/dubsar-project-continuity/runtime/memory-vnext-snapshot.mjs",
       "bytes": 10042,
       "sha256": "ab8df59ac28f51f239b6e4f27611a81e176d6eeebdb189b9a3b79303447145a7",
@@ -667,8 +676,8 @@
     },
     {
       "path": "packages/dubsar-project-continuity/runtime/path-safety.mjs",
-      "bytes": 3770,
-      "sha256": "0989b4aa2a993a0e8224a0de11ec706993800068f9c8990cfdce96c127c3e963",
+      "bytes": 3777,
+      "sha256": "052a2e4c4b4be45940d5cf0398d48a349c1f83e4f5b09c1f445a1aa44d0e6d3f",
       "role": "runtime"
     },
     {
@@ -852,5 +861,5 @@
       "role": "runtime"
     }
   ],
-  "content_root_sha256": "4b5725a969512f90fcfc68c82678fa9303c1ecb3b789afda354dc21865164524"
+  "content_root_sha256": "9cca481d11dac766148b89120783a2cfdec83ffaf211c90a096b6824326d3f6b"
 }

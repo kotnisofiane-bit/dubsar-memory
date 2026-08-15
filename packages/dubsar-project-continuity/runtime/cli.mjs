@@ -42,15 +42,20 @@ import {
   applyMemoryMigration,
   previewMemoryMigration,
 } from "./memory-vnext-migration.mjs";
+import {
+  applyPendingCheckpointRecord,
+  previewPendingCheckpointRecord,
+} from "./memory-vnext-pending-writer.mjs";
 
 export const PUBLIC_CONTINUITY_COMMANDS = Object.freeze([
   "bootstrap", "capabilities", "checkpoint", "close", "context", "history", "inbox", "init", "knowledge", "lots",
-  "memory", "migrate", "precedents", "resume", "route", "work",
+  "memory", "migrate", "pending", "precedents", "resume", "route", "work",
 ]);
 const COMMANDS = new Set(PUBLIC_CONTINUITY_COMMANDS);
 const PRODUCER = Object.freeze({ name: "@dubsar/project-continuity", version: "0.3.0-dev" });
 export const RUNTIME_CAPABILITIES = Object.freeze([
   "memory.atomic-bootstrap.v1",
+  "memory.pending-checkpoint-record.v1",
   "memory.reference-freshness.v1",
   "memory.resume-capsule.v4",
   "memory.route.v2",
@@ -93,6 +98,8 @@ Write style A - you author a proposal file:
   inbox promote    dubsar.memory-change-proposal/1, operation inbox_promote
   checkpoint       dubsar.memory-change-proposal/1, operation checkpoint_append
                    Lite workspace: dubsar.continuity-checkpoint-proposal/1
+  pending record   dubsar.pending-checkpoint-proposal/1
+                   Writes only .dubsar-pending/<source>/<id>.md; never .dubsar/
 
 Write style B - the CLI builds the proposal from flags:
   These commands take no --proposal and reject it. Preview first, then repeat
@@ -153,6 +160,11 @@ function parseArguments(argv) {
     if (!new Set(["list", "retire", "show"]).has(options.knowledge_action)) {
       throw new WorkbenchError("CLI_ARGUMENT_INVALID");
     }
+    firstOption = 2;
+  }
+  if (command === "pending") {
+    options.pending_action = argv.at(1);
+    if (options.pending_action !== "record") throw new WorkbenchError("CLI_ARGUMENT_INVALID");
     firstOption = 2;
   }
   for (let index = firstOption; index < argv.length; index += 1) {
@@ -319,6 +331,20 @@ function parseArguments(argv) {
       options.apply !== (options.expected_change !== undefined)) {
       throw new WorkbenchError("CLI_ARGUMENT_INVALID");
     }
+  } else if (command === "pending") {
+    const allowed = new Set([
+      "apply", "capsule", "expected_change", "json", "pending_action", "proposal", "start",
+    ]);
+    if (
+      Object.keys(options).some((key) => !allowed.has(key)) ||
+      options.pending_action !== "record" ||
+      options.proposal === undefined ||
+      options.start === undefined ||
+      options.capsule ||
+      options.apply !== (options.expected_change !== undefined)
+    ) {
+      throw new WorkbenchError("CLI_ARGUMENT_INVALID");
+    }
   } else if (options.apply || options.expected_change !== undefined || options.proposal !== undefined || options.to !== undefined || options.transition_lot !== undefined) {
     throw new WorkbenchError("CLI_ARGUMENT_INVALID");
   }
@@ -427,6 +453,14 @@ function humanOutput(command, value) {
     `Target: ${value.target}`,
     `Change SHA-256: ${value.change_sha256}`,
     "The retained .dubsar-project workspace is not deleted.",
+  ].join("\n");
+  if (command === "pending") return [
+    value.status === "applied" ? "DUBSAR pending checkpoint recorded" : "DUBSAR pending checkpoint preview",
+    `Target: ${value.target}`,
+    `Source: ${value.declared_source}`,
+    `Candidate SHA-256: ${value.candidate_sha256}`,
+    `Change SHA-256: ${value.change_sha256}`,
+    "Advisory only; canonical .dubsar/ memory was not modified.",
   ].join("\n");
   if (command === "history") return `DUBSAR recorded history\nRecords: ${value.entries.length}\nOrder: recorded index, newest first; this is not a chronology.`;
   if (command === "lots") return `DUBSAR work packages\nActive: ${value.summary.active}\nEligible: ${value.summary.eligible}\nBlocked: ${value.summary.blocked}\nChoose an eligible work package; DUBSAR does not choose for you.`;
@@ -611,6 +645,17 @@ export async function runContinuityCli(argv, io = {}) {
       value = options.apply
         ? await applyMemoryMigration({ start: options.start, expectedChange: options.expected_change })
         : await previewMemoryMigration({ start: options.start });
+    } else if (command === "pending") {
+      value = options.apply
+        ? await applyPendingCheckpointRecord({
+            start: options.start,
+            proposalPath: options.proposal,
+            expectedChange: options.expected_change,
+          })
+        : await previewPendingCheckpointRecord({
+            start: options.start,
+            proposalPath: options.proposal,
+          });
     } else if (command === "close") {
       value = await runInteractiveClose({
         start: options.start,

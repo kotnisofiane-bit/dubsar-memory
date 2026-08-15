@@ -2,7 +2,7 @@ import { lstat, realpath } from "node:fs/promises";
 import path from "node:path";
 import { WorkbenchError } from "./contracts.mjs";
 
-const WINDOWS_RESERVED = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$/iu;
+export const WINDOWS_RESERVED = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$/iu;
 
 function comparable(input) {
   const resolved = path.resolve(input);

@@ -5,7 +5,7 @@ import {
   sha256Bytes,
   stableJson,
 } from "./contracts.mjs";
-import { normalizeRelativePath } from "./path-safety.mjs";
+import { WINDOWS_RESERVED, normalizeRelativePath } from "./path-safety.mjs";
 import { safeDisplayText } from "./display-safety.mjs";
 
 export const MEMORY_MANIFEST_FORMAT = "dubsar.memory-project/1";
@@ -182,14 +182,45 @@ function checkpointDigest(entry) {
   return sha256Bytes(Buffer.from(stableJson(base), "utf8"));
 }
 
-function assertCheckpoint(value, index, previous, projectId) {
-  const code = "MEMORY_CHECKPOINTS_INVALID";
-  if (!exactKeys(value, [
-    "attempt", "checkpoint_id", "checkpoint_sha256", "index", "kind", "limitations",
-    "previous_checkpoint_sha256", "references", "resolves", "resulting_state", "summary",
-    "validation", "work_id",
-  ]) || value.index !== index || !CHECKPOINT_KIND.has(value.kind) ||
-    value.previous_checkpoint_sha256 !== previous || !SHA256.test(value.checkpoint_sha256 ?? "")) fail(code);
+const CHECKPOINT_AUTHOR_KEYS = [
+  "attempt", "checkpoint_id", "kind", "limitations", "references",
+  "resolves", "resulting_state", "summary", "validation", "work_id",
+];
+
+function assertStructuralIdPolicy(value, code) {
+  const policy = value.normalize("NFKC");
+  const instruction = policy.replace(/[-_.]+/gu, " ");
+  if (STRUCTURAL_SECRET.test(policy) || STRUCTURAL_IPV4.test(policy) || STRUCTURAL_INSTRUCTION.test(instruction)) {
+    fail(code);
+  }
+}
+
+function assertPortableSegment(value, code, { maxTail }) {
+  if (
+    typeof value !== "string" ||
+    value.length < 3 ||
+    value.length > maxTail + 1 ||
+    !new RegExp(`^[a-z0-9][a-z0-9._-]{2,${maxTail}}$`, "u").test(value) ||
+    /[. ]$/u.test(value) ||
+    WINDOWS_RESERVED.test(value)
+  ) {
+    fail(code);
+  }
+  assertStructuralIdPolicy(value, code);
+  return value;
+}
+
+function assertPortableCheckpointId(value, code) {
+  return assertPortableSegment(value, code, { maxTail: 127 });
+}
+
+/**
+ * Shared author-field validation for canonical checkpoint_append entries and
+ * pending candidates. Callers supply the checkpoint_id asserter so pending can
+ * tighten to the portable lowercase filesystem subset.
+ */
+function assertCheckpointAuthorFields(value, code, assertCheckpointId) {
+  if (!CHECKPOINT_KIND.has(value.kind)) fail(code);
   const attempt = value.attempt === null ? null : (() => {
     if (!exactKeys(value.attempt, ["action_id", "failure_fingerprint", "gate_id"]) ||
       !SHA256.test(value.attempt.failure_fingerprint ?? "")) fail(code);
@@ -207,20 +238,34 @@ function assertCheckpoint(value, index, previous, projectId) {
     return { path: normalized, sha256: item.sha256 };
   });
   if (new Set(references.map((item) => item.path)).size !== references.length) fail(code);
-  const normalized = {
-    checkpoint_id: id(value.checkpoint_id, code),
-    checkpoint_sha256: value.checkpoint_sha256,
-    index,
+  return {
+    attempt,
+    checkpoint_id: assertCheckpointId(value.checkpoint_id, code),
     kind: value.kind,
     limitations: textArray(value.limitations, 8, 500, code),
-    previous_checkpoint_sha256: previous,
     references,
     resolves: nullableId(value.resolves, code),
     resulting_state: resultingState(value.resulting_state, code),
     summary: text(value.summary, 500, code),
     validation: textArray(value.validation, 8, 500, code),
     work_id: id(value.work_id, code),
-    attempt,
+  };
+}
+
+function assertCheckpoint(value, index, previous, projectId) {
+  const code = "MEMORY_CHECKPOINTS_INVALID";
+  if (!exactKeys(value, [
+    "attempt", "checkpoint_id", "checkpoint_sha256", "index", "kind", "limitations",
+    "previous_checkpoint_sha256", "references", "resolves", "resulting_state", "summary",
+    "validation", "work_id",
+  ]) || value.index !== index ||
+    value.previous_checkpoint_sha256 !== previous || !SHA256.test(value.checkpoint_sha256 ?? "")) fail(code);
+  const author = assertCheckpointAuthorFields(value, code, id);
+  const normalized = {
+    ...author,
+    checkpoint_sha256: value.checkpoint_sha256,
+    index,
+    previous_checkpoint_sha256: previous,
   };
   if (checkpointDigest(normalized) !== normalized.checkpoint_sha256) fail(code);
   return normalized;
@@ -251,4 +296,69 @@ export function assertMemoryCheckpoints(value, projectId) {
 
 export function memoryCheckpointDigest(entry) {
   return checkpointDigest(entry);
+}
+
+export const MEMORY_PENDING_CHECKPOINT_FORMAT = "dubsar.pending-checkpoint/1";
+export const MEMORY_PENDING_MAX_SOURCES = 32;
+export const MEMORY_PENDING_MAX_CANDIDATES = 128;
+export const MEMORY_PENDING_MAX_FILE_BYTES = 64 * 1024;
+
+function pendingAuthorCheckpoint(value, code) {
+  if (!exactKeys(value, CHECKPOINT_AUTHOR_KEYS)) fail(code);
+  return deepFreeze(assertCheckpointAuthorFields(value, code, assertPortableCheckpointId));
+}
+
+export function assertPendingDeclaredSource(value, code = "PENDING_DOCUMENT_INVALID") {
+  return assertPortableSegment(value, code, { maxTail: 63 });
+}
+
+export function assertPendingCheckpointId(value, code = "PENDING_DOCUMENT_INVALID") {
+  return assertPortableCheckpointId(value, code);
+}
+
+export function memoryPendingCandidateDigest(frontmatterWithoutDigest) {
+  return sha256Bytes(Buffer.concat([
+    Buffer.from(`${MEMORY_PENDING_CHECKPOINT_FORMAT}\0`, "utf8"),
+    Buffer.from(stableJson(frontmatterWithoutDigest), "utf8"),
+  ]));
+}
+
+export function assertPendingCheckpointDocument(value, projectId) {
+  const code = "PENDING_DOCUMENT_INVALID";
+  if (!exactKeys(value, [
+    "base_checkpoint_sha256",
+    "base_work_checkpoint_sha256",
+    "candidate_sha256",
+    "checkpoint",
+    "declared_source",
+    "format",
+    "project_id",
+    "source_shared_snapshot_sha256",
+  ]) || value.format !== MEMORY_PENDING_CHECKPOINT_FORMAT ||
+    !(value.base_checkpoint_sha256 === null || SHA256.test(value.base_checkpoint_sha256 ?? "")) ||
+    !(value.base_work_checkpoint_sha256 === null || SHA256.test(value.base_work_checkpoint_sha256 ?? "")) ||
+    !SHA256.test(value.candidate_sha256 ?? "") ||
+    !SHA256.test(value.source_shared_snapshot_sha256 ?? "")) fail(code);
+  const documentProjectId = id(value.project_id, code);
+  if (projectId !== undefined && projectId !== documentProjectId) fail(code);
+  const declaredSource = assertPendingDeclaredSource(value.declared_source, code);
+  const checkpoint = pendingAuthorCheckpoint(value.checkpoint, code);
+  const withoutDigest = {
+    base_checkpoint_sha256: value.base_checkpoint_sha256,
+    base_work_checkpoint_sha256: value.base_work_checkpoint_sha256,
+    checkpoint,
+    declared_source: declaredSource,
+    format: MEMORY_PENDING_CHECKPOINT_FORMAT,
+    project_id: documentProjectId,
+    source_shared_snapshot_sha256: value.source_shared_snapshot_sha256,
+  };
+  if (memoryPendingCandidateDigest(withoutDigest) !== value.candidate_sha256) fail(code);
+  return deepFreeze({
+    ...withoutDigest,
+    candidate_sha256: value.candidate_sha256,
+  });
+}
+
+export function assertPendingCheckpointAuthor(value) {
+  return pendingAuthorCheckpoint(value, "PENDING_DOCUMENT_INVALID");
 }

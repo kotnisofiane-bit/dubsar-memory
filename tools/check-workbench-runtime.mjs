@@ -202,6 +202,10 @@ const fsBindingsByFile = new Map([
     new Set(["open", "rename", "unlink"]),
   ],
   [
+    "packages/dubsar-project-continuity/runtime/memory-vnext-pending-writer.mjs",
+    new Set(["mkdir", "open", "opendir", "rename", "unlink"]),
+  ],
+  [
     "packages/dubsar-project-continuity/runtime/personal-memory.mjs",
     new Set(["lstat", "mkdir", "open", "readdir", "rename", "rm", "unlink"]),
   ],
@@ -289,6 +293,13 @@ const exclusiveWriteOpenPolicies = new Map([
     ],
   ],
   [
+    "packages/dubsar-project-continuity/runtime/memory-vnext-pending-writer.mjs",
+    [
+      { identifier: "lockPath", calls: 1 },
+      { identifier: "temporary", calls: 1 },
+    ],
+  ],
+  [
     "packages/dubsar-project-continuity/runtime/personal-memory.mjs",
     [
       { identifier: "target", calls: 1 },
@@ -330,6 +341,10 @@ const allowedFilesystemMutationsByFile = new Map([
   [
     "packages/dubsar-project-continuity/runtime/memory-vnext-writer.mjs",
     new Set(["rename", "sync", "unlink", "writeFile"]),
+  ],
+  [
+    "packages/dubsar-project-continuity/runtime/memory-vnext-pending-writer.mjs",
+    new Set(["mkdir", "rename", "sync", "unlink", "writeFile"]),
   ],
   [
     "packages/dubsar-project-continuity/runtime/personal-memory.mjs",
@@ -1129,14 +1144,18 @@ function pathJoinStartsWith(node, identifier) {
 
 function inspectMemoryVnextMutationGraph(ast, file, findings) {
   const writer = "packages/dubsar-project-continuity/runtime/memory-vnext-writer.mjs";
+  const pendingWriter = "packages/dubsar-project-continuity/runtime/memory-vnext-pending-writer.mjs";
   const initializer = "packages/dubsar-project-continuity/runtime/memory-vnext-initializer.mjs";
   const bootstrap = "packages/dubsar-project-continuity/runtime/memory-vnext-bootstrap.mjs";
   const migration = "packages/dubsar-project-continuity/runtime/memory-vnext-migration.mjs";
-  if (!new Set([writer, initializer, bootstrap, migration]).has(file.relative)) return;
-  const stagingMode = file.relative !== writer;
+  if (!new Set([writer, pendingWriter, initializer, bootstrap, migration]).has(file.relative)) return;
+  const stagingMode = file.relative !== writer && file.relative !== pendingWriter;
+  const pendingMode = file.relative === pendingWriter;
   const expected = stagingMode
     ? { mkdir: 2, rename: 1, rmdir: 2, unlink: 2, writeFile: 1, sync: 1 }
-    : { mkdir: 0, rename: 1, rmdir: 0, unlink: 2, writeFile: 1, sync: 1 };
+    : pendingMode
+      ? { mkdir: 2, rename: 1, rmdir: 0, unlink: 2, writeFile: 1, sync: 1 }
+      : { mkdir: 0, rename: 1, rmdir: 0, unlink: 2, writeFile: 1, sync: 1 };
   const counts = new Map(Object.keys(expected).map((key) => [key, 0]));
   let invalid = false;
   walk(ast, (node) => {
@@ -1158,8 +1177,16 @@ function inspectMemoryVnextMutationGraph(ast, file, findings) {
         : identifierNamed(argument, "lockPath") || identifierNamed(argument, "temporary");
       if (node.arguments.length !== 1 || !valid) invalid = true;
     } else if (calleeName === "mkdir" || calleeName === "rmdir") {
-      const valid = stagingMode && node.arguments.length >= 1 &&
-        (identifierNamed(node.arguments[0], "staging") || pathJoinStartsWith(node.arguments[0], "staging"));
+      const valid = stagingMode
+        ? node.arguments.length >= 1 &&
+          (identifierNamed(node.arguments[0], "staging") || pathJoinStartsWith(node.arguments[0], "staging"))
+        : pendingMode &&
+          calleeName === "mkdir" &&
+          node.arguments.length >= 1 &&
+          (
+            memberOf(node.arguments[0], "change", "pendingRoot") ||
+            memberOf(node.arguments[0], "change", "sourceDir")
+          );
       if (!valid) invalid = true;
     } else if (calleeName === "writeFile" || calleeName === "sync") {
       const object = node.callee?.type === "MemberExpression" ? node.callee.object : null;
