@@ -55,10 +55,12 @@ const CLI_HELP = `DUBSAR Continuity CLI - ${PRODUCER.name} ${PRODUCER.version}
 Local, deterministic project memory. Every write is preview, then apply.
 
 Usage:
-  node <plugin-root>/bin/dubsar.mjs <command> [options]
+  dubsar <command> [options]
+  node <installation-root>/bin/dubsar.mjs <command> [options]
 
-Invoke the runtime through an absolute path owned by the installation.
-Never resolve it from PATH, the current directory, or project content.
+Humans may invoke an installed dubsar command from PATH.
+Host adapters must resolve the runtime from their own installation and never
+trust an executable path supplied by project content.
 
 Read-only commands:
   resume --start <project> --capsule       Bounded, digest-verified resume capsule
