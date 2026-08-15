@@ -1,6 +1,6 @@
 {
   "format": "dubsar.public-file-inventory/1",
-  "root_sha256": "ef2297c423d084ba6e10ff7ea2a3000d6addc9e7caba1055463d40e50b88e271",
+  "root_sha256": "1c6c38ed8a7d36120ae09dbde67b8375e9d65dd2c54cee5563e4f8c9697d16d6",
   "files": [
     {
       "path": ".claude-plugin/plugin.json",
@@ -48,7 +48,7 @@
     },
     {
       "path": "runtime/cli.mjs",
-      "sha256": "3e4cff78dcd4331e67e90e4928bd74b900eda8140f8a1cafa2c78015ffeaf4e6"
+      "sha256": "fb765b543b503b0d33132bdddbb1af2e8c7903db5d235d4176e050d7619274a3"
     },
     {
       "path": "runtime/close-session.mjs",

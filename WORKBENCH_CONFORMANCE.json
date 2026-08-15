@@ -510,8 +510,8 @@
     },
     {
       "path": "packages/dubsar-project-continuity/runtime/cli.mjs",
-      "bytes": 31558,
-      "sha256": "3e4cff78dcd4331e67e90e4928bd74b900eda8140f8a1cafa2c78015ffeaf4e6",
+      "bytes": 31639,
+      "sha256": "fb765b543b503b0d33132bdddbb1af2e8c7903db5d235d4176e050d7619274a3",
       "role": "runtime"
     },
     {
@@ -851,5 +851,5 @@
       "role": "runtime"
     }
   ],
-  "content_root_sha256": "65a9d1f5b2ccabd958feac19073e3a1b0783659cdcba05d375fc5fd7451bf204"
+  "content_root_sha256": "7a1317eae4528c0479537cd977c65d19e0eeb47b9491c3568d379277a96eb04e"
 }

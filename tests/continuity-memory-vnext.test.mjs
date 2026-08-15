@@ -1076,6 +1076,10 @@ test("CLI help is emitted without reading a workspace and without writing anythi
     assert.equal(result.exitCode, 0, result.err);
     assert.equal(result.err, "");
     assert.match(result.out, /^DUBSAR Continuity CLI - @dubsar\/project-continuity /u);
+    assert.match(result.out, /^  dubsar <command> \[options\]$/mu);
+    assert.match(result.out, /Humans may invoke an installed dubsar command from PATH\./u);
+    assert.match(result.out, /Host adapters must resolve the runtime from their own installation/u);
+    assert.doesNotMatch(result.out, /Never resolve it from PATH/u);
     assert.match(result.out, /Write style A - you author a proposal file:/u);
     assert.match(result.out, /Write style B - the CLI builds the proposal from flags:/u);
     assert.match(result.out, /This help reads no workspace and changes no file\./u);
