@@ -5,6 +5,8 @@ separate, explicitly reviewed decision.
 
 ## Public technical preview — 0.3.0-dev
 
+- Spec Kit extension 0.1.4 requires bootstrap `next_action` to describe the
+  post-apply resume step and surfaces it in the human preview;
 - Spec Kit extension 0.1.3 aligns compatibility documentation with the Spec Kit
   version actually tested (`0.16.4`);
 - add optional Continuity CLI `bootstrap` for one atomic Create project memory
