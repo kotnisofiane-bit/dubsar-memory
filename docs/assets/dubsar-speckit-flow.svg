@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" role="img" aria-labelledby="title description">
+  <title id="title">Spec Kit and DUBSAR Memory workflow</title>
+  <desc id="description">Spec Kit turns human intent into specifications, plans, and tasks. DUBSAR Memory records work, checkpoints, and document freshness so Cursor, Claude Code, or Codex can resume the same project context in another session. The two tools retain separate directories and authority.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0f14"/>
+      <stop offset="1" stop-color="#111925"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#75849a"/>
+    </marker>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#020509" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="560" rx="24" fill="url(#background)"/>
+  <path d="M0 1h1200" stroke="#263244"/>
+
+  <text x="64" y="56" fill="#54d6a8" font-family="system-ui, sans-serif" font-size="15" font-weight="600" letter-spacing="2.4">DUBSAR MEMORY + SPEC KIT</text>
+  <text x="64" y="98" fill="#f2f6fb" font-family="system-ui, sans-serif" font-size="32" font-weight="650">From a clear specification to a reliable next session</text>
+  <text x="64" y="129" fill="#9aa8ba" font-family="system-ui, sans-serif" font-size="17">Each tool owns its files. DUBSAR records continuity without taking control of execution.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="64" y="184" width="220" height="176" rx="16" fill="#131b26" stroke="#2a3749"/>
+    <rect x="348" y="184" width="250" height="176" rx="16" fill="#131b26" stroke="#405b91"/>
+    <rect x="662" y="184" width="250" height="176" rx="16" fill="#131b26" stroke="#317f6a"/>
+    <rect x="976" y="184" width="160" height="176" rx="16" fill="#131b26" stroke="#2a3749"/>
+  </g>
+
+  <circle cx="96" cy="218" r="12" fill="#253144"/>
+  <path d="M91 218h10M96 213v10" stroke="#dce5ef" stroke-width="2" stroke-linecap="round"/>
+  <text x="120" y="224" fill="#dce5ef" font-family="system-ui, sans-serif" font-size="15" font-weight="650">HUMAN INTENT</text>
+  <text x="88" y="267" fill="#f2f6fb" font-family="system-ui, sans-serif" font-size="18" font-weight="600">What should we</text>
+  <text x="88" y="291" fill="#f2f6fb" font-family="system-ui, sans-serif" font-size="18" font-weight="600">build?</text>
+  <text x="88" y="322" fill="#9aa8ba" font-family="system-ui, sans-serif" font-size="14">A feature, decision,</text>
+  <text x="88" y="344" fill="#9aa8ba" font-family="system-ui, sans-serif" font-size="14">or concrete outcome.</text>
+
+  <rect x="372" y="207" width="88" height="26" rx="13" fill="#1f3153"/>
+  <text x="416" y="225" text-anchor="middle" fill="#a9c4ff" font-family="system-ui, sans-serif" font-size="13" font-weight="650">SPEC KIT</text>
+  <text x="372" y="272" fill="#f2f6fb" font-family="system-ui, sans-serif" font-size="20" font-weight="600">Frame the work</text>
+  <text x="372" y="307" fill="#a9c4ff" font-family="ui-monospace, monospace" font-size="14">spec.md · plan.md · tasks.md</text>
+  <text x="372" y="335" fill="#9aa8ba" font-family="ui-monospace, monospace" font-size="13">.specify/ + specs/</text>
+
+  <rect x="686" y="207" width="132" height="26" rx="13" fill="#183a34"/>
+  <text x="752" y="225" text-anchor="middle" fill="#79e1be" font-family="system-ui, sans-serif" font-size="13" font-weight="650">DUBSAR MEMORY</text>
+  <text x="686" y="272" fill="#f2f6fb" font-family="system-ui, sans-serif" font-size="20" font-weight="600">Record continuity</text>
+  <text x="686" y="307" fill="#79e1be" font-family="ui-monospace, monospace" font-size="14">Work · checkpoints · freshness</text>
+  <text x="686" y="335" fill="#9aa8ba" font-family="ui-monospace, monospace" font-size="13">.dubsar/</text>
+
+  <text x="1000" y="224" fill="#dce5ef" font-family="system-ui, sans-serif" font-size="15" font-weight="650">NEXT SESSION</text>
+  <text x="1000" y="270" fill="#f2f6fb" font-family="system-ui, sans-serif" font-size="16">Cursor</text>
+  <text x="1000" y="301" fill="#f2f6fb" font-family="system-ui, sans-serif" font-size="16">Claude Code</text>
+  <text x="1000" y="332" fill="#f2f6fb" font-family="system-ui, sans-serif" font-size="16">Codex</text>
+
+  <path d="M284 272h52" fill="none" stroke="#75849a" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M598 272h52" fill="none" stroke="#75849a" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M912 272h52" fill="none" stroke="#75849a" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="630" y="250" text-anchor="middle" fill="#8190a4" font-family="system-ui, sans-serif" font-size="12">path + SHA-256</text>
+
+  <g transform="translate(64 420)">
+    <rect width="260" height="86" rx="14" fill="#101721" stroke="#263244"/>
+    <circle cx="27" cy="27" r="8" fill="#54d6a8"/>
+    <path d="M23 27l3 3 6-7" fill="none" stroke="#08110e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="48" y="32" fill="#e7edf5" font-family="system-ui, sans-serif" font-size="15" font-weight="600">Explicit checkpoint</text>
+    <text x="20" y="56" fill="#8f9caf" font-family="system-ui, sans-serif" font-size="13">Nothing is recorded</text>
+    <text x="20" y="75" fill="#8f9caf" font-family="system-ui, sans-serif" font-size="13">in the background.</text>
+  </g>
+  <g transform="translate(350 420)">
+    <rect width="278" height="86" rx="14" fill="#101721" stroke="#263244"/>
+    <circle cx="27" cy="27" r="8" fill="#7aa2ff"/>
+    <text x="48" y="32" fill="#e7edf5" font-family="system-ui, sans-serif" font-size="15" font-weight="600">Preview + confirmation</text>
+    <text x="20" y="56" fill="#8f9caf" font-family="system-ui, sans-serif" font-size="13">Every write is visible</text>
+    <text x="20" y="75" fill="#8f9caf" font-family="system-ui, sans-serif" font-size="13">before it applies.</text>
+  </g>
+  <g transform="translate(654 420)">
+    <rect width="240" height="86" rx="14" fill="#101721" stroke="#263244"/>
+    <circle cx="27" cy="27" r="8" fill="#54d6a8"/>
+    <text x="48" y="32" fill="#e7edf5" font-family="system-ui, sans-serif" font-size="15" font-weight="600">Read-only resume</text>
+    <text x="20" y="56" fill="#8f9caf" font-family="system-ui, sans-serif" font-size="13">The same state,</text>
+    <text x="20" y="75" fill="#8f9caf" font-family="system-ui, sans-serif" font-size="13">in another session.</text>
+  </g>
+  <text x="1136" y="450" text-anchor="end" fill="#9aa8ba" font-family="system-ui, sans-serif" font-size="14">No hooks</text>
+  <text x="1136" y="474" text-anchor="end" fill="#9aa8ba" font-family="system-ui, sans-serif" font-size="14">No MCP · No daemon</text>
+  <text x="1136" y="498" text-anchor="end" fill="#54d6a8" font-family="system-ui, sans-serif" font-size="14" font-weight="600">Local by design</text>
+</svg>

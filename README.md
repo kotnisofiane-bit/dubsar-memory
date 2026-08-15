@@ -68,6 +68,25 @@ generated views, and personal memory are never project authority.
 The complete storage model is documented in
 [Project memory architecture](docs/MEMORY_ARCHITECTURE.md).
 
+## Spec Kit + DUBSAR Memory
+
+Spec Kit frames what should be built. DUBSAR records what actually happened
+afterwards so another session or coding host can resume from the same bounded
+state. Their authority stays separate: Spec Kit owns `.specify/` and `specs/`;
+DUBSAR owns `.dubsar/` and writes only after an explicit preview and
+confirmation.
+
+![Spec Kit turns intent into project artifacts, then DUBSAR records Work, checkpoints, and freshness for a later Cursor, Claude Code, or Codex session.](docs/assets/dubsar-speckit-flow.svg)
+
+The verified `0.1.4` flow creates the first project memory, active Work, and
+checkpoint atomically. A later read restores the recorded next action and
+checks whether the referenced specification still matches its SHA-256 digest.
+
+![Animated terminal walkthrough: create a Spec Kit feature, preview and confirm one DUBSAR bootstrap, then resume the Work and fresh specification in a new session.](docs/assets/dubsar-speckit-demo.gif)
+
+[View the static final frame](docs/assets/dubsar-speckit-demo-poster.png) or read
+the [Spec Kit extension guide](integrations/spec-kit/dubsar-memory/README.md).
+
 ## Quick start
 
 Node.js 20 or newer is the only runtime prerequisite.
