@@ -57,11 +57,17 @@ A checkpoint records an already-supported fact or an already-made human decision
      status document (use each document's `captured_sha256` verbatim).
 
    If any human field is missing, ask for it and stop. Never invent title,
-   objective, scope, selection, or summary.
+   objective, scope, selection, summary, or `resulting_state.next_action`.
 
    Derive `project_id` and `work_id` in kebab-case from the human titles and
    confirm them before previewing. Set `selected_work_id` to that same
    `work_id` explicitly in the proposal — never imply selection.
+
+   `resulting_state.next_action` must describe the action to take **after** a
+   successful bootstrap apply. It becomes the resume capsule label. Never
+   record a request to confirm, preview, or apply this bootstrap itself.
+   Example:
+   `Review the catalog submission draft before requesting publication approval.`
 
    Compose one `dubsar.memory-bootstrap-proposal/1` in an **OS temporary
    directory — never inside the project**, then preview only:
@@ -75,6 +81,7 @@ A checkpoint records an already-supported fact or an already-made human decision
    - Create project memory (project id + title);
    - Active work (work id, title, objective, scope, explicit selection);
    - First recorded checkpoint (checkpoint id, kind, summary, references);
+   - After bootstrap, do next (`resulting_state.next_action`);
    - the exact `change_sha256`.
 
    State that nothing has changed yet. Ask for **one** confirmation of that

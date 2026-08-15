@@ -27,6 +27,7 @@ import {
 } from "./lite-initializer.mjs";
 import {
   applyMemoryBootstrap,
+  bootstrapHumanNextAction,
   previewMemoryBootstrap,
 } from "./memory-vnext-bootstrap.mjs";
 import {
@@ -349,14 +350,20 @@ function humanOutput(command, value) {
     `Change SHA-256: ${value.change_sha256}`,
     ...(value.summary ? [`Summary: ${value.summary}`] : []),
   ].join("\n");
-  if (command === "bootstrap") return [
-    value.status === "applied" ? "DUBSAR Create project memory applied" : "DUBSAR Create project memory preview",
-    `Target: ${value.target}`,
-    `Active work: ${value.work_id}`,
-    `First recorded checkpoint: ${value.checkpoint_id}`,
-    `Change SHA-256: ${value.change_sha256}`,
-    ...(value.summary ? [`Summary: ${value.summary}`] : []),
-  ].join("\n");
+  if (command === "bootstrap") {
+    const nextAction = bootstrapHumanNextAction(value);
+    return [
+      value.status === "applied" ? "DUBSAR Create project memory applied" : "DUBSAR Create project memory preview",
+      `Target: ${value.target}`,
+      `Active work: ${value.work_id}`,
+      `First recorded checkpoint: ${value.checkpoint_id}`,
+      ...(typeof nextAction === "string" && nextAction.length > 0
+        ? [`After bootstrap, do next: ${nextAction}`]
+        : []),
+      `Change SHA-256: ${value.change_sha256}`,
+      ...(value.summary ? [`Summary: ${value.summary}`] : []),
+    ].join("\n");
+  }
   if (command === "checkpoint") return [
     value.status === "applied" ? "DUBSAR checkpoint applied" : "DUBSAR checkpoint preview",
     `Operation: ${value.operation}`,

@@ -814,16 +814,23 @@ test("the contract reference ships in the artifact and reaches every integration
   // archive, so the check proves provenance instead of mere presence.
   const packageRoot = path.join(REPOSITORY_ROOT, "packages", "dubsar-project-continuity");
   const inventory = JSON.parse(await readFile(path.join(packageRoot, "FILES.sha256.json"), "utf8"));
-  for (const [canonicalPath, pattern] of [
-    ["skills/checkpoint-project-context/references/checkpoint-append.md", /dubsar\.memory-change-proposal\/1/u],
-    ["skills/checkpoint-project-context/references/bootstrap.md", /dubsar\.memory-bootstrap-proposal\/1/u],
+  for (const [canonicalPath, patterns] of [
+    ["skills/checkpoint-project-context/references/checkpoint-append.md", [
+      /dubsar\.memory-change-proposal\/1/u,
+    ]],
+    ["skills/checkpoint-project-context/references/bootstrap.md", [
+      /dubsar\.memory-bootstrap-proposal\/1/u,
+      /After bootstrap, do next/u,
+      /must describe the action to take \*\*after\*\* bootstrap has already succeeded/u,
+    ]],
   ]) {
     const canonical = await readFile(path.join(packageRoot, ...canonicalPath.split("/")));
     const declared = inventory.files.find((item) => item.path === canonicalPath);
     assert.equal(typeof declared?.sha256, "string", `the canonical contract is inventoried: ${canonicalPath}`);
     assert.equal(sha256(canonical), declared.sha256,
       "packaging copies the sealed contract rather than maintaining a second copy");
-    assert.match(canonical.toString("utf8"), pattern);
+    const text = canonical.toString("utf8");
+    for (const pattern of patterns) assert.match(text, pattern);
   }
 
   // Both installed commands point at the contracts.
@@ -839,6 +846,19 @@ test("the contract reference ships in the artifact and reaches every integration
   assert.match(checkpoint, /Create project memory/u);
   assert.match(checkpoint, /Active work/u);
   assert.match(checkpoint, /First recorded checkpoint/u);
+  assert.match(checkpoint, /After bootstrap, do next/u);
+  assert.match(
+    checkpoint,
+    /resulting_state\.next_action` must describe the action to take \*\*after\*\* a\s+successful bootstrap apply/u,
+  );
+  assert.match(
+    checkpoint,
+    /Never\s+record a request to confirm, preview, or apply this bootstrap itself/u,
+  );
+  assert.match(
+    checkpoint,
+    /Review the catalog submission draft before requesting publication approval/u,
+  );
   // Granular path remains available as the advanced solution.
   assert.match(checkpoint, /Advanced granular path/u);
   assert.match(checkpoint, /work select` writes `\.dubsar\/local\.json/u);

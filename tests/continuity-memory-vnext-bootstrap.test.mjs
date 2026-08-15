@@ -124,6 +124,20 @@ test("memory bootstrap is previewed, digest-bound, and published atomically", as
   assert.equal(first.work_id, "validate-cursor-continuity");
   assert.equal(first.checkpoint_id, "cp-bootstrap-first");
   assert.match(first.change_sha256, /^[0-9a-f]{64}$/u);
+  assert.deepEqual(Object.keys(first).sort(), [
+    "change_sha256",
+    "checkpoint_id",
+    "consequence",
+    "file_sha256",
+    "format",
+    "operation",
+    "project_id",
+    "proposal_sha256",
+    "status",
+    "summary",
+    "target",
+    "work_id",
+  ], "bootstrap preview /1 JSON keys stay closed");
   assert.equal(
     first.summary,
     "Create project memory with one Active work and one First recorded checkpoint.",
@@ -176,6 +190,11 @@ test("memory bootstrap is previewed, digest-bound, and published atomically", as
   assert.equal(capsule.recorded_continuity.length, 1);
   assert.equal(capsule.format, "dubsar.resume-capsule/4");
   assert.equal(capsule.evidence_freshness.status, "fresh");
+  assert.equal(
+    capsule.next_action.label,
+    proposal.checkpoint.resulting_state.next_action,
+    "recorded next_action survives apply unchanged into the resume capsule",
+  );
 
   await assert.rejects(
     previewMemoryBootstrap({ start: projectRoot, proposal }),
@@ -407,8 +426,9 @@ test("CLI human bootstrap preview names Create project memory, Active work, and 
     await rm(projectRoot, { recursive: true, force: true });
     await rm(tempRoot, { recursive: true, force: true });
   });
+  const proposal = bootstrapProposal();
   const proposalPath = path.join(tempRoot, "bootstrap.json");
-  await writeFile(proposalPath, `${JSON.stringify(bootstrapProposal(), null, 2)}\n`);
+  await writeFile(proposalPath, `${JSON.stringify(proposal, null, 2)}\n`);
 
   const preview = await runCli([
     "bootstrap", "--start", projectRoot, "--proposal", proposalPath,
@@ -417,9 +437,56 @@ test("CLI human bootstrap preview names Create project memory, Active work, and 
   assert.match(preview.stdout, /Create project memory/u);
   assert.match(preview.stdout, /Active work: validate-cursor-continuity/u);
   assert.match(preview.stdout, /First recorded checkpoint: cp-bootstrap-first/u);
+  assert.match(
+    preview.stdout,
+    new RegExp(`After bootstrap, do next: ${proposal.checkpoint.resulting_state.next_action}`, "u"),
+  );
   const digests = [...preview.stdout.matchAll(/Change SHA-256: ([0-9a-f]{64})/gu)];
   assert.equal(digests.length, 1);
   await assertCleanRefusal(projectRoot);
+
+  const jsonPreview = await runCli([
+    "bootstrap", "--start", projectRoot, "--proposal", proposalPath, "--json",
+  ]);
+  assert.equal(jsonPreview.exitCode, 0);
+  const previewDoc = JSON.parse(jsonPreview.stdout);
+  assert.equal(Object.hasOwn(previewDoc, "next_action"), false,
+    "JSON bootstrap preview /1 must not gain a next_action field");
+});
+
+test("bootstrap capsule keeps the authored post-apply next_action", async (t) => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "dubsar-memory-bootstrap-next-"));
+  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  const nextAction = "Review the catalog submission draft before requesting publication approval.";
+  const proposal = bootstrapProposal({
+    checkpoint: {
+      ...bootstrapProposal().checkpoint,
+      resulting_state: {
+        ...bootstrapProposal().checkpoint.resulting_state,
+        next_action: nextAction,
+      },
+    },
+  });
+  const preview = await previewMemoryBootstrap({ start: projectRoot, proposal });
+  await applyMemoryBootstrap({
+    start: projectRoot,
+    proposal,
+    expectedChange: preview.change_sha256,
+  });
+  const inspection = await inspectWorkspace({
+    start: projectRoot,
+    domain: "project",
+    observeReferences: true,
+  });
+  const capsule = buildMemoryResumeCapsule({
+    inspection,
+    producer: { name: "@dubsar/project-continuity", version: "0.3.0-dev" },
+  });
+  assert.equal(capsule.next_action.label, nextAction);
+  const checkpoints = JSON.parse(
+    await readFile(path.join(projectRoot, ".dubsar", "checkpoints.json"), "utf8"),
+  );
+  assert.equal(checkpoints.entries[0].resulting_state.next_action, nextAction);
 });
 
 test("init still publishes an empty workspace without bootstrap", async (t) => {

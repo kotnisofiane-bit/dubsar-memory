@@ -50,9 +50,17 @@ project (see `references/bootstrap.md`). The proposal must declare
 node "<plugin-root>/bin/dubsar.mjs" bootstrap --start <project> --proposal <temporary-json> --json
 ```
 
-Present Create project memory, Active work, First recorded checkpoint, and the
-exact `change_sha256`. Apply only after one confirmation of that digest. Delete
-the temporary proposal afterward.
+Present Create project memory, Active work, First recorded checkpoint, After
+bootstrap do next (the recorded `resulting_state.next_action`), and the exact
+`change_sha256`.
+
+`resulting_state.next_action` must describe the action to take **after** a
+successful bootstrap apply. Never record a request to confirm, preview, or
+apply this bootstrap itself. Example:
+`Review the catalog submission draft before requesting publication approval.`
+
+Apply only after one confirmation of that digest. Delete the temporary proposal
+afterward.
 
 ### Granular init
 

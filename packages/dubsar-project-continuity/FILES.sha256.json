@@ -1,6 +1,6 @@
 {
   "format": "dubsar.public-file-inventory/1",
-  "root_sha256": "d98c8048289aba7d768ac37a8d4a0df3efc2a9566dce9298915c29c3ed1b1165",
+  "root_sha256": "ef2297c423d084ba6e10ff7ea2a3000d6addc9e7caba1055463d40e50b88e271",
   "files": [
     {
       "path": ".claude-plugin/plugin.json",
@@ -48,7 +48,7 @@
     },
     {
       "path": "runtime/cli.mjs",
-      "sha256": "319c6c1e90a48df3b447e01eecb7af94ddc1159f8c15cacfbcbec20fa82745a9"
+      "sha256": "3e4cff78dcd4331e67e90e4928bd74b900eda8140f8a1cafa2c78015ffeaf4e6"
     },
     {
       "path": "runtime/close-session.mjs",
@@ -108,7 +108,7 @@
     },
     {
       "path": "runtime/memory-vnext-bootstrap.mjs",
-      "sha256": "cbd6312e4fae8cf7d1b833ce046b9b2cb40ea64388f9f85a2e1a3f61c6a39a95"
+      "sha256": "8dc5e33b367336129ed853ebb6526c5de172fd7b030af599dc5df6391a5e0693"
     },
     {
       "path": "runtime/memory-vnext-capsule.mjs",
@@ -180,7 +180,7 @@
     },
     {
       "path": "skills/checkpoint-project-context/references/bootstrap.md",
-      "sha256": "46aa5f9812f97d7e0c4ea5097dec31f107a6fe1dbbdaf11a75d5a1e63251f0d7"
+      "sha256": "e677186b7a9c4b7e4799593d75847a19473f79969262130f988964ee92171101"
     },
     {
       "path": "skills/checkpoint-project-context/references/checkpoint-append.md",
@@ -188,7 +188,7 @@
     },
     {
       "path": "skills/checkpoint-project-context/SKILL.md",
-      "sha256": "38c4735aa9cadcd0a0c860329e9067fb8712e0a8083cbc6d98026a0b53dc827c"
+      "sha256": "db6dd9d4fc5c4ccc3088037a3665485b8d04a902fa35587ac25cc9668e592787"
     },
     {
       "path": "skills/resume-project-context/agents/openai.yaml",

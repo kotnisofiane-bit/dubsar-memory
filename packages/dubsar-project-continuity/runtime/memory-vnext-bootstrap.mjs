@@ -35,6 +35,13 @@ export const MEMORY_BOOTSTRAP_PROPOSAL_FORMAT = "dubsar.memory-bootstrap-proposa
 export const MEMORY_BOOTSTRAP_PREVIEW_FORMAT = "dubsar.memory-bootstrap-preview/1";
 export const MEMORY_BOOTSTRAP_APPLY_FORMAT = "dubsar.memory-bootstrap-apply/1";
 
+const humanNextActions = new WeakMap();
+
+/** Human-only preview channel; never part of the JSON `/1` document. */
+export function bootstrapHumanNextAction(preview) {
+  return humanNextActions.get(preview);
+}
+
 const SHA256 = /^[0-9a-f]{64}$/u;
 const SAFE_ID = /^[a-z0-9][a-z0-9._-]{2,127}$/iu;
 const MAX_PROPOSAL_BYTES = 128 * 1024;
@@ -248,19 +255,21 @@ async function buildBootstrap({ start, proposalPath, proposal }) {
     file_sha256: fileSha256,
     proposal_sha256: proposalSha256,
   };
+  const preview = {
+    format: MEMORY_BOOTSTRAP_PREVIEW_FORMAT,
+    status: "preview",
+    ...base,
+    change_sha256: sha256Bytes(Buffer.from(stableJson(base), "utf8")),
+    summary: "Create project memory with one Active work and one First recorded checkpoint.",
+    consequence: "The .dubsar directory is published atomically; source files and personal memory are unchanged.",
+  };
+  humanNextActions.set(preview, normalized.checkpoint.resulting_state.next_action);
   return {
     projectRoot,
     marker,
     files,
     normalized,
-    preview: {
-      format: MEMORY_BOOTSTRAP_PREVIEW_FORMAT,
-      status: "preview",
-      ...base,
-      change_sha256: sha256Bytes(Buffer.from(stableJson(base), "utf8")),
-      summary: "Create project memory with one Active work and one First recorded checkpoint.",
-      consequence: "The .dubsar directory is published atomically; source files and personal memory are unchanged.",
-    },
+    preview,
   };
 }
 

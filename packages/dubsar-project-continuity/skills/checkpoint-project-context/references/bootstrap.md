@@ -35,6 +35,25 @@ otherwise): no Knowledge files exist yet.
 
 `checkpoint.resolves` must be `null` for the first chain entry.
 
+## `resulting_state.next_action` (post-apply only)
+
+`checkpoint.resulting_state.next_action` is recorded into the first checkpoint
+and becomes the resume capsule's next-action label after a successful apply.
+
+It must describe the action to take **after** bootstrap has already succeeded.
+It must **not** ask to confirm, preview, or apply this bootstrap itself.
+
+Correct example:
+
+`Review the catalog submission draft before requesting publication approval.`
+
+Incorrect example (do not record):
+
+`Await explicit confirmation before applying the atomic bootstrap.`
+
+The runtime does not invent or rewrite this field. Authors and host skills must
+supply a post-application action.
+
 ## `checkpoint` — ten authored fields
 
 Same authored fields as `checkpoint_append`:
@@ -63,6 +82,7 @@ Summary language for humans:
 - Create project memory
 - Active work
 - First recorded checkpoint
+- After bootstrap, do next (the recorded `resulting_state.next_action`)
 
 Nothing is written before confirmation of the exact `change_sha256`. Apply
 stages under a sibling directory, validates digests and closed documents, then
