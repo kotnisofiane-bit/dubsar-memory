@@ -36,3 +36,7 @@ this directory document design validation. They are useful to maintainers but
 are not required to install or use DUBSAR Memory. Some describe historical
 formats retained only for compatibility; the current `.dubsar/` contract and
 CLI behavior always take precedence.
+
+- [Parallel-worktree checkpoints](DUBSAR_PARALLEL_WORKTREE_CHECKPOINTS_ADR.md)
+  records the verified merge failure, the current single-writer rule, and a
+  contract-first candidate/promotion design that is not implemented.

@@ -7,12 +7,14 @@ node packages/dubsar-project-continuity/bin/dubsar.mjs <command> --start <projec
 ```
 
 Node.js 20 or newer is required. The CLI never depends on a global `dubsar`
-binary.
+binary. `capabilities --json` is the only command below that intentionally
+requires no `--start` because it reads no workspace.
 
 ## Read commands
 
 | Command | Result |
 |---|---|
+| `capabilities` | Exact installed producer, Node requirement, and append-only runtime capability tokens. |
 | `resume --capsule` | Bounded, digest-verified resume capsule. |
 | `route` | Advisory memory route, exact relations, lifecycle, and optional native Plan/Goal guidance. |
 | `context` | Compiled project context; no write unless `--write` is explicit. |
@@ -26,6 +28,10 @@ binary.
 
 Read commands do not write the project, host profile, Git metadata, or personal
 memory.
+
+Integrations should test the exact token they require from
+`dubsar.runtime-capabilities/1`. A token may be added to that format, but its
+meaning must never be removed, reused, or changed.
 
 ## Explicit write commands
 

@@ -101,6 +101,7 @@ npm run demo
 Inspect the included synthetic project:
 
 ```bash
+node packages/dubsar-project-continuity/bin/dubsar.mjs capabilities --json
 node packages/dubsar-project-continuity/bin/dubsar.mjs resume --start examples/memory-vnext-project --capsule --json
 node packages/dubsar-project-continuity/bin/dubsar.mjs route --start examples/memory-vnext-project --json
 node packages/dubsar-project-continuity/bin/dubsar.mjs history --start examples/memory-vnext-project --json
@@ -120,8 +121,8 @@ writes.
 
 The supported integration boundary for this preview is the versioned JSON CLI.
 A backend can invoke the packaged runtime with an absolute path, consume
-`resume`, `context`, `history`, or `route`, and keep all policy and execution
-authority outside DUBSAR.
+`capabilities`, `resume`, `context`, `history`, or `route`, and keep all policy
+and execution authority outside DUBSAR.
 
 DUBSAR does not require a daemon or database. It can run in a developer
 worktree, a disposable worker, or a VM. It is not yet a multi-tenant knowledge

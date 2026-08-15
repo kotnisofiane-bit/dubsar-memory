@@ -71,6 +71,7 @@
         "dubsar.resume-capsule/3",
         "dubsar.resume-capsule/4",
         "dubsar.review-ledger-ui-session/1",
+        "dubsar.runtime-capabilities/1",
         "dubsar.ui-session/1",
         "dubsar.validation/1",
         "dubsar.work/1"
@@ -510,8 +511,8 @@
     },
     {
       "path": "packages/dubsar-project-continuity/runtime/cli.mjs",
-      "bytes": 31639,
-      "sha256": "fb765b543b503b0d33132bdddbb1af2e8c7903db5d235d4176e050d7619274a3",
+      "bytes": 32836,
+      "sha256": "738907c99fbf2a4e0d2ef2bf9114600e23d96ddd89ef7efeb07f8235b50d0b45",
       "role": "runtime"
     },
     {
@@ -851,5 +852,5 @@
       "role": "runtime"
     }
   ],
-  "content_root_sha256": "7a1317eae4528c0479537cd977c65d19e0eeb47b9491c3568d379277a96eb04e"
+  "content_root_sha256": "4b5725a969512f90fcfc68c82678fa9303c1ecb3b789afda354dc21865164524"
 }

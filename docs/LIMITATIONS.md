@@ -46,6 +46,26 @@ and atomic replacement. They intentionally do not implement distributed locks
 or multi-machine transactions. Put each writable project workspace on a local
 filesystem with normal atomic-rename semantics.
 
+Those locks are scoped to one workspace root. Separate Git worktrees therefore
+have separate locks and must not append canonical checkpoints concurrently.
+`checkpoints.json` is one tracked, strictly positional hash chain: two branches
+that append from the same parent each create a valid child at the same index,
+but Git cannot merge those children into one valid chain. Keeping both entries
+without choosing an order is rejected as `MEMORY_CHECKPOINTS_INVALID`.
+
+The supported rule for parallel worktrees is currently **many readers, one
+canonical writer after explicit convergence**. Read or resume from any
+worktree, merge the intended source changes, then preview and apply exactly one
+canonical checkpoint from the retained worktree. Do not use concurrent
+`checkpoint_append` operations as branch-local journals that are expected to
+merge later. A valid relinearization would require an explicit ordering choice
+and new digests for the displaced entry and its descendants; DUBSAR does not do
+that automatically.
+
+The proposed, not-yet-implemented contract for carrying branch-local candidate
+facts without creating a second canonical history is recorded in the
+[parallel-worktree checkpoint ADR](DUBSAR_PARALLEL_WORKTREE_CHECKPOINTS_ADR.md).
+
 ## Interfaces
 
 - Node.js 20+ is required;
