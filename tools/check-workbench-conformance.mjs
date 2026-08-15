@@ -76,6 +76,9 @@ export const WORKBENCH_COMPONENTS = freeze([
       "dubsar.memory-project/1",
       "dubsar.memory-snapshot/1",
       "dubsar.memory-work-view/1",
+      "dubsar.pending-checkpoint-apply/1",
+      "dubsar.pending-checkpoint-preview/1",
+      "dubsar.pending-checkpoint/1",
       "dubsar.personal-memory-command-result/1",
       "dubsar.project-evidence/2",
       "dubsar.resume-capsule/3",
@@ -369,6 +372,10 @@ const formatBindings = freeze({
       binding: "MEMORY_WORK_FORMAT",
     },
     {
+      path: "packages/dubsar-project-continuity/runtime/memory-vnext-contracts.mjs",
+      binding: "MEMORY_PENDING_CHECKPOINT_FORMAT",
+    },
+    {
       path: "packages/dubsar-project-continuity/runtime/memory-vnext-bootstrap.mjs",
       binding: "MEMORY_BOOTSTRAP_APPLY_FORMAT",
     },
@@ -411,6 +418,18 @@ const formatBindings = freeze({
     {
       path: "packages/dubsar-project-continuity/runtime/memory-vnext-writer.mjs",
       binding: "MEMORY_CHANGE_PREVIEW_FORMAT",
+    },
+    {
+      path: "packages/dubsar-project-continuity/runtime/memory-vnext-pending-writer.mjs",
+      binding: "PENDING_CHECKPOINT_APPLY_FORMAT",
+    },
+    {
+      path: "packages/dubsar-project-continuity/runtime/memory-vnext-pending-writer.mjs",
+      binding: "PENDING_CHECKPOINT_PREVIEW_FORMAT",
+    },
+    {
+      path: "packages/dubsar-project-continuity/runtime/memory-vnext-pending-writer.mjs",
+      binding: "PENDING_CHECKPOINT_PROPOSAL_FORMAT",
     },
   ],
   "codex-adapter": [
@@ -792,6 +811,23 @@ const formatProducers = freeze({
       called_by_export: "applyMemoryChange",
       occurrences: 1,
       formats: ["dubsar.memory-change-apply/1"],
+    },
+    {
+      path: "packages/dubsar-project-continuity/runtime/memory-vnext-pending-writer.mjs",
+      function: "buildPendingRecord",
+      called_by_export: "previewPendingCheckpointRecord",
+      occurrences: 2,
+      formats: [
+        "dubsar.pending-checkpoint-preview/1",
+        "dubsar.pending-checkpoint/1",
+      ],
+    },
+    {
+      path: "packages/dubsar-project-continuity/runtime/memory-vnext-pending-writer.mjs",
+      function: "publishPendingRecord",
+      called_by_export: "applyPendingCheckpointRecord",
+      occurrences: 1,
+      formats: ["dubsar.pending-checkpoint-apply/1"],
     },
   ],
   "codex-adapter": [

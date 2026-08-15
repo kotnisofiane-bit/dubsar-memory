@@ -1,7 +1,8 @@
 # ADR — checkpoints et worktrees parallèles
 
-**Statut :** décision opératoire immédiate ; proposition contract-first pour
-une extension future, non approuvée pour implémentation.
+**Statut :** Lot 1 d'enregistrement des candidats implémenté
+(`pending record`). Projection et promotion restent futures et non approuvées
+ici.
 
 **Date :** 2026-08-15
 
@@ -14,11 +15,12 @@ mémoire, mais un seul worktree convergé écrit la chaîne canonique. Aucun mer
 Git n'est autorisé à réconcilier automatiquement deux `checkpoint_append`
 concurrents.
 
-Une extension future pourra transporter des **candidats consultatifs**, un
-fichier par source déclarée et par checkpoint, puis les promouvoir un par un
-après une décision humaine explicite. Cette extension n'est pas implémentée par
-ce lot. Elle ne modifie ni `dubsar.continuity-checkpoints/2`, ni
-`dubsar.workspace-snapshot/1`, ni le sens du snapshot canonique.
+Le Lot 1 permet d'enregistrer des **candidats consultatifs** dans
+`.dubsar-pending/<declared_source>/<checkpoint_id>.md` via
+`dubsar pending record`. Ces fichiers sont suivis par Git, mais ne modifient
+jamais `.dubsar/`, ni `dubsar.continuity-checkpoints/2`, ni
+`dubsar.workspace-snapshot/1`, ni le sens du snapshot canonique. La projection
+et la promotion restent des lots séparés.
 
 ## Défaut reproduit
 

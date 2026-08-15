@@ -5,6 +5,8 @@ separate, explicitly reviewed decision.
 
 ## Public technical preview — 0.3.0-dev
 
+- add Lot 1 `pending record` for Git-tracked advisory checkpoint candidates under
+  `.dubsar-pending/` without modifying canonical `.dubsar/` memory;
 - add workspace-free runtime capability discovery for integrations and record
   the verified single-writer rule for parallel Git worktrees;
 - Spec Kit extension 0.1.4 requires bootstrap `next_action` to describe the

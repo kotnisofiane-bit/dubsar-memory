@@ -62,8 +62,10 @@ merge later. A valid relinearization would require an explicit ordering choice
 and new digests for the displaced entry and its descendants; DUBSAR does not do
 that automatically.
 
-The proposed, not-yet-implemented contract for carrying branch-local candidate
-facts without creating a second canonical history is recorded in the
+Lot 1 recording is available through `pending record`: it writes only
+`.dubsar-pending/<declared_source>/<checkpoint_id>.md`. Those candidates are
+Git-tracked advisory facts and never change `.dubsar/`, integrity, readiness,
+capsules, or routing. Projection and promotion remain future lots; see the
 [parallel-worktree checkpoint ADR](DUBSAR_PARALLEL_WORKTREE_CHECKPOINTS_ADR.md).
 
 ## Interfaces
