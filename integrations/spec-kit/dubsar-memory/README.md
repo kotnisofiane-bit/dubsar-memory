@@ -118,10 +118,10 @@ Extension Submission issue noting that it updates an existing entry.
 
 ### Verified against
 
-Spec Kit `0.16.5.dev0`, installed with `specify extension add --dev` and
-validated by Spec Kit's own manifest validator at install time. The manifest
-declares `speckit_version: ">=0.16.5.dev0"`, the oldest version actually
-exercised — nothing older is claimed.
+Spec Kit `0.16.4`, installed and executed with the packaged artifact across the
+`claude`, `codex`, and `cursor-agent` integrations. The manifest declares
+`speckit_version: ">=0.16.4"`, the oldest version actually exercised — nothing
+older is claimed.
 
 ## Guarantees
 
