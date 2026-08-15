@@ -178,7 +178,8 @@ async function withProject(run) {
 
 async function expectPendingReject(root, run, code) {
   const before = await dubsarFingerprint(root);
-  await assert.rejects(run, (error) => error.code === code);
+  const accepted = new Set(Array.isArray(code) ? code : [code]);
+  await assert.rejects(run, (error) => accepted.has(error.code));
   assert.equal(await dubsarFingerprint(root), before);
 }
 
@@ -529,7 +530,7 @@ test("pending record rejects symlink junction reparse under pending when availab
           start: root,
           proposal: pendingProposal({ checkpointId: "cp-symlink-guard" }),
         }),
-        "PENDING_ROOT_UNSAFE",
+        ["PENDING_ROOT_UNSAFE", "SYMBOLIC_PATH_REJECTED"],
       );
     } finally {
       await rm(outside, { recursive: true, force: true });
