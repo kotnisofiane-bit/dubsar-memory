@@ -65,7 +65,10 @@ that automatically.
 Lot 1 recording is available through `pending record`: it writes only
 `.dubsar-pending/<declared_source>/<checkpoint_id>.md`. Those candidates are
 Git-tracked advisory facts and never change `.dubsar/`, integrity, readiness,
-capsules, or routing. Projection and promotion remain future lots; see the
+capsules, or routing. Lot 2 `pending list` enumerates valid candidates without
+classifying them. Lot 3 `pending promote` is the explicit human-confirmed
+append of exactly one candidate into `.dubsar/checkpoints.json`; it never
+deletes or rewrites the pending file. See the
 [parallel-worktree checkpoint ADR](DUBSAR_PARALLEL_WORKTREE_CHECKPOINTS_ADR.md).
 
 ## Interfaces

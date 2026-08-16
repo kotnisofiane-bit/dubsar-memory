@@ -1,7 +1,8 @@
 # ADR — checkpoints et worktrees parallèles
 
-**Statut :** Lot 1 d'enregistrement des candidats implémenté
-(`pending record`). Projection et promotion restent futures et non approuvées
+**Statut :** Lot 1 d'enregistrement des candidats, Lot 2 de liste minimale et
+Lot 3 de promotion explicite implémentés (`pending record`, `pending list`,
+`pending promote`). La projection consultative reste future et non approuvée
 ici.
 
 **Date :** 2026-08-15

@@ -65,6 +65,7 @@ Work automatically. `context` writes nothing unless `--write` is explicit, and
 then targets only `generated/context.md` through the normal preview/apply path.
 `pending record` writes only under `.dubsar-pending/` and never under `.dubsar/`.
 `pending list` enumerates valid candidates under `.dubsar-pending/` without classifying them or observing references.
+`pending promote` appends exactly one selected candidate into `.dubsar/checkpoints.json` after preview confirmation and leaves the pending file byte-identical.
 
 ## Memory guidance
 

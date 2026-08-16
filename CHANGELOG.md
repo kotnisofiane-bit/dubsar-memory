@@ -5,6 +5,9 @@ separate, explicitly reviewed decision.
 
 ## Public technical preview — 0.3.0-dev
 
+- add Lot 3 explicit `pending promote` to append one human-confirmed pending
+  candidate into the canonical `.dubsar/checkpoints.json` chain without altering
+  `.dubsar-pending/`;
 - add Lot 2 minimal `pending list` for valid advisory candidates under
   `.dubsar-pending/` without classification, reference observation, or writes;
 - add Lot 1 `pending record` for Git-tracked advisory checkpoint candidates under

@@ -100,6 +100,7 @@ preview/apply migration before changing canonical storage.
 Parallel Git worktrees do not share a writer lock. They may all read the
 project memory, but only one converged worktree should append canonical
 checkpoints. Worktrees may also record advisory candidates with
-`pending record` under `.dubsar-pending/`; those files never alter canonical
-`.dubsar/` memory. See the
+`pending record` under `.dubsar-pending/` and list them with `pending list`.
+Promotion into `.dubsar/checkpoints.json` requires an explicit `pending promote`
+preview/apply for exactly one candidate. See the
 [parallel-worktree checkpoint ADR](DUBSAR_PARALLEL_WORKTREE_CHECKPOINTS_ADR.md).

@@ -1,6 +1,6 @@
 {
   "format": "dubsar.public-file-inventory/1",
-  "root_sha256": "85f089452c69c4d73d1b99cbfc5eff8c40e09eec44a8799c385734bddfc7bf97",
+  "root_sha256": "43cf6af77a71a751d11d98870063a5de08bba325a8f90efa19cd422b673f6837",
   "files": [
     {
       "path": ".claude-plugin/plugin.json",
@@ -32,7 +32,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "f04ac55df05891f18bbcf1ff248b969943d95c801097cc714ea123e7b933a824"
+      "sha256": "8ad8edb2409fad7a308509b1fc2bf39009d5e616e5587689e456d2fd8f06ec93"
     },
     {
       "path": "runtime/artifact-lifecycle.mjs",
@@ -48,7 +48,7 @@
     },
     {
       "path": "runtime/cli.mjs",
-      "sha256": "31f1181ff949fd7a1057d5ac6145f758fcc08689f4e3a2ab629f27e8f9c2dd79"
+      "sha256": "f21e34c1e4f818c66fc61bf79ef93ca1fdf4920a7b62e5ec2c9a7e4d3195120f"
     },
     {
       "path": "runtime/close-session.mjs",
@@ -141,6 +141,10 @@
     {
       "path": "runtime/memory-vnext-pending-list.mjs",
       "sha256": "b73408512eb1d923d31a671c5a2ed9eb3c9375bc03143865877a6cd1a7b8b685"
+    },
+    {
+      "path": "runtime/memory-vnext-pending-promotion.mjs",
+      "sha256": "98d53abe1f2e77861ede0d320bcaad53b73281dea20d9c67817fc52708285948"
     },
     {
       "path": "runtime/memory-vnext-pending-writer.mjs",

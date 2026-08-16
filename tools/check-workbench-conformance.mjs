@@ -78,6 +78,8 @@ export const WORKBENCH_COMPONENTS = freeze([
       "dubsar.memory-work-view/1",
       "dubsar.pending-checkpoint-apply/1",
       "dubsar.pending-checkpoint-preview/1",
+      "dubsar.pending-checkpoint-promotion-apply/1",
+      "dubsar.pending-checkpoint-promotion-preview/1",
       "dubsar.pending-checkpoint/1",
       "dubsar.pending-checkpoints-list/1",
       "dubsar.personal-memory-command-result/1",
@@ -435,6 +437,14 @@ const formatBindings = freeze({
     {
       path: "packages/dubsar-project-continuity/runtime/memory-vnext-pending-writer.mjs",
       binding: "PENDING_CHECKPOINT_PROPOSAL_FORMAT",
+    },
+    {
+      path: "packages/dubsar-project-continuity/runtime/memory-vnext-pending-promotion.mjs",
+      binding: "PENDING_CHECKPOINT_PROMOTION_APPLY_FORMAT",
+    },
+    {
+      path: "packages/dubsar-project-continuity/runtime/memory-vnext-pending-promotion.mjs",
+      binding: "PENDING_CHECKPOINT_PROMOTION_PREVIEW_FORMAT",
     },
   ],
   "codex-adapter": [
@@ -840,6 +850,20 @@ const formatProducers = freeze({
       exported: true,
       occurrences: 2,
       formats: ["dubsar.pending-checkpoints-list/1"],
+    },
+    {
+      path: "packages/dubsar-project-continuity/runtime/memory-vnext-pending-promotion.mjs",
+      function: "buildPromotion",
+      called_by_export: "previewPendingCheckpointPromotion",
+      occurrences: 1,
+      formats: ["dubsar.pending-checkpoint-promotion-preview/1"],
+    },
+    {
+      path: "packages/dubsar-project-continuity/runtime/memory-vnext-pending-promotion.mjs",
+      function: "publishPromotion",
+      called_by_export: "applyPendingCheckpointPromotion",
+      occurrences: 2,
+      formats: ["dubsar.pending-checkpoint-promotion-apply/1"],
     },
   ],
   "codex-adapter": [

@@ -206,6 +206,10 @@ const fsBindingsByFile = new Map([
     new Set(["opendir"]),
   ],
   [
+    "packages/dubsar-project-continuity/runtime/memory-vnext-pending-promotion.mjs",
+    new Set(["open", "rename", "unlink"]),
+  ],
+  [
     "packages/dubsar-project-continuity/runtime/memory-vnext-pending-writer.mjs",
     new Set(["mkdir", "open", "opendir", "rename", "unlink"]),
   ],
@@ -304,6 +308,13 @@ const exclusiveWriteOpenPolicies = new Map([
     ],
   ],
   [
+    "packages/dubsar-project-continuity/runtime/memory-vnext-pending-promotion.mjs",
+    [
+      { identifier: "lockPath", calls: 1 },
+      { identifier: "temporary", calls: 1 },
+    ],
+  ],
+  [
     "packages/dubsar-project-continuity/runtime/personal-memory.mjs",
     [
       { identifier: "target", calls: 1 },
@@ -349,6 +360,10 @@ const allowedFilesystemMutationsByFile = new Map([
   [
     "packages/dubsar-project-continuity/runtime/memory-vnext-pending-writer.mjs",
     new Set(["mkdir", "rename", "sync", "unlink", "writeFile"]),
+  ],
+  [
+    "packages/dubsar-project-continuity/runtime/memory-vnext-pending-promotion.mjs",
+    new Set(["rename", "sync", "unlink", "writeFile"]),
   ],
   [
     "packages/dubsar-project-continuity/runtime/personal-memory.mjs",
@@ -1149,11 +1164,12 @@ function pathJoinStartsWith(node, identifier) {
 function inspectMemoryVnextMutationGraph(ast, file, findings) {
   const writer = "packages/dubsar-project-continuity/runtime/memory-vnext-writer.mjs";
   const pendingWriter = "packages/dubsar-project-continuity/runtime/memory-vnext-pending-writer.mjs";
+  const pendingPromotion = "packages/dubsar-project-continuity/runtime/memory-vnext-pending-promotion.mjs";
   const initializer = "packages/dubsar-project-continuity/runtime/memory-vnext-initializer.mjs";
   const bootstrap = "packages/dubsar-project-continuity/runtime/memory-vnext-bootstrap.mjs";
   const migration = "packages/dubsar-project-continuity/runtime/memory-vnext-migration.mjs";
-  if (!new Set([writer, pendingWriter, initializer, bootstrap, migration]).has(file.relative)) return;
-  const stagingMode = file.relative !== writer && file.relative !== pendingWriter;
+  if (!new Set([writer, pendingWriter, pendingPromotion, initializer, bootstrap, migration]).has(file.relative)) return;
+  const stagingMode = file.relative !== writer && file.relative !== pendingWriter && file.relative !== pendingPromotion;
   const pendingMode = file.relative === pendingWriter;
   const expected = stagingMode
     ? { mkdir: 2, rename: 1, rmdir: 2, unlink: 2, writeFile: 1, sync: 1 }
