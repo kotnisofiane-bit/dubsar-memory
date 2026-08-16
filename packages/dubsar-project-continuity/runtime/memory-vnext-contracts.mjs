@@ -1,5 +1,6 @@
 import {
   WorkbenchError,
+  comparePortable,
   deepFreeze,
   exactKeys,
   sha256Bytes,
@@ -361,4 +362,146 @@ export function assertPendingCheckpointDocument(value, projectId) {
 
 export function assertPendingCheckpointAuthor(value) {
   return pendingAuthorCheckpoint(value, "PENDING_DOCUMENT_INVALID");
+}
+
+export const MEMORY_PENDING_LIST_FORMAT = "dubsar.pending-checkpoints-list/1";
+export const MEMORY_PENDING_SET_FORMAT = "dubsar.pending-checkpoints-set/1";
+
+export function memoryPendingSetDigest(entries) {
+  if (!Array.isArray(entries) || entries.length > MEMORY_PENDING_MAX_CANDIDATES) {
+    fail("PENDING_DOCUMENT_INVALID");
+  }
+  const lines = [...entries]
+    .map((item) => {
+      if (!exactKeys(item, ["path", "sha256"]) || !SHA256.test(item.sha256 ?? "")) {
+        fail("PENDING_DOCUMENT_INVALID");
+      }
+      if (
+        typeof item.path !== "string" ||
+        item.path.includes("\n") ||
+        item.path.includes("\r") ||
+        item.path.includes("\0")
+      ) {
+        fail("PENDING_DOCUMENT_INVALID");
+      }
+      let portable;
+      try {
+        portable = normalizeRelativePath(item.path);
+      } catch {
+        fail("PENDING_DOCUMENT_INVALID");
+      }
+      if (portable !== item.path) fail("PENDING_DOCUMENT_INVALID");
+      const parts = portable.split("/");
+      if (parts.length !== 2) fail("PENDING_DOCUMENT_INVALID");
+      const sourcePart = parts[0];
+      const filePart = parts[1];
+      if (typeof filePart !== "string" || !filePart.endsWith(".md")) {
+        fail("PENDING_DOCUMENT_INVALID");
+      }
+      const source = assertPendingDeclaredSource(sourcePart, "PENDING_DOCUMENT_INVALID");
+      const checkpointId = assertPendingCheckpointId(
+        filePart.slice(0, -3),
+        "PENDING_DOCUMENT_INVALID",
+      );
+      const reconstructed = `${source}/${checkpointId}.md`;
+      if (reconstructed !== portable) fail("PENDING_DOCUMENT_INVALID");
+      return { path: reconstructed, sha256: item.sha256 };
+    })
+    .sort((left, right) => comparePortable(left.path, right.path));
+  let previousPath = null;
+  for (const line of lines) {
+    if (previousPath !== null && comparePortable(previousPath, line.path) !== -1) {
+      fail("PENDING_DOCUMENT_INVALID");
+    }
+    previousPath = line.path;
+  }
+  if (new Set(lines.map((item) => item.path)).size !== lines.length) {
+    fail("PENDING_DOCUMENT_INVALID");
+  }
+  return sha256Bytes(Buffer.concat([
+    Buffer.from(`${MEMORY_PENDING_SET_FORMAT}\0`, "utf8"),
+    Buffer.from(lines.map((item) => `${item.sha256}  ${item.path}\n`).join(""), "utf8"),
+  ]));
+}
+
+export function memoryPendingListDigest(listWithoutListSha256) {
+  return sha256Bytes(Buffer.concat([
+    Buffer.from(`${MEMORY_PENDING_LIST_FORMAT}\0`, "utf8"),
+    Buffer.from(stableJson(listWithoutListSha256), "utf8"),
+  ]));
+}
+
+export function assertPendingCheckpointsList(value) {
+  const code = "PENDING_LIST_INVALID";
+  if (!exactKeys(value, [
+    "candidates",
+    "count",
+    "format",
+    "list_sha256",
+    "pending_set_sha256",
+    "project_id",
+    "source_shared_snapshot_sha256",
+  ]) || value.format !== MEMORY_PENDING_LIST_FORMAT ||
+    !SHA256.test(value.source_shared_snapshot_sha256 ?? "") ||
+    !SHA256.test(value.pending_set_sha256 ?? "") ||
+    !SHA256.test(value.list_sha256 ?? "") ||
+    !Number.isSafeInteger(value.count) || value.count < 0 ||
+    value.count > MEMORY_PENDING_MAX_CANDIDATES ||
+    !Array.isArray(value.candidates) ||
+    value.candidates.length > MEMORY_PENDING_MAX_CANDIDATES ||
+    value.count !== value.candidates.length
+  ) fail(code);
+
+  const candidates = value.candidates.map((item) => {
+    if (!exactKeys(item, [
+      "candidate_sha256",
+      "checkpoint_id",
+      "declared_source",
+      "kind",
+      "source_file_sha256",
+      "summary",
+      "work_id",
+    ]) || !CHECKPOINT_KIND.has(item.kind) ||
+      typeof item.summary !== "string" || item.summary.length === 0 || item.summary.length > 500 ||
+      !SHA256.test(item.candidate_sha256 ?? "") ||
+      !SHA256.test(item.source_file_sha256 ?? "")
+    ) fail(code);
+    return {
+      declared_source: assertPendingDeclaredSource(item.declared_source, code),
+      checkpoint_id: assertPendingCheckpointId(item.checkpoint_id, code),
+      work_id: id(item.work_id, code),
+      kind: item.kind,
+      summary: item.summary,
+      candidate_sha256: item.candidate_sha256,
+      source_file_sha256: item.source_file_sha256,
+    };
+  });
+
+  const keys = candidates.map((item) => `${item.declared_source}/${item.checkpoint_id}`);
+  if (new Set(keys).size !== keys.length) fail(code);
+  let previousKey = null;
+  for (const key of keys) {
+    if (previousKey !== null && comparePortable(previousKey, key) !== -1) fail(code);
+    previousKey = key;
+  }
+
+  const setEntries = candidates.map((item) => ({
+    path: `${item.declared_source}/${item.checkpoint_id}.md`,
+    sha256: item.source_file_sha256,
+  }));
+  if (memoryPendingSetDigest(setEntries) !== value.pending_set_sha256) fail(code);
+
+  const withoutDigest = {
+    format: MEMORY_PENDING_LIST_FORMAT,
+    project_id: id(value.project_id, code),
+    source_shared_snapshot_sha256: value.source_shared_snapshot_sha256,
+    pending_set_sha256: value.pending_set_sha256,
+    count: value.count,
+    candidates,
+  };
+  if (memoryPendingListDigest(withoutDigest) !== value.list_sha256) fail(code);
+  return deepFreeze({
+    ...withoutDigest,
+    list_sha256: value.list_sha256,
+  });
 }

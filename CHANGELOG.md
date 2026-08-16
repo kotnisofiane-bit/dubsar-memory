@@ -5,6 +5,8 @@ separate, explicitly reviewed decision.
 
 ## Public technical preview — 0.3.0-dev
 
+- add Lot 2 minimal `pending list` for valid advisory candidates under
+  `.dubsar-pending/` without classification, reference observation, or writes;
 - add Lot 1 `pending record` for Git-tracked advisory checkpoint candidates under
   `.dubsar-pending/` without modifying canonical `.dubsar/` memory;
 - add workspace-free runtime capability discovery for integrations and record

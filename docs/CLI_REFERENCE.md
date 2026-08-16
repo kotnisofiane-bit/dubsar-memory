@@ -46,6 +46,7 @@ meaning must never be removed, reused, or changed.
 | `knowledge retire --knowledge <id>` | Retires one Knowledge entry. |
 | `checkpoint --proposal <file>` | Appends one canonical checkpoint. |
 | `pending record --proposal <file>` | Records one advisory candidate under `.dubsar-pending/` only. |
+| `pending list` | Lists valid advisory candidates under `.dubsar-pending/`; never writes. |
 | `context --write` | Writes only `.dubsar/generated/context.md`. |
 | `migrate --to-memory-vnext` | Creates `.dubsar/` and retains the valid Lite source unchanged. |
 | `close` | Human interactive checkpoint workflow. |

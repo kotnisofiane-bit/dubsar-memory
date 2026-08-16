@@ -555,7 +555,7 @@ async function validateContinuityRuntime(files, findings) {
     "memory-snapshot-compiler.mjs", "memory-vnext-bootstrap.mjs", "memory-vnext-capsule.mjs", "memory-vnext-contracts.mjs",
     "memory-vnext-evaluator.mjs", "memory-vnext-freshness.mjs",
     "memory-vnext-initializer.mjs", "memory-vnext-markdown.mjs",
-    "memory-vnext-migration.mjs", "memory-vnext-pending-writer.mjs", "memory-vnext-snapshot.mjs", "memory-vnext-views.mjs", "memory-vnext-writer.mjs",
+    "memory-vnext-migration.mjs", "memory-vnext-pending-list.mjs", "memory-vnext-pending-writer.mjs", "memory-vnext-snapshot.mjs", "memory-vnext-views.mjs", "memory-vnext-writer.mjs",
     "path-safety.mjs",
     "personal-memory.mjs", "project.mjs", "safe-capture.mjs",
     "sensitive-content.mjs", "snapshot.mjs",
