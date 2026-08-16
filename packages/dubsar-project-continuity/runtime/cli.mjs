@@ -47,6 +47,10 @@ import {
   previewPendingCheckpointRecord,
 } from "./memory-vnext-pending-writer.mjs";
 import { listPendingCheckpoints } from "./memory-vnext-pending-list.mjs";
+import {
+  applyPendingCheckpointPromotion,
+  previewPendingCheckpointPromotion,
+} from "./memory-vnext-pending-promotion.mjs";
 
 export const PUBLIC_CONTINUITY_COMMANDS = Object.freeze([
   "bootstrap", "capabilities", "checkpoint", "close", "context", "history", "inbox", "init", "knowledge", "lots",
@@ -57,6 +61,7 @@ const PRODUCER = Object.freeze({ name: "@dubsar/project-continuity", version: "0
 export const RUNTIME_CAPABILITIES = Object.freeze([
   "memory.atomic-bootstrap.v1",
   "memory.pending-checkpoint-list.v1",
+  "memory.pending-checkpoint-promotion.v1",
   "memory.pending-checkpoint-record.v1",
   "memory.reference-freshness.v1",
   "memory.resume-capsule.v4",
@@ -112,6 +117,8 @@ Write style B - the CLI builds the proposal from flags:
   work select --work <id|none>
   work status --work <id> --to open|paused|complete
   knowledge retire --knowledge <id>
+  pending promote --source <declared_source> --checkpoint <checkpoint_id>
+                   Promotes one pending candidate into .dubsar/checkpoints.json
   checkpoint --transition-lot <id> --to candidate|complete   (legacy workspace only)
 
 Human-only commands - require an interactive TTY:
@@ -167,7 +174,7 @@ function parseArguments(argv) {
   }
   if (command === "pending") {
     options.pending_action = argv.at(1);
-    if (!new Set(["list", "record"]).has(options.pending_action)) {
+    if (!new Set(["list", "promote", "record"]).has(options.pending_action)) {
       throw new WorkbenchError("CLI_ARGUMENT_INVALID");
     }
     firstOption = 2;
@@ -200,8 +207,8 @@ function parseArguments(argv) {
       continue;
     }
     if (!new Set([
-      "--before", "--category", "--domain", "--expected-change", "--lang", "--limit", "--lot",
-      "--knowledge", "--proposal", "--ref", "--start", "--status", "--to", "--transition-lot", "--work",
+      "--before", "--category", "--checkpoint", "--domain", "--expected-change", "--lang", "--limit", "--lot",
+      "--knowledge", "--proposal", "--ref", "--source", "--start", "--status", "--to", "--transition-lot", "--work",
     ]).has(token) || index + 1 >= argv.length) {
       throw new WorkbenchError("CLI_ARGUMENT_INVALID");
     }
@@ -212,6 +219,9 @@ function parseArguments(argv) {
     } else if (token === "--category") {
       if (options.category !== undefined) throw new WorkbenchError("CLI_ARGUMENT_DUPLICATE");
       options.category = value;
+    } else if (token === "--checkpoint") {
+      if (options.checkpoint !== undefined) throw new WorkbenchError("CLI_ARGUMENT_DUPLICATE");
+      options.checkpoint = value;
     } else if (token === "--expected-change") {
       if (options.expected_change !== undefined) throw new WorkbenchError("CLI_ARGUMENT_DUPLICATE");
       options.expected_change = value;
@@ -236,6 +246,9 @@ function parseArguments(argv) {
     } else if (token === "--ref") {
       if (options.reference !== undefined) throw new WorkbenchError("CLI_ARGUMENT_DUPLICATE");
       options.reference = value;
+    } else if (token === "--source") {
+      if (options.source !== undefined) throw new WorkbenchError("CLI_ARGUMENT_DUPLICATE");
+      options.source = value;
     } else if (token === "--start") {
       if (options.start !== undefined) throw new WorkbenchError("CLI_ARGUMENT_DUPLICATE");
       options.start = value;
@@ -344,6 +357,20 @@ function parseArguments(argv) {
         options.start === undefined ||
         options.capsule ||
         options.apply
+      ) {
+        throw new WorkbenchError("CLI_ARGUMENT_INVALID");
+      }
+    } else if (options.pending_action === "promote") {
+      const allowed = new Set([
+        "apply", "capsule", "checkpoint", "expected_change", "json", "pending_action", "source", "start",
+      ]);
+      if (
+        Object.keys(options).some((key) => !allowed.has(key)) ||
+        options.start === undefined ||
+        options.source === undefined ||
+        options.checkpoint === undefined ||
+        options.capsule ||
+        options.apply !== (options.expected_change !== undefined)
       ) {
         throw new WorkbenchError("CLI_ARGUMENT_INVALID");
       }
@@ -483,6 +510,23 @@ function humanOutput(command, value) {
         );
       }
       return lines.join("\n");
+    }
+    if (
+      value.format === "dubsar.pending-checkpoint-promotion-preview/1" ||
+      value.format === "dubsar.pending-checkpoint-promotion-apply/1"
+    ) {
+      return [
+        value.status === "applied"
+          ? "DUBSAR pending checkpoint promoted"
+          : value.status === "already_promoted"
+            ? "DUBSAR pending checkpoint already promoted"
+            : "DUBSAR pending checkpoint promotion preview",
+        `Source: ${value.declared_source}`,
+        `Checkpoint: ${value.checkpoint_id}`,
+        `Target: ${value.target}`,
+        value.consequence ?? "Only .dubsar/checkpoints.json will change.",
+        `Change SHA-256: ${value.change_sha256}`,
+      ].join("\n");
     }
     return [
       value.status === "applied" ? "DUBSAR pending checkpoint recorded" : "DUBSAR pending checkpoint preview",
@@ -679,6 +723,19 @@ export async function runContinuityCli(argv, io = {}) {
     } else if (command === "pending") {
       if (options.pending_action === "list") {
         value = await listPendingCheckpoints({ start: options.start });
+      } else if (options.pending_action === "promote") {
+        value = options.apply
+          ? await applyPendingCheckpointPromotion({
+              start: options.start,
+              source: options.source,
+              checkpoint: options.checkpoint,
+              expectedChange: options.expected_change,
+            })
+          : await previewPendingCheckpointPromotion({
+              start: options.start,
+              source: options.source,
+              checkpoint: options.checkpoint,
+            });
       } else {
         value = options.apply
           ? await applyPendingCheckpointRecord({

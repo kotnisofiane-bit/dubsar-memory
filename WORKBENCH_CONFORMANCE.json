@@ -11,7 +11,7 @@
   },
   "policy": {
     "path": "tools/check-workbench-runtime.mjs",
-    "sha256": "d0684405e66267ffff60628ba05744386295b3c500a66ca977e94f16d3ba03b0"
+    "sha256": "9fbf091e3299860b46a04b7b752b8e55e86d82d2c50e0ff9ead1dec05a78ddea"
   },
   "components": [
     {
@@ -68,6 +68,8 @@
         "dubsar.memory-work-view/1",
         "dubsar.pending-checkpoint-apply/1",
         "dubsar.pending-checkpoint-preview/1",
+        "dubsar.pending-checkpoint-promotion-apply/1",
+        "dubsar.pending-checkpoint-promotion-preview/1",
         "dubsar.pending-checkpoint/1",
         "dubsar.pending-checkpoints-list/1",
         "dubsar.personal-memory-command-result/1",
@@ -515,8 +517,8 @@
     },
     {
       "path": "packages/dubsar-project-continuity/runtime/cli.mjs",
-      "bytes": 35901,
-      "sha256": "31f1181ff949fd7a1057d5ac6145f758fcc08689f4e3a2ab629f27e8f9c2dd79",
+      "bytes": 38393,
+      "sha256": "f21e34c1e4f818c66fc61bf79ef93ca1fdf4920a7b62e5ec2c9a7e4d3195120f",
       "role": "runtime"
     },
     {
@@ -655,6 +657,12 @@
       "path": "packages/dubsar-project-continuity/runtime/memory-vnext-pending-list.mjs",
       "bytes": 11530,
       "sha256": "b73408512eb1d923d31a671c5a2ed9eb3c9375bc03143865877a6cd1a7b8b685",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/memory-vnext-pending-promotion.mjs",
+      "bytes": 19651,
+      "sha256": "98d53abe1f2e77861ede0d320bcaad53b73281dea20d9c67817fc52708285948",
       "role": "runtime"
     },
     {
@@ -868,5 +876,5 @@
       "role": "runtime"
     }
   ],
-  "content_root_sha256": "4c2953cb5c69450ec16b155d6e2c823c217933d0a42f989a8f8c7825c97d06b6"
+  "content_root_sha256": "a7ef19a3463bc7a6f3161ab9ca0a1490fea3622c0ae03183d5338daf65d3e02f"
 }
