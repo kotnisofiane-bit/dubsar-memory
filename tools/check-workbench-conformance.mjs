@@ -79,6 +79,7 @@ export const WORKBENCH_COMPONENTS = freeze([
       "dubsar.pending-checkpoint-apply/1",
       "dubsar.pending-checkpoint-preview/1",
       "dubsar.pending-checkpoint/1",
+      "dubsar.pending-checkpoints-list/1",
       "dubsar.personal-memory-command-result/1",
       "dubsar.project-evidence/2",
       "dubsar.resume-capsule/3",
@@ -374,6 +375,10 @@ const formatBindings = freeze({
     {
       path: "packages/dubsar-project-continuity/runtime/memory-vnext-contracts.mjs",
       binding: "MEMORY_PENDING_CHECKPOINT_FORMAT",
+    },
+    {
+      path: "packages/dubsar-project-continuity/runtime/memory-vnext-contracts.mjs",
+      binding: "MEMORY_PENDING_LIST_FORMAT",
     },
     {
       path: "packages/dubsar-project-continuity/runtime/memory-vnext-bootstrap.mjs",
@@ -828,6 +833,13 @@ const formatProducers = freeze({
       called_by_export: "applyPendingCheckpointRecord",
       occurrences: 1,
       formats: ["dubsar.pending-checkpoint-apply/1"],
+    },
+    {
+      path: "packages/dubsar-project-continuity/runtime/memory-vnext-pending-list.mjs",
+      function: "listPendingCheckpoints",
+      exported: true,
+      occurrences: 2,
+      formats: ["dubsar.pending-checkpoints-list/1"],
     },
   ],
   "codex-adapter": [

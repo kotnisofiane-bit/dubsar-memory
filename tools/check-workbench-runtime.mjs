@@ -202,6 +202,10 @@ const fsBindingsByFile = new Map([
     new Set(["open", "rename", "unlink"]),
   ],
   [
+    "packages/dubsar-project-continuity/runtime/memory-vnext-pending-list.mjs",
+    new Set(["opendir"]),
+  ],
+  [
     "packages/dubsar-project-continuity/runtime/memory-vnext-pending-writer.mjs",
     new Set(["mkdir", "open", "opendir", "rename", "unlink"]),
   ],

@@ -11,7 +11,7 @@
   },
   "policy": {
     "path": "tools/check-workbench-runtime.mjs",
-    "sha256": "123a50aebf5427e191ec7b76c51b953affc9317ec1dadc7427a92479104ba7a1"
+    "sha256": "d0684405e66267ffff60628ba05744386295b3c500a66ca977e94f16d3ba03b0"
   },
   "components": [
     {
@@ -69,6 +69,7 @@
         "dubsar.pending-checkpoint-apply/1",
         "dubsar.pending-checkpoint-preview/1",
         "dubsar.pending-checkpoint/1",
+        "dubsar.pending-checkpoints-list/1",
         "dubsar.personal-memory-command-result/1",
         "dubsar.project-evidence/2",
         "dubsar.resume-capsule/3",
@@ -514,8 +515,8 @@
     },
     {
       "path": "packages/dubsar-project-continuity/runtime/cli.mjs",
-      "bytes": 34654,
-      "sha256": "a3532ec85e13395239ebd394e7b7528afba6b5648625350c358a3cbd23b2237d",
+      "bytes": 35901,
+      "sha256": "31f1181ff949fd7a1057d5ac6145f758fcc08689f4e3a2ab629f27e8f9c2dd79",
       "role": "runtime"
     },
     {
@@ -616,8 +617,8 @@
     },
     {
       "path": "packages/dubsar-project-continuity/runtime/memory-vnext-contracts.mjs",
-      "bytes": 14592,
-      "sha256": "3fe6e2b12424fa2248f7ae85362d18e8d9c1548882f6262a5c873d72b9669a13",
+      "bytes": 19722,
+      "sha256": "236c175ad7d35bf5346b39627114fa8af75e9f9424a9513cf181d75657aec5c0",
       "role": "runtime"
     },
     {
@@ -648,6 +649,12 @@
       "path": "packages/dubsar-project-continuity/runtime/memory-vnext-migration.mjs",
       "bytes": 10384,
       "sha256": "c7cdb4c3f047864fbf09b326d058b0196c21e7d2335bca799cb9046284263600",
+      "role": "runtime"
+    },
+    {
+      "path": "packages/dubsar-project-continuity/runtime/memory-vnext-pending-list.mjs",
+      "bytes": 11530,
+      "sha256": "b73408512eb1d923d31a671c5a2ed9eb3c9375bc03143865877a6cd1a7b8b685",
       "role": "runtime"
     },
     {
@@ -861,5 +868,5 @@
       "role": "runtime"
     }
   ],
-  "content_root_sha256": "9cca481d11dac766148b89120783a2cfdec83ffaf211c90a096b6824326d3f6b"
+  "content_root_sha256": "4c2953cb5c69450ec16b155d6e2c823c217933d0a42f989a8f8c7825c97d06b6"
 }
