@@ -328,9 +328,16 @@ export async function listPendingCheckpoints({
       snapshot.documents.checkpoints.entries.map((entry) => entry.checkpoint_id),
     );
 
-    const first = await capturePendingInventory(projectRoot);
-    if (typeof afterInventoryPass === "function") await afterInventoryPass();
-    const second = await capturePendingInventory(projectRoot);
+    let first;
+    let second;
+    try {
+      first = await capturePendingInventory(projectRoot);
+      if (typeof afterInventoryPass === "function") await afterInventoryPass();
+      second = await capturePendingInventory(projectRoot);
+    } catch (error) {
+      throw mapPendingListDiagnostic(error, "pending");
+    }
+
     if (inventoryFingerprint(first) !== inventoryFingerprint(second)) {
       throw new WorkbenchError("PENDING_CAPTURE_RACE");
     }
