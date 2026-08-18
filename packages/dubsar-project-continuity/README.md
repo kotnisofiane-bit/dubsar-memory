@@ -64,7 +64,7 @@ work and one First recorded checkpoint in a single atomic publish when no
 Work automatically. `context` writes nothing unless `--write` is explicit, and
 then targets only `generated/context.md` through the normal preview/apply path.
 `pending record` writes only under `.dubsar-pending/` and never under `.dubsar/`.
-`pending list` enumerates valid candidates under `.dubsar-pending/` without classifying them or observing references.
+`pending list` enumerates valid candidates under `.dubsar-pending/` without classifying them or observing references. Failures use only the runtime `PENDING_LIST_DIAGNOSTICS` codes; locator and snapshot codes never cross that boundary.
 `pending promote` appends exactly one selected candidate into `.dubsar/checkpoints.json` after preview confirmation and leaves the pending file byte-identical.
 
 ## Memory guidance

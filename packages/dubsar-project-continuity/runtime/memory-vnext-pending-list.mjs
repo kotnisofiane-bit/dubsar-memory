@@ -19,6 +19,7 @@ import {
   assertPendingCheckpointDocument,
   assertPendingCheckpointId,
   assertPendingDeclaredSource,
+  mapPendingListDiagnostic,
   memoryPendingListDigest,
   memoryPendingSetDigest,
 } from "./memory-vnext-contracts.mjs";
@@ -295,74 +296,80 @@ function parseCandidate(capture, projectId, knownWorks, knownCheckpoints) {
  * Read-only list of valid pending checkpoint candidates.
  * Never mutates `.dubsar/` or `.dubsar-pending/`. Never observes references.
  *
- * @internal afterInventoryPass — test seam only.
+ * @internal afterInventoryPass, afterCanonicalCapture — test seams only.
  */
-export async function listPendingCheckpoints({ start, afterInventoryPass } = {}) {
-  const location = await locateProjectWorkspace({ start });
-  if (location.marker !== MEMORY_PROJECT_MARKER) {
-    throw new WorkbenchError("PENDING_WORKSPACE_REQUIRED");
-  }
-  const projectRoot = await assertPendingParent(
-    location.project_root ?? path.dirname(location.root),
-    location.root,
-  );
-  const snapshot = await snapshotMemoryWorkspace(location, resolveLimits());
-  const projectId = snapshot.documents.manifest.project_id;
-  const shared = snapshot.shared_snapshot_sha256;
-  const knownWorks = new Set(snapshot.documents.works.map((item) => item.work_id));
-  const knownCheckpoints = new Set(
-    snapshot.documents.checkpoints.entries.map((entry) => entry.checkpoint_id),
-  );
-
-  let first;
+export async function listPendingCheckpoints({
+  start,
+  afterInventoryPass,
+  afterCanonicalCapture,
+} = {}) {
   try {
-    first = await capturePendingInventory(projectRoot);
+    const location = await locateProjectWorkspace({ start });
+    if (location.marker !== MEMORY_PROJECT_MARKER) {
+      throw new WorkbenchError("PENDING_WORKSPACE_REQUIRED");
+    }
+    const projectRoot = await assertPendingParent(
+      location.project_root ?? path.dirname(location.root),
+      location.root,
+    );
+    const snapshot = await snapshotMemoryWorkspace(
+      location,
+      resolveLimits(),
+      { afterCanonicalCapture },
+    );
+    const projectId = snapshot.documents.manifest.project_id;
+    const shared = snapshot.shared_snapshot_sha256;
+    const knownWorks = new Set(snapshot.documents.works.map((item) => item.work_id));
+    const knownCheckpoints = new Set(
+      snapshot.documents.checkpoints.entries.map((entry) => entry.checkpoint_id),
+    );
+
+    const first = await capturePendingInventory(projectRoot);
     if (typeof afterInventoryPass === "function") await afterInventoryPass();
     const second = await capturePendingInventory(projectRoot);
     if (inventoryFingerprint(first) !== inventoryFingerprint(second)) {
       throw new WorkbenchError("PENDING_CAPTURE_RACE");
     }
-  } catch (error) {
-    if (error instanceof WorkbenchError) throw error;
-    throw new WorkbenchError("PENDING_ROOT_UNSAFE");
-  }
 
-  if (first.kind === "absent") {
+    if (first.kind === "absent") {
+      const withoutDigest = {
+        format: MEMORY_PENDING_LIST_FORMAT,
+        project_id: projectId,
+        source_shared_snapshot_sha256: shared,
+        pending_set_sha256: memoryPendingSetDigest([]),
+        count: 0,
+        candidates: [],
+      };
+      return deepFreeze({
+        ...withoutDigest,
+        list_sha256: memoryPendingListDigest(withoutDigest),
+      });
+    }
+
+    const captures = [...first.captures].sort((left, right) => (
+      comparePortable(left.portable, right.portable)
+    ));
+    const candidates = captures.map((capture) => (
+      parseCandidate(capture, projectId, knownWorks, knownCheckpoints)
+    ));
+
+    const setEntries = captures.map((item) => ({
+      path: item.portable,
+      sha256: item.sha256,
+    }));
     const withoutDigest = {
       format: MEMORY_PENDING_LIST_FORMAT,
       project_id: projectId,
       source_shared_snapshot_sha256: shared,
-      pending_set_sha256: memoryPendingSetDigest([]),
-      count: 0,
-      candidates: [],
+      pending_set_sha256: memoryPendingSetDigest(setEntries),
+      count: candidates.length,
+      candidates,
     };
     return deepFreeze({
       ...withoutDigest,
       list_sha256: memoryPendingListDigest(withoutDigest),
     });
+  } catch (error) {
+    throw mapPendingListDiagnostic(error);
   }
-
-  const captures = [...first.captures].sort((left, right) => (
-    comparePortable(left.portable, right.portable)
-  ));
-  const candidates = captures.map((capture) => (
-    parseCandidate(capture, projectId, knownWorks, knownCheckpoints)
-  ));
-
-  const setEntries = captures.map((item) => ({
-    path: item.portable,
-    sha256: item.sha256,
-  }));
-  const withoutDigest = {
-    format: MEMORY_PENDING_LIST_FORMAT,
-    project_id: projectId,
-    source_shared_snapshot_sha256: shared,
-    pending_set_sha256: memoryPendingSetDigest(setEntries),
-    count: candidates.length,
-    candidates,
-  };
-  return deepFreeze({
-    ...withoutDigest,
-    list_sha256: memoryPendingListDigest(withoutDigest),
-  });
 }

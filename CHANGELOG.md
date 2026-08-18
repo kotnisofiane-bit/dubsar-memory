@@ -5,6 +5,9 @@ separate, explicitly reviewed decision.
 
 ## Public technical preview — 0.3.0-dev
 
+- close Lot 2 `pending list` diagnostics at the runtime boundary so locator and
+  snapshot codes never leak, and lock that contract in tests and the CLI
+  reference;
 - classify Lot 2 `pending list` as a read command in the CLI reference and lock
   its fail-closed diagnostics, exact `.dubsar-pending` basename, traversal
   refusals, and non-observation of references in tests;

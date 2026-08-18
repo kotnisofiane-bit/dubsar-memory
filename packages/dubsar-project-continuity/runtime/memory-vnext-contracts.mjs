@@ -367,6 +367,61 @@ export function assertPendingCheckpointAuthor(value) {
 export const MEMORY_PENDING_LIST_FORMAT = "dubsar.pending-checkpoints-list/1";
 export const MEMORY_PENDING_SET_FORMAT = "dubsar.pending-checkpoints-set/1";
 
+/**
+ * Public fail-closed diagnostics for `pending list`. Locator and snapshot
+ * codes never cross this boundary.
+ */
+export const PENDING_LIST_DIAGNOSTICS = Object.freeze([
+  "PENDING_CAPTURE_RACE",
+  "PENDING_ENTRY_INVALID",
+  "PENDING_LIMIT_EXCEEDED",
+  "PENDING_LIST_INVALID",
+  "PENDING_ROOT_UNSAFE",
+  "PENDING_WORKSPACE_REQUIRED",
+]);
+
+const PENDING_LIST_DIAGNOSTIC_SET = new Set(PENDING_LIST_DIAGNOSTICS);
+
+const PENDING_LIST_INTERNAL_DIAGNOSTIC_PAIRS = Object.freeze([
+  Object.freeze(["DIRECTORY_NOT_FOUND", "PENDING_WORKSPACE_REQUIRED"]),
+  Object.freeze(["FILE_CHANGED_DURING_SNAPSHOT", "PENDING_CAPTURE_RACE"]),
+  Object.freeze(["INVALID_JSON", "PENDING_LIST_INVALID"]),
+  Object.freeze(["INVALID_UTF8", "PENDING_LIST_INVALID"]),
+  Object.freeze(["MEMORY_CHECKPOINTS_INVALID", "PENDING_LIST_INVALID"]),
+  Object.freeze(["MEMORY_KNOWLEDGE_INVALID", "PENDING_LIST_INVALID"]),
+  Object.freeze(["MEMORY_LOCAL_INVALID", "PENDING_LIST_INVALID"]),
+  Object.freeze(["MEMORY_MANIFEST_INVALID", "PENDING_LIST_INVALID"]),
+  Object.freeze(["MEMORY_MARKDOWN_INVALID", "PENDING_LIST_INVALID"]),
+  Object.freeze(["MEMORY_WORKSPACE_INVALID", "PENDING_LIST_INVALID"]),
+  Object.freeze(["MEMORY_WORK_INVALID", "PENDING_LIST_INVALID"]),
+  Object.freeze(["PATH_NOT_FOUND", "PENDING_WORKSPACE_REQUIRED"]),
+  Object.freeze(["PROJECT_BOUNDARY_UNSAFE", "PENDING_ROOT_UNSAFE"]),
+  Object.freeze(["SNAPSHOT_CAPTURE_RACE", "PENDING_CAPTURE_RACE"]),
+  Object.freeze(["WORKSPACE_MARKER_UNSAFE", "PENDING_ROOT_UNSAFE"]),
+  Object.freeze(["WORKSPACE_NOT_FOUND", "PENDING_WORKSPACE_REQUIRED"]),
+]);
+
+export const PENDING_LIST_INTERNAL_DIAGNOSTIC_MAP = Object.freeze(
+  Object.fromEntries(PENDING_LIST_INTERNAL_DIAGNOSTIC_PAIRS),
+);
+
+export function mapPendingListDiagnostic(error) {
+  const code = error instanceof WorkbenchError && typeof error.code === "string"
+    ? error.code
+    : null;
+  if (code !== null && PENDING_LIST_DIAGNOSTIC_SET.has(code)) {
+    return error instanceof WorkbenchError ? error : new WorkbenchError(code);
+  }
+  if (code !== null) {
+    for (const [internal, mapped] of PENDING_LIST_INTERNAL_DIAGNOSTIC_PAIRS) {
+      if (code === internal) {
+        return new WorkbenchError(mapped);
+      }
+    }
+  }
+  return new WorkbenchError("PENDING_LIST_INVALID");
+}
+
 export function memoryPendingSetDigest(entries) {
   if (!Array.isArray(entries) || entries.length > MEMORY_PENDING_MAX_CANDIDATES) {
     fail("PENDING_DOCUMENT_INVALID");
