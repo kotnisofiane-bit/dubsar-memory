@@ -117,7 +117,12 @@ async function markdownNames(root, directoryName, maximum) {
 
 async function recaptureAll(root, captures, maxBytes) {
   for (const expected of captures) {
-    const observed = await captureRegularFile(root, expected.path, maxBytes);
+    let observed;
+    try {
+      observed = await captureRegularFile(root, expected.path, maxBytes);
+    } catch {
+      throw new WorkbenchError("SNAPSHOT_CAPTURE_RACE");
+    }
     if (
       observed.identity !== expected.identity ||
       observed.size !== expected.size ||
@@ -245,11 +250,18 @@ export async function snapshotMemoryWorkspace(location, overrides = {}, seams = 
     await seams.afterCanonicalCapture();
   }
   await recaptureAll(location.root, captures, limits.maxCanonicalFileBytes);
-  const [rootNamesAfter, workNamesAfter, knowledgeNamesAfter] = await Promise.all([
-    inspectRoot(location.root),
-    markdownNames(location.root, "work", MEMORY_MAX_WORK_ITEMS),
-    markdownNames(location.root, "knowledge", MEMORY_MAX_KNOWLEDGE_ITEMS),
-  ]);
+  let rootNamesAfter;
+  let workNamesAfter;
+  let knowledgeNamesAfter;
+  try {
+    [rootNamesAfter, workNamesAfter, knowledgeNamesAfter] = await Promise.all([
+      inspectRoot(location.root),
+      markdownNames(location.root, "work", MEMORY_MAX_WORK_ITEMS),
+      markdownNames(location.root, "knowledge", MEMORY_MAX_KNOWLEDGE_ITEMS),
+    ]);
+  } catch {
+    throw new WorkbenchError("SNAPSHOT_CAPTURE_RACE");
+  }
   if (
     JSON.stringify(rootNamesAfter) !== JSON.stringify(rootNames) ||
     JSON.stringify(workNamesAfter) !== JSON.stringify(workNames) ||
