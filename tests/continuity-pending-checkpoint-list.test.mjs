@@ -14,6 +14,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { runContinuityCli } from "../packages/dubsar-project-continuity/runtime/cli.mjs";
 import {
@@ -24,7 +25,9 @@ import {
   MEMORY_PENDING_MAX_CANDIDATES,
   MEMORY_PENDING_MAX_FILE_BYTES,
   MEMORY_PENDING_MAX_SOURCES,
+  assertPendingCheckpointId,
   assertPendingCheckpointsList,
+  assertPendingDeclaredSource,
   memoryPendingCandidateDigest,
   memoryPendingListDigest,
   memoryPendingSetDigest,
@@ -224,7 +227,21 @@ async function fillPlaceholderCandidate(dir, checkpointId) {
   await writeFile(path.join(dir, `${checkpointId}.md`), "x\n");
 }
 
+const PENDING_LIST_CLOSED_DIAGNOSTICS = Object.freeze(new Set([
+  "PENDING_CAPTURE_RACE",
+  "PENDING_ENTRY_INVALID",
+  "PENDING_LIMIT_EXCEEDED",
+  "PENDING_LIST_INVALID",
+  "PENDING_ROOT_UNSAFE",
+  "PENDING_WORKSPACE_REQUIRED",
+]));
+
 async function expectListReject(root, run, code) {
+  assert.equal(
+    PENDING_LIST_CLOSED_DIAGNOSTICS.has(code),
+    true,
+    `${code} is outside the closed pending-list diagnostic set`,
+  );
   const beforeDubsar = await dubsarFingerprint(root);
   const beforePending = await pendingFingerprint(root);
   await assert.rejects(run, (error) => error.code === code);
@@ -609,6 +626,20 @@ test("paths case unicode symlink junction and hardlink fail closed", async () =>
     } catch (error) {
       if (error?.code !== "EPERM" && error?.code !== "ENOTSUP") throw error;
     }
+
+    await rm(pendingRoot, { recursive: true, force: true });
+    const newlineSource = path.join(pendingRoot, "bad\nsource");
+    try {
+      await mkdir(newlineSource, { recursive: true });
+      await fillPlaceholderCandidate(newlineSource, "cp-newline-001");
+      await expectListReject(
+        root,
+        () => listPendingCheckpoints({ start: root }),
+        "PENDING_ROOT_UNSAFE",
+      );
+    } catch (error) {
+      if (error?.code !== "ENOENT" && error?.code !== "EINVAL") throw error;
+    }
   });
 });
 
@@ -776,4 +807,170 @@ test("two Git worktrees record distinct sources then list sees both after merge"
     ["agent-a/cp-from-agent-a", "agent-b/cp-from-agent-b"],
   );
   assertPendingCheckpointsList(list);
+});
+
+const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+test("CLI help and CLI reference classify pending list as read-only", async () => {
+  const help = await invoke(["--help"]);
+  assert.equal(help.exitCode, 0, help.stderr);
+  const [readOnlyHelp, writeHelp] = help.stdout.split("Write style A");
+  assert.match(readOnlyHelp, /Read-only commands:/u);
+  assert.match(readOnlyHelp, /^\s*pending list\b/mu);
+  assert.doesNotMatch(writeHelp, /^\s*pending list\b/mu);
+  assert.match(readOnlyHelp, /route --start <project>\s+Advisory signal; never executed automatically/u);
+
+  const reference = await readFile(path.join(REPOSITORY_ROOT, "docs", "CLI_REFERENCE.md"), "utf8");
+  const [readSection, writeSection] = reference.split("## Explicit write commands");
+  assert.match(readSection, /## Read commands/u);
+  assert.match(readSection, /\| `pending list` \|/u);
+  assert.doesNotMatch(writeSection, /\| `pending list` \|/u);
+  assert.match(readSection, /`route` is\nadvisory and grants no execution authority\./u);
+});
+
+test("pending list --apply is rejected and writes nothing", async () => {
+  await withProject(async (root) => {
+    await recordCandidate(root, pendingProposal({ checkpointId: "cp-no-apply" }));
+    const beforeDubsar = await dubsarFingerprint(root);
+    const beforePending = await pendingFingerprint(root);
+    const result = await invoke(["pending", "list", "--start", root, "--apply", "--json"]);
+    assert.equal(result.exitCode, 1);
+    assert.equal(JSON.parse(result.stderr).code, "CLI_ARGUMENT_INVALID");
+    assert.equal(await dubsarFingerprint(root), beforeDubsar);
+    assert.equal(await pendingFingerprint(root), beforePending);
+  });
+});
+
+test("pending list requires a memory vnext workspace", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "dubsar-pending-list-lite-"));
+  try {
+    await mkdir(path.join(root, ".dubsar-project"));
+    await assert.rejects(
+      () => listPendingCheckpoints({ start: root }),
+      (error) => {
+        assert.equal(PENDING_LIST_CLOSED_DIAGNOSTICS.has(error.code), true);
+        return error.code === "PENDING_WORKSPACE_REQUIRED";
+      },
+    );
+    assert.deepEqual(await readdir(root), [".dubsar-project"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("pending list diagnostics belong to a closed set", () => {
+  assert.deepEqual(
+    [...PENDING_LIST_CLOSED_DIAGNOSTICS],
+    [
+      "PENDING_CAPTURE_RACE",
+      "PENDING_ENTRY_INVALID",
+      "PENDING_LIMIT_EXCEEDED",
+      "PENDING_LIST_INVALID",
+      "PENDING_ROOT_UNSAFE",
+      "PENDING_WORKSPACE_REQUIRED",
+    ],
+  );
+  assert.equal(PENDING_LIST_CLOSED_DIAGNOSTICS.has("PENDING_ENTRIES_OMITTED"), false);
+});
+
+test("declared source and checkpoint id reject traversal newline and non-portable names", () => {
+  const invalid = [
+    "..",
+    "../x",
+    "a/b",
+    "a\\b",
+    "foo\nbar",
+    "foo\rbar",
+    ".hidden",
+    "Worktree",
+    "CON",
+    "aux",
+    `${"a".repeat(200)}`,
+  ];
+  for (const value of invalid) {
+    assert.throws(
+      () => assertPendingDeclaredSource(value, "PENDING_ROOT_UNSAFE"),
+      (error) => error.code === "PENDING_ROOT_UNSAFE",
+      value,
+    );
+    assert.throws(
+      () => assertPendingCheckpointId(value, "PENDING_ROOT_UNSAFE"),
+      (error) => error.code === "PENDING_ROOT_UNSAFE",
+      value,
+    );
+  }
+});
+
+test("exact .dubsar-pending basename is required; a differently cased sibling is not a source", async () => {
+  const source = await readFile(
+    path.join(
+      REPOSITORY_ROOT,
+      "packages",
+      "dubsar-project-continuity",
+      "runtime",
+      "memory-vnext-pending-list.mjs",
+    ),
+    "utf8",
+  );
+  assert.match(source, /const PENDING_ROOT_NAME = "\.dubsar-pending";/u);
+  assert.match(source, /path\.basename\(opened\) !== PENDING_ROOT_NAME/u);
+  assert.notEqual(".DUBSAR-PENDING", ".dubsar-pending");
+  await withProject(async (root) => {
+    const wrong = path.join(root, ".DUBSAR-PENDING");
+    await mkdir(path.join(wrong, "worktree-a"), { recursive: true });
+    await writeFile(path.join(wrong, "worktree-a", "cp-wrong-case.md"), "x\n");
+    if (process.platform === "win32") {
+      await expectListReject(
+        root,
+        () => listPendingCheckpoints({ start: root }),
+        "PENDING_ROOT_UNSAFE",
+      );
+      return;
+    }
+    const list = await listPendingCheckpoints({ start: root });
+    assert.equal(list.count, 0);
+    assertPendingCheckpointsList(list);
+    const cli = await invoke(["pending", "list", "--start", root, "--json"]);
+    assert.equal(cli.exitCode, 0, cli.stderr);
+    assert.equal(JSON.parse(cli.stdout).count, 0);
+  });
+});
+
+test("list does not observe references and enforces the per-candidate bound", async () => {
+  await withProject(async (root) => {
+    await recordCandidate(root, pendingProposal({ checkpointId: "cp-ref-budget" }));
+    const digest = "a".repeat(64);
+    const eight = Array.from({ length: 8 }, (_, index) => ({
+      path: `notes/file-${index}.txt`,
+      sha256: digest,
+    }));
+    await rewritePendingDocument(
+      pendingPath(root, "worktree-a", "cp-ref-budget"),
+      (document) => {
+        document.checkpoint = {
+          ...document.checkpoint,
+          references: eight,
+        };
+      },
+    );
+    const listed = await listPendingCheckpoints({ start: root });
+    assert.equal(listed.count, 1);
+    assert.equal("references" in listed.candidates[0], false);
+    assertPendingCheckpointsList(listed);
+
+    await rewritePendingDocument(
+      pendingPath(root, "worktree-a", "cp-ref-budget"),
+      (document) => {
+        document.checkpoint = {
+          ...document.checkpoint,
+          references: [...eight, { path: "notes/file-8.txt", sha256: digest }],
+        };
+      },
+    );
+    await expectListReject(
+      root,
+      () => listPendingCheckpoints({ start: root }),
+      "PENDING_ENTRY_INVALID",
+    );
+  });
 });

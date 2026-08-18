@@ -5,6 +5,9 @@ separate, explicitly reviewed decision.
 
 ## Public technical preview — 0.3.0-dev
 
+- classify Lot 2 `pending list` as a read command in the CLI reference and lock
+  its fail-closed diagnostics, exact `.dubsar-pending` basename, traversal
+  refusals, and non-observation of references in tests;
 - add Lot 3 explicit `pending promote` to append one human-confirmed pending
   candidate into the canonical `.dubsar/checkpoints.json` chain without altering
   `.dubsar-pending/`;

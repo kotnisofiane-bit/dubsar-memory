@@ -25,9 +25,11 @@ requires no `--start` because it reads no workspace.
 | `inbox list` | Local Inbox metadata with bounded/redacted previews. |
 | `precedents` | Exact-only matches for an explicit Work/lot or reference selector. |
 | `lots` | Compatibility Work-package view for supported older workspaces. |
+| `pending list` | Lists valid advisory candidates under `.dubsar-pending/`; never writes or observes references. |
 
 Read commands do not write the project, host profile, Git metadata, or personal
-memory.
+memory. `pending list` never writes `.dubsar/` or `.dubsar-pending/`. `route` is
+advisory and grants no execution authority.
 
 Integrations should test the exact token they require from
 `dubsar.runtime-capabilities/1`. A token may be added to that format, but its
@@ -46,7 +48,6 @@ meaning must never be removed, reused, or changed.
 | `knowledge retire --knowledge <id>` | Retires one Knowledge entry. |
 | `checkpoint --proposal <file>` | Appends one canonical checkpoint. |
 | `pending record --proposal <file>` | Records one advisory candidate under `.dubsar-pending/` only. |
-| `pending list` | Lists valid advisory candidates under `.dubsar-pending/`; never writes. |
 | `pending promote --source <id> --checkpoint <id>` | Promotes one pending candidate into `.dubsar/checkpoints.json` only. |
 | `context --write` | Writes only `.dubsar/generated/context.md`. |
 | `migrate --to-memory-vnext` | Creates `.dubsar/` and retains the valid Lite source unchanged. |
