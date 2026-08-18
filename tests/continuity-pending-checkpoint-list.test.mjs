@@ -1089,7 +1089,80 @@ test("pending list maps a canonical snapshot race to PENDING_CAPTURE_RACE", asyn
   });
 });
 
-test("pending list maps unknown internals to PENDING_LIST_INVALID without leaking them", async () => {
+test("pending list maps unknown internals to PENDING_LIST_INVALID without leaking them in each phase", async () => {
+  // Phase locate: unit and contract mapping
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("PATH_INSPECTION_FAILED"), "locate").code,
+    "PENDING_LIST_INVALID",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("SYNTHETIC_LOCATE_ERROR"), "locate").code,
+    "PENDING_LIST_INVALID",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new Error("synthetic-locate-native-error"), "locate").code,
+    "PENDING_LIST_INVALID",
+  );
+
+  // Phase snapshot: unit and execution mapping
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("PATH_INSPECTION_FAILED"), "snapshot").code,
+    "PENDING_LIST_INVALID",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("SYNTHETIC_SNAPSHOT_ERROR"), "snapshot").code,
+    "PENDING_LIST_INVALID",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new Error("synthetic-snapshot-native-error"), "snapshot").code,
+    "PENDING_LIST_INVALID",
+  );
+  await withProject(async (root) => {
+    await expectListReject(
+      root,
+      () => listPendingCheckpoints({
+        start: root,
+        afterCanonicalCapture: async () => {
+          throw new WorkbenchError("PATH_INSPECTION_FAILED");
+        },
+      }),
+      "PENDING_LIST_INVALID",
+    );
+    await expectListReject(
+      root,
+      () => listPendingCheckpoints({
+        start: root,
+        afterCanonicalCapture: async () => {
+          throw new WorkbenchError("SYNTHETIC_SNAPSHOT_ERROR");
+        },
+      }),
+      "PENDING_LIST_INVALID",
+    );
+    await expectListReject(
+      root,
+      () => listPendingCheckpoints({
+        start: root,
+        afterCanonicalCapture: async () => {
+          throw new Error("synthetic-snapshot-native-error");
+        },
+      }),
+      "PENDING_LIST_INVALID",
+    );
+  });
+
+  // Phase pending: unit and execution mapping
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("PATH_INSPECTION_FAILED"), "pending").code,
+    "PENDING_LIST_INVALID",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("SYNTHETIC_PENDING_ERROR"), "pending").code,
+    "PENDING_LIST_INVALID",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new Error("synthetic-pending-native-error"), "pending").code,
+    "PENDING_LIST_INVALID",
+  );
   await withProject(async (root) => {
     await expectListReject(
       root,
@@ -1106,7 +1179,17 @@ test("pending list maps unknown internals to PENDING_LIST_INVALID without leakin
       () => listPendingCheckpoints({
         start: root,
         afterInventoryPass: async () => {
-          throw new Error("synthetic-internal-failure");
+          throw new WorkbenchError("SYNTHETIC_PENDING_ERROR");
+        },
+      }),
+      "PENDING_LIST_INVALID",
+    );
+    await expectListReject(
+      root,
+      () => listPendingCheckpoints({
+        start: root,
+        afterInventoryPass: async () => {
+          throw new Error("synthetic-pending-native-error");
         },
       }),
       "PENDING_LIST_INVALID",

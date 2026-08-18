@@ -619,8 +619,8 @@
     },
     {
       "path": "packages/dubsar-project-continuity/runtime/memory-vnext-contracts.mjs",
-      "bytes": 22859,
-      "sha256": "6fb2d644d7f85c1103287cc337c3750f079841a4e5dfa61f35ee5580a310dbd7",
+      "bytes": 24012,
+      "sha256": "bf539fa5068d580da57a86e7dfd6c743f7acfa7b9d6659d585f67231876c594c",
       "role": "runtime"
     },
     {
@@ -655,8 +655,8 @@
     },
     {
       "path": "packages/dubsar-project-continuity/runtime/memory-vnext-pending-list.mjs",
-      "bytes": 12173,
-      "sha256": "fb56b555b144a5432699be71d31f13cf7987ab323666e94c076cd896905ddab0",
+      "bytes": 11543,
+      "sha256": "e7d444900a6e95f2168051da81b080931e894121421a6c34ba6b76d609219e06",
       "role": "runtime"
     },
     {
@@ -876,5 +876,5 @@
       "role": "runtime"
     }
   ],
-  "content_root_sha256": "fa629851e585bcabd80bb966466f29cbae9d459e40aab75bcfa108ccbf410969"
+  "content_root_sha256": "ce15179a575ea0d0132ce4ca7d3d7415d5d50fb45d871633768705c05c7b5a07"
 }

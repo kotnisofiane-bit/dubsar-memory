@@ -45,45 +45,24 @@ function foldKey(value) {
 }
 
 function mapCaptureError(error) {
-  if (!(error instanceof WorkbenchError)) {
-    throw new WorkbenchError("PENDING_ROOT_UNSAFE");
-  }
-  if (error.code === "FILE_SIZE_LIMIT_EXCEEDED") {
-    throw new WorkbenchError("PENDING_LIMIT_EXCEEDED");
-  }
-  if (
-    error.code === "FILE_CHANGED_DURING_SNAPSHOT" ||
-    MISSING_CODES.has(error.code)
-  ) {
-    throw new WorkbenchError("PENDING_CAPTURE_RACE");
-  }
-  throw new WorkbenchError("PENDING_ROOT_UNSAFE");
+  throw mapPendingListDiagnostic(error, "pending");
 }
 
 async function assertPendingParent(projectRoot, memoryRoot) {
-  let openedProject;
-  let openedMemory;
-  try {
-    openedProject = await openDirectory(projectRoot);
-    openedMemory = await openDirectory(memoryRoot);
-    const memoryParent = path.dirname(openedMemory);
-    const projectInfo = await entryInfo(openedProject);
-    const parentInfo = await entryInfo(memoryParent);
-    if (
-      projectInfo === null ||
-      parentInfo === null ||
-      !sameIdentity(projectInfo, parentInfo) ||
-      path.basename(openedMemory) !== MEMORY_PROJECT_MARKER
-    ) {
-      throw new WorkbenchError("PENDING_ROOT_UNSAFE");
-    }
-    return openedProject;
-  } catch (error) {
-    if (error instanceof WorkbenchError && error.code === "PENDING_ROOT_UNSAFE") {
-      throw error;
-    }
+  const openedProject = await openDirectory(projectRoot);
+  const openedMemory = await openDirectory(memoryRoot);
+  const memoryParent = path.dirname(openedMemory);
+  const projectInfo = await entryInfo(openedProject);
+  const parentInfo = await entryInfo(memoryParent);
+  if (
+    projectInfo === null ||
+    parentInfo === null ||
+    !sameIdentity(projectInfo, parentInfo) ||
+    path.basename(openedMemory) !== MEMORY_PROJECT_MARKER
+  ) {
     throw new WorkbenchError("PENDING_ROOT_UNSAFE");
   }
+  return openedProject;
 }
 
 async function openExactPendingRoot(projectRoot) {
@@ -242,9 +221,6 @@ async function capturePendingInventory(projectRoot) {
         files: fileLedger,
       });
     }
-  } catch (error) {
-    if (error instanceof WorkbenchError) throw error;
-    throw new WorkbenchError("PENDING_ROOT_UNSAFE");
   } finally {
     await directory?.close().catch(() => {});
   }
@@ -324,10 +300,15 @@ export async function listPendingCheckpoints({
       throw new WorkbenchError("PENDING_WORKSPACE_REQUIRED");
     }
 
-    const projectRoot = await assertPendingParent(
-      location.project_root ?? path.dirname(location.root),
-      location.root,
-    );
+    let projectRoot;
+    try {
+      projectRoot = await assertPendingParent(
+        location.project_root ?? path.dirname(location.root),
+        location.root,
+      );
+    } catch (error) {
+      throw mapPendingListDiagnostic(error, "locate");
+    }
 
     let snapshot;
     try {

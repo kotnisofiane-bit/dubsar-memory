@@ -382,6 +382,55 @@ export const PENDING_LIST_DIAGNOSTICS = Object.freeze([
 
 const PENDING_LIST_DIAGNOSTIC_SET = new Set(PENDING_LIST_DIAGNOSTICS);
 
+const LOCATE_REQUIRED_CODES = new Set([
+  "DIRECTORY_NOT_FOUND",
+  "PATH_NOT_FOUND",
+  "WORKSPACE_NOT_FOUND",
+]);
+
+const LOCATE_UNSAFE_CODES = new Set([
+  "DEVICE_PATH_REJECTED",
+  "LOCATION_INVALID",
+  "PATH_OUTSIDE_ROOT",
+  "PENDING_ROOT_UNSAFE",
+  "PROJECT_BOUNDARY_UNSAFE",
+  "SYMBOLIC_PATH_REJECTED",
+  "UNSUPPORTED_ABSOLUTE_PATH",
+  "WORKSPACE_MARKER_UNSAFE",
+]);
+
+const SNAPSHOT_RACE_CODES = new Set([
+  "FILE_CHANGED_DURING_SNAPSHOT",
+  "PENDING_CAPTURE_RACE",
+  "SNAPSHOT_CAPTURE_RACE",
+]);
+
+const PENDING_LIMIT_CODES = new Set([
+  "FILE_SIZE_LIMIT_EXCEEDED",
+  "PENDING_LIMIT_EXCEEDED",
+]);
+
+const PENDING_RACE_CODES = new Set([
+  "DIRECTORY_NOT_FOUND",
+  "FILE_CHANGED_DURING_SNAPSHOT",
+  "PATH_NOT_FOUND",
+  "PENDING_CAPTURE_RACE",
+  "REQUIRED_FILE_MISSING",
+  "SNAPSHOT_CAPTURE_RACE",
+]);
+
+const PENDING_UNSAFE_CODES = new Set([
+  "DEVICE_PATH_REJECTED",
+  "FILE_UNSAFE",
+  "LOCATION_INVALID",
+  "PATH_OUTSIDE_ROOT",
+  "PENDING_ROOT_UNSAFE",
+  "PROJECT_BOUNDARY_UNSAFE",
+  "SYMBOLIC_PATH_REJECTED",
+  "UNSUPPORTED_ABSOLUTE_PATH",
+  "WORKSPACE_MARKER_UNSAFE",
+]);
+
 const PENDING_LIST_INTERNAL_DIAGNOSTIC_PAIRS = Object.freeze([
   Object.freeze(["FILE_CHANGED_DURING_SNAPSHOT", "PENDING_CAPTURE_RACE"]),
   Object.freeze(["INVALID_JSON", "PENDING_LIST_INVALID"]),
@@ -412,30 +461,31 @@ export function mapPendingListDiagnostic(error, phase = null) {
     return error instanceof WorkbenchError ? error : new WorkbenchError(code);
   }
   if (phase === "locate") {
-    if (code === "PROJECT_BOUNDARY_UNSAFE" || code === "WORKSPACE_MARKER_UNSAFE") {
+    if (code !== null && LOCATE_REQUIRED_CODES.has(code)) {
+      return new WorkbenchError("PENDING_WORKSPACE_REQUIRED");
+    }
+    if (code !== null && LOCATE_UNSAFE_CODES.has(code)) {
       return new WorkbenchError("PENDING_ROOT_UNSAFE");
     }
-    return new WorkbenchError("PENDING_WORKSPACE_REQUIRED");
+    return new WorkbenchError("PENDING_LIST_INVALID");
   }
   if (phase === "snapshot") {
-    if (code === "FILE_CHANGED_DURING_SNAPSHOT" || code === "SNAPSHOT_CAPTURE_RACE") {
+    if (code !== null && SNAPSHOT_RACE_CODES.has(code)) {
       return new WorkbenchError("PENDING_CAPTURE_RACE");
     }
     return new WorkbenchError("PENDING_LIST_INVALID");
   }
   if (phase === "pending") {
-    if (code === "FILE_SIZE_LIMIT_EXCEEDED") {
+    if (code !== null && PENDING_LIMIT_CODES.has(code)) {
       return new WorkbenchError("PENDING_LIMIT_EXCEEDED");
     }
-    if (
-      code === "FILE_CHANGED_DURING_SNAPSHOT" ||
-      code === "PATH_NOT_FOUND" ||
-      code === "REQUIRED_FILE_MISSING" ||
-      code === "SNAPSHOT_CAPTURE_RACE"
-    ) {
+    if (code !== null && PENDING_RACE_CODES.has(code)) {
       return new WorkbenchError("PENDING_CAPTURE_RACE");
     }
-    return new WorkbenchError("PENDING_ROOT_UNSAFE");
+    if (code !== null && PENDING_UNSAFE_CODES.has(code)) {
+      return new WorkbenchError("PENDING_ROOT_UNSAFE");
+    }
+    return new WorkbenchError("PENDING_LIST_INVALID");
   }
   if (code !== null) {
     for (const [internal, mapped] of PENDING_LIST_INTERNAL_DIAGNOSTIC_PAIRS) {
