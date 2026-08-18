@@ -968,7 +968,59 @@ test("missing canonical work directory yields PENDING_LIST_INVALID", async () =>
   });
 });
 
-test("locator marker and boundary unsafe failures yield PENDING_ROOT_UNSAFE", async () => {
+test("locator marker, boundary unsafe, directory unsafe, and directory alias yield PENDING_ROOT_UNSAFE", async () => {
+  // Unit mapping check for directory safety codes
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("DIRECTORY_UNSAFE"), "locate").code,
+    "PENDING_ROOT_UNSAFE",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("DIRECTORY_ALIAS_REJECTED"), "locate").code,
+    "PENDING_ROOT_UNSAFE",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("DIRECTORY_UNSAFE"), "pending").code,
+    "PENDING_ROOT_UNSAFE",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("DIRECTORY_ALIAS_REJECTED"), "pending").code,
+    "PENDING_ROOT_UNSAFE",
+  );
+
+  // Execution: start path is a file, openDirectory(start) throws DIRECTORY_UNSAFE in locate
+  const fileStart = path.join(os.tmpdir(), `dubsar-locate-file-${Date.now()}.txt`);
+  await writeFile(fileStart, "not a directory\n");
+  try {
+    await assert.rejects(
+      () => listPendingCheckpoints({ start: fileStart }),
+      (error) => {
+        assertClosedListError(error, "PENDING_ROOT_UNSAFE");
+        return true;
+      },
+    );
+    const cli = await invoke(["pending", "list", "--start", fileStart, "--json"]);
+    assert.equal(cli.exitCode, 1);
+    assert.equal(JSON.parse(cli.stderr).code, "PENDING_ROOT_UNSAFE");
+    for (const leaked of PENDING_LIST_INTERNAL_CODES) {
+      assert.equal(cli.stderr.includes(leaked), false, `CLI leaked ${leaked}`);
+      assert.equal(cli.stdout.includes(leaked), false, `CLI stdout leaked ${leaked}`);
+    }
+  } finally {
+    await rm(fileStart, { force: true });
+  }
+
+  // Execution: DIRECTORY_UNSAFE in pending phase (.dubsar-pending/worktree-a is a file)
+  await withProject(async (root) => {
+    const pendingRoot = path.join(root, ".dubsar-pending");
+    await mkdir(pendingRoot, { recursive: true });
+    await writeFile(path.join(pendingRoot, "worktree-a"), "file not dir\n");
+    await expectListReject(
+      root,
+      () => listPendingCheckpoints({ start: root }),
+      "PENDING_ROOT_UNSAFE",
+    );
+  });
+
   const markerRoot = await mkdtemp(path.join(os.tmpdir(), "dubsar-pending-list-marker-"));
   try {
     const target = await mkdtemp(path.join(os.tmpdir(), "dubsar-pending-list-marker-target-"));
@@ -1163,7 +1215,45 @@ test("pending list maps unknown internals to PENDING_LIST_INVALID without leakin
     mapPendingListDiagnostic(new Error("synthetic-pending-native-error"), "pending").code,
     "PENDING_LIST_INVALID",
   );
+
+  // ENOENT during inventory -> PENDING_CAPTURE_RACE
+  const enoentError = new Error("ENOENT: no such file or directory");
+  enoentError.code = "ENOENT";
+  assert.equal(
+    mapPendingListDiagnostic(enoentError, "pending").code,
+    "PENDING_CAPTURE_RACE",
+  );
+
   await withProject(async (root) => {
+    // Deterministic directory removal before second opendir -> PENDING_CAPTURE_RACE (ENOENT)
+    const pendingRoot = path.join(root, ".dubsar-pending");
+    await mkdir(path.join(pendingRoot, "worktree-a"), { recursive: true });
+    await writeFile(path.join(pendingRoot, "worktree-a", "cp-race.md"), "x\n");
+    const enoentDuringOpendir = new Error("ENOENT: no such file or directory");
+    enoentDuringOpendir.code = "ENOENT";
+    await expectListReject(
+      root,
+      () => listPendingCheckpoints({
+        start: root,
+        afterInventoryPass: async () => {
+          throw enoentDuringOpendir;
+        },
+      }),
+      "PENDING_CAPTURE_RACE",
+    );
+
+    // Native unknown error during inventory -> PENDING_LIST_INVALID
+    await expectListReject(
+      root,
+      () => listPendingCheckpoints({
+        start: root,
+        afterInventoryPass: async () => {
+          throw new TypeError("synthetic-type-error-during-pending-inventory");
+        },
+      }),
+      "PENDING_LIST_INVALID",
+    );
+
     await expectListReject(
       root,
       () => listPendingCheckpoints({
@@ -1223,6 +1313,22 @@ test("runtime, tests, and CLI reference share one pending-list diagnostic contra
     mapPendingListDiagnostic(new WorkbenchError("DIRECTORY_NOT_FOUND"), "snapshot").code,
     "PENDING_LIST_INVALID",
   );
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("DIRECTORY_UNSAFE"), "locate").code,
+    "PENDING_ROOT_UNSAFE",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("DIRECTORY_ALIAS_REJECTED"), "locate").code,
+    "PENDING_ROOT_UNSAFE",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("DIRECTORY_UNSAFE"), "pending").code,
+    "PENDING_ROOT_UNSAFE",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("DIRECTORY_ALIAS_REJECTED"), "pending").code,
+    "PENDING_ROOT_UNSAFE",
+  );
   const source = await readFile(
     path.join(
       REPOSITORY_ROOT,
@@ -1240,7 +1346,8 @@ test("runtime, tests, and CLI reference share one pending-list diagnostic contra
   }
   assert.match(reference, /WORKSPACE_NOT_FOUND/u);
   assert.match(reference, /PROJECT_BOUNDARY_UNSAFE/u);
-  assert.match(reference, /INVALID_UTF8/u);
+  assert.match(reference, /DIRECTORY_UNSAFE/u);
+  assert.match(reference, /DIRECTORY_ALIAS_REJECTED/u);
   assert.match(reference, /SNAPSHOT_CAPTURE_RACE/u);
 });
 
