@@ -1,6 +1,6 @@
 {
   "format": "dubsar.public-file-inventory/1",
-  "root_sha256": "43cf6af77a71a751d11d98870063a5de08bba325a8f90efa19cd422b673f6837",
+  "root_sha256": "b21561dc334e5f5d3fbe815625e22b43b05713cdbc92b8630954a196a444ea1a",
   "files": [
     {
       "path": ".claude-plugin/plugin.json",
@@ -32,7 +32,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "8ad8edb2409fad7a308509b1fc2bf39009d5e616e5587689e456d2fd8f06ec93"
+      "sha256": "7eadb64373b86be0eb56d43104c31f4b3bfa6b68010522ba70a5cb0138f0e3c4"
     },
     {
       "path": "runtime/artifact-lifecycle.mjs",
@@ -76,7 +76,7 @@
     },
     {
       "path": "runtime/index.mjs",
-      "sha256": "bf75d255df87a010d3b408972c7f0cd9ec53d9fe2f5579b5654fc51bed188ba0"
+      "sha256": "895ed94bcdcfcc4fd1618246370ac2d1b11a6e2e3be116170f2f19d4e2b61036"
     },
     {
       "path": "runtime/lite-initializer.mjs",
@@ -116,7 +116,7 @@
     },
     {
       "path": "runtime/memory-vnext-contracts.mjs",
-      "sha256": "236c175ad7d35bf5346b39627114fa8af75e9f9424a9513cf181d75657aec5c0"
+      "sha256": "7a0312618fce5396af5208d9b072c804498b899d366dcecf2bc420d912a507a1"
     },
     {
       "path": "runtime/memory-vnext-evaluator.mjs",
@@ -140,7 +140,7 @@
     },
     {
       "path": "runtime/memory-vnext-pending-list.mjs",
-      "sha256": "b73408512eb1d923d31a671c5a2ed9eb3c9375bc03143865877a6cd1a7b8b685"
+      "sha256": "0cec5e2e14e6c585a7a7fcea49c62e31db1ce001e4a62cdeeb54156f9f3f514d"
     },
     {
       "path": "runtime/memory-vnext-pending-promotion.mjs",
@@ -152,7 +152,7 @@
     },
     {
       "path": "runtime/memory-vnext-snapshot.mjs",
-      "sha256": "ab8df59ac28f51f239b6e4f27611a81e176d6eeebdb189b9a3b79303447145a7"
+      "sha256": "4a3c6a62952cd12f3c237ec896ccebb3ac31a29c8d99b6209a7844c862f89376"
     },
     {
       "path": "runtime/memory-vnext-views.mjs",
