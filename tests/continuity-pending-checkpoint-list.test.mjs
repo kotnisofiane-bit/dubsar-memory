@@ -25,9 +25,12 @@ import {
   MEMORY_PENDING_MAX_CANDIDATES,
   MEMORY_PENDING_MAX_FILE_BYTES,
   MEMORY_PENDING_MAX_SOURCES,
+  PENDING_LIST_DIAGNOSTICS,
+  PENDING_LIST_INTERNAL_DIAGNOSTIC_MAP,
   assertPendingCheckpointId,
   assertPendingCheckpointsList,
   assertPendingDeclaredSource,
+  mapPendingListDiagnostic,
   memoryPendingCandidateDigest,
   memoryPendingListDigest,
   memoryPendingSetDigest,
@@ -43,7 +46,7 @@ import {
 } from "../packages/dubsar-project-continuity/runtime/memory-vnext-pending-writer.mjs";
 import { snapshotMemoryWorkspace } from "../packages/dubsar-project-continuity/runtime/memory-vnext-snapshot.mjs";
 import { locateProjectWorkspace } from "../packages/dubsar-project-continuity/runtime/locate.mjs";
-import { resolveLimits } from "../packages/dubsar-project-continuity/runtime/contracts.mjs";
+import { resolveLimits, WorkbenchError } from "../packages/dubsar-project-continuity/runtime/contracts.mjs";
 
 const PROJECT_ID = "pending-list-project";
 const WORK_ID = "pending-list-work";
@@ -227,26 +230,33 @@ async function fillPlaceholderCandidate(dir, checkpointId) {
   await writeFile(path.join(dir, `${checkpointId}.md`), "x\n");
 }
 
-const PENDING_LIST_CLOSED_DIAGNOSTICS = Object.freeze(new Set([
-  "PENDING_CAPTURE_RACE",
-  "PENDING_ENTRY_INVALID",
-  "PENDING_LIMIT_EXCEEDED",
-  "PENDING_LIST_INVALID",
-  "PENDING_ROOT_UNSAFE",
-  "PENDING_WORKSPACE_REQUIRED",
-]));
+const PENDING_LIST_INTERNAL_CODES = Object.freeze(Object.keys(PENDING_LIST_INTERNAL_DIAGNOSTIC_MAP));
 
 async function expectListReject(root, run, code) {
   assert.equal(
-    PENDING_LIST_CLOSED_DIAGNOSTICS.has(code),
+    PENDING_LIST_DIAGNOSTICS.includes(code),
     true,
     `${code} is outside the closed pending-list diagnostic set`,
   );
   const beforeDubsar = await dubsarFingerprint(root);
   const beforePending = await pendingFingerprint(root);
-  await assert.rejects(run, (error) => error.code === code);
+  await assert.rejects(run, (error) => {
+    assertClosedListError(error, code);
+    return true;
+  });
   assert.equal(await dubsarFingerprint(root), beforeDubsar);
   assert.equal(await pendingFingerprint(root), beforePending);
+}
+
+function assertClosedListError(error, expected) {
+  assert.equal(error instanceof WorkbenchError, true);
+  assert.equal(error.code, expected);
+  assert.equal(error.message, expected);
+  assert.equal(PENDING_LIST_DIAGNOSTICS.includes(error.code), true);
+  const serialized = `${error.code}\n${error.message}\n${error.stack ?? ""}`;
+  for (const leaked of PENDING_LIST_INTERNAL_CODES) {
+    assert.equal(serialized.includes(leaked), false, `leaked ${leaked} through pending list`);
+  }
 }
 
 test("absent pending root yields empty valid list", async () => {
@@ -848,8 +858,8 @@ test("pending list requires a memory vnext workspace", async () => {
     await assert.rejects(
       () => listPendingCheckpoints({ start: root }),
       (error) => {
-        assert.equal(PENDING_LIST_CLOSED_DIAGNOSTICS.has(error.code), true);
-        return error.code === "PENDING_WORKSPACE_REQUIRED";
+        assertClosedListError(error, "PENDING_WORKSPACE_REQUIRED");
+        return true;
       },
     );
     assert.deepEqual(await readdir(root), [".dubsar-project"]);
@@ -858,19 +868,186 @@ test("pending list requires a memory vnext workspace", async () => {
   }
 });
 
-test("pending list diagnostics belong to a closed set", () => {
-  assert.deepEqual(
-    [...PENDING_LIST_CLOSED_DIAGNOSTICS],
-    [
-      "PENDING_CAPTURE_RACE",
-      "PENDING_ENTRY_INVALID",
-      "PENDING_LIMIT_EXCEEDED",
+test("pending list maps locator and snapshot failures onto the closed diagnostic set", async () => {
+  const missing = await mkdtemp(path.join(os.tmpdir(), "dubsar-pending-list-missing-"));
+  try {
+    await mkdir(path.join(missing, ".git"));
+    await assert.rejects(
+      () => listPendingCheckpoints({ start: missing }),
+      (error) => {
+        assertClosedListError(error, "PENDING_WORKSPACE_REQUIRED");
+        return true;
+      },
+    );
+    const cliMissing = await invoke(["pending", "list", "--start", missing, "--json"]);
+    assert.equal(cliMissing.exitCode, 1);
+    assert.equal(JSON.parse(cliMissing.stderr).code, "PENDING_WORKSPACE_REQUIRED");
+    for (const leaked of PENDING_LIST_INTERNAL_CODES) {
+      assert.equal(cliMissing.stderr.includes(leaked), false, `CLI leaked ${leaked}`);
+      assert.equal(cliMissing.stdout.includes(leaked), false, `CLI stdout leaked ${leaked}`);
+    }
+  } finally {
+    await rm(missing, { recursive: true, force: true });
+  }
+
+  const markerRoot = await mkdtemp(path.join(os.tmpdir(), "dubsar-pending-list-marker-"));
+  try {
+    const target = await mkdtemp(path.join(os.tmpdir(), "dubsar-pending-list-marker-target-"));
+    try {
+      await mkdir(path.join(markerRoot, ".git"));
+      try {
+        await symlink(target, path.join(markerRoot, ".dubsar"), "dir");
+      } catch (error) {
+        if (error?.code !== "EPERM" && error?.code !== "ENOTSUP") throw error;
+      }
+      if ((await readdir(markerRoot)).includes(".dubsar")) {
+        await assert.rejects(
+          () => listPendingCheckpoints({ start: markerRoot }),
+          (error) => {
+            assertClosedListError(error, "PENDING_ROOT_UNSAFE");
+            return true;
+          },
+        );
+      }
+    } finally {
+      await rm(target, { recursive: true, force: true });
+    }
+  } finally {
+    await rm(markerRoot, { recursive: true, force: true });
+  }
+
+  const boundaryRoot = await mkdtemp(path.join(os.tmpdir(), "dubsar-pending-list-boundary-"));
+  try {
+    const gitTarget = await mkdtemp(path.join(os.tmpdir(), "dubsar-pending-list-git-target-"));
+    try {
+      try {
+        await symlink(gitTarget, path.join(boundaryRoot, ".git"), "dir");
+      } catch (error) {
+        if (error?.code !== "EPERM" && error?.code !== "ENOTSUP") throw error;
+      }
+      if ((await readdir(boundaryRoot)).includes(".git")) {
+        await assert.rejects(
+          () => listPendingCheckpoints({ start: boundaryRoot }),
+          (error) => {
+            assertClosedListError(error, "PENDING_ROOT_UNSAFE");
+            return true;
+          },
+        );
+        const cliBoundary = await invoke(["pending", "list", "--start", boundaryRoot, "--json"]);
+        assert.equal(cliBoundary.exitCode, 1);
+        assert.equal(JSON.parse(cliBoundary.stderr).code, "PENDING_ROOT_UNSAFE");
+        assert.equal(cliBoundary.stderr.includes("PROJECT_BOUNDARY_UNSAFE"), false);
+      }
+    } finally {
+      await rm(gitTarget, { recursive: true, force: true });
+    }
+  } finally {
+    await rm(boundaryRoot, { recursive: true, force: true });
+  }
+});
+
+test("pending list maps invalid canonical UTF-8 and JSON to PENDING_LIST_INVALID", async () => {
+  await withProject(async (root) => {
+    await writeFile(path.join(root, ".dubsar", "manifest.json"), Buffer.from([0xff, 0xfe, 0xfd]));
+    await expectListReject(
+      root,
+      () => listPendingCheckpoints({ start: root }),
       "PENDING_LIST_INVALID",
-      "PENDING_ROOT_UNSAFE",
-      "PENDING_WORKSPACE_REQUIRED",
-    ],
+    );
+    const cliUtf8 = await invoke(["pending", "list", "--start", root, "--json"]);
+    assert.equal(cliUtf8.exitCode, 1);
+    assert.equal(JSON.parse(cliUtf8.stderr).code, "PENDING_LIST_INVALID");
+    assert.equal(cliUtf8.stderr.includes("INVALID_UTF8"), false);
+  });
+
+  await withProject(async (root) => {
+    await writeFile(path.join(root, ".dubsar", "manifest.json"), "{");
+    await expectListReject(
+      root,
+      () => listPendingCheckpoints({ start: root }),
+      "PENDING_LIST_INVALID",
+    );
+    const cliJson = await invoke(["pending", "list", "--start", root, "--json"]);
+    assert.equal(cliJson.exitCode, 1);
+    assert.equal(JSON.parse(cliJson.stderr).code, "PENDING_LIST_INVALID");
+    assert.equal(cliJson.stderr.includes("MEMORY_MANIFEST_INVALID"), false);
+    assert.equal(cliJson.stderr.includes("INVALID_JSON"), false);
+  });
+});
+
+test("pending list maps a canonical snapshot race to PENDING_CAPTURE_RACE", async () => {
+  await withProject(async (root) => {
+    const manifestPath = path.join(root, ".dubsar", "manifest.json");
+    const original = await readFile(manifestPath);
+    await assert.rejects(
+      () => listPendingCheckpoints({
+        start: root,
+        afterCanonicalCapture: async () => {
+          await writeFile(manifestPath, `${original.toString("utf8")}\n`);
+        },
+      }),
+      (error) => {
+        assertClosedListError(error, "PENDING_CAPTURE_RACE");
+        return true;
+      },
+    );
+  });
+});
+
+test("pending list maps unknown internals to PENDING_LIST_INVALID without leaking them", async () => {
+  await withProject(async (root) => {
+    await expectListReject(
+      root,
+      () => listPendingCheckpoints({
+        start: root,
+        afterInventoryPass: async () => {
+          throw new WorkbenchError("PATH_INSPECTION_FAILED");
+        },
+      }),
+      "PENDING_LIST_INVALID",
+    );
+    await expectListReject(
+      root,
+      () => listPendingCheckpoints({
+        start: root,
+        afterInventoryPass: async () => {
+          throw new Error("synthetic-internal-failure");
+        },
+      }),
+      "PENDING_LIST_INVALID",
+    );
+  });
+});
+
+test("runtime, tests, and CLI reference share one pending-list diagnostic contract", async () => {
+  assert.deepEqual(PENDING_LIST_DIAGNOSTICS, [...PENDING_LIST_DIAGNOSTICS].sort((left, right) => (
+    left.localeCompare(right, "en")
+  )));
+  assert.equal(PENDING_LIST_DIAGNOSTICS.includes("PENDING_ENTRIES_OMITTED"), false);
+  for (const [internal, mapped] of Object.entries(PENDING_LIST_INTERNAL_DIAGNOSTIC_MAP)) {
+    const result = mapPendingListDiagnostic(new WorkbenchError(internal));
+    assert.equal(result.code, mapped, internal);
+    assert.equal(PENDING_LIST_DIAGNOSTICS.includes(result.code), true);
+  }
+  const source = await readFile(
+    path.join(
+      REPOSITORY_ROOT,
+      "packages",
+      "dubsar-project-continuity",
+      "runtime",
+      "memory-vnext-pending-list.mjs",
+    ),
+    "utf8",
   );
-  assert.equal(PENDING_LIST_CLOSED_DIAGNOSTICS.has("PENDING_ENTRIES_OMITTED"), false);
+  assert.match(source, /mapPendingListDiagnostic/u);
+  const reference = await readFile(path.join(REPOSITORY_ROOT, "docs", "CLI_REFERENCE.md"), "utf8");
+  for (const code of PENDING_LIST_DIAGNOSTICS) {
+    assert.match(reference, new RegExp(code, "u"));
+  }
+  assert.match(reference, /WORKSPACE_NOT_FOUND/u);
+  assert.match(reference, /PROJECT_BOUNDARY_UNSAFE/u);
+  assert.match(reference, /INVALID_UTF8/u);
+  assert.match(reference, /SNAPSHOT_CAPTURE_RACE/u);
 });
 
 test("declared source and checkpoint id reject traversal newline and non-portable names", () => {

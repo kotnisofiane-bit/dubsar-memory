@@ -146,7 +146,7 @@ export async function revalidateMemorySnapshot(location, limits, expectedSnapsho
   return after;
 }
 
-export async function snapshotMemoryWorkspace(location, overrides = {}) {
+export async function snapshotMemoryWorkspace(location, overrides = {}, seams = {}) {
   assertLocation(location);
   const limits = resolveLimits(overrides);
   const rootNames = await inspectRoot(location.root);
@@ -241,6 +241,9 @@ export async function snapshotMemoryWorkspace(location, overrides = {}) {
     fail("WORKSPACE_FORMAT_AMBIGUOUS");
   }
 
+  if (typeof seams.afterCanonicalCapture === "function") {
+    await seams.afterCanonicalCapture();
+  }
   await recaptureAll(location.root, captures, limits.maxCanonicalFileBytes);
   const [rootNamesAfter, workNamesAfter, knowledgeNamesAfter] = await Promise.all([
     inspectRoot(location.root),
