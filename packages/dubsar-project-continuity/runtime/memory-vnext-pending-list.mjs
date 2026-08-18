@@ -61,20 +61,29 @@ function mapCaptureError(error) {
 }
 
 async function assertPendingParent(projectRoot, memoryRoot) {
-  const openedProject = await openDirectory(projectRoot);
-  const openedMemory = await openDirectory(memoryRoot);
-  const memoryParent = path.dirname(openedMemory);
-  const projectInfo = await entryInfo(openedProject);
-  const parentInfo = await entryInfo(memoryParent);
-  if (
-    projectInfo === null ||
-    parentInfo === null ||
-    !sameIdentity(projectInfo, parentInfo) ||
-    path.basename(openedMemory) !== MEMORY_PROJECT_MARKER
-  ) {
+  let openedProject;
+  let openedMemory;
+  try {
+    openedProject = await openDirectory(projectRoot);
+    openedMemory = await openDirectory(memoryRoot);
+    const memoryParent = path.dirname(openedMemory);
+    const projectInfo = await entryInfo(openedProject);
+    const parentInfo = await entryInfo(memoryParent);
+    if (
+      projectInfo === null ||
+      parentInfo === null ||
+      !sameIdentity(projectInfo, parentInfo) ||
+      path.basename(openedMemory) !== MEMORY_PROJECT_MARKER
+    ) {
+      throw new WorkbenchError("PENDING_ROOT_UNSAFE");
+    }
+    return openedProject;
+  } catch (error) {
+    if (error instanceof WorkbenchError && error.code === "PENDING_ROOT_UNSAFE") {
+      throw error;
+    }
     throw new WorkbenchError("PENDING_ROOT_UNSAFE");
   }
-  return openedProject;
 }
 
 async function openExactPendingRoot(projectRoot) {
@@ -304,19 +313,33 @@ export async function listPendingCheckpoints({
   afterCanonicalCapture,
 } = {}) {
   try {
-    const location = await locateProjectWorkspace({ start });
+    let location;
+    try {
+      location = await locateProjectWorkspace({ start });
+    } catch (error) {
+      throw mapPendingListDiagnostic(error, "locate");
+    }
+
     if (location.marker !== MEMORY_PROJECT_MARKER) {
       throw new WorkbenchError("PENDING_WORKSPACE_REQUIRED");
     }
+
     const projectRoot = await assertPendingParent(
       location.project_root ?? path.dirname(location.root),
       location.root,
     );
-    const snapshot = await snapshotMemoryWorkspace(
-      location,
-      resolveLimits(),
-      { afterCanonicalCapture },
-    );
+
+    let snapshot;
+    try {
+      snapshot = await snapshotMemoryWorkspace(
+        location,
+        resolveLimits(),
+        { afterCanonicalCapture },
+      );
+    } catch (error) {
+      throw mapPendingListDiagnostic(error, "snapshot");
+    }
+
     const projectId = snapshot.documents.manifest.project_id;
     const shared = snapshot.shared_snapshot_sha256;
     const knownWorks = new Set(snapshot.documents.works.map((item) => item.work_id));

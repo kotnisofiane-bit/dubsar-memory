@@ -230,7 +230,12 @@ async function fillPlaceholderCandidate(dir, checkpointId) {
   await writeFile(path.join(dir, `${checkpointId}.md`), "x\n");
 }
 
-const PENDING_LIST_INTERNAL_CODES = Object.freeze(Object.keys(PENDING_LIST_INTERNAL_DIAGNOSTIC_MAP));
+const PENDING_LIST_INTERNAL_CODES = Object.freeze([
+  ...Object.keys(PENDING_LIST_INTERNAL_DIAGNOSTIC_MAP),
+  "DIRECTORY_NOT_FOUND",
+  "PATH_NOT_FOUND",
+  "REQUIRED_FILE_MISSING",
+]);
 
 async function expectListReject(root, run, code) {
   assert.equal(
@@ -868,7 +873,25 @@ test("pending list requires a memory vnext workspace", async () => {
   }
 });
 
-test("pending list maps locator and snapshot failures onto the closed diagnostic set", async () => {
+test("non-existent start path yields PENDING_WORKSPACE_REQUIRED", async () => {
+  const missing = path.join(os.tmpdir(), "dubsar-pending-list-nonexistent-start-dir");
+  await assert.rejects(
+    () => listPendingCheckpoints({ start: missing }),
+    (error) => {
+      assertClosedListError(error, "PENDING_WORKSPACE_REQUIRED");
+      return true;
+    },
+  );
+  const cli = await invoke(["pending", "list", "--start", missing, "--json"]);
+  assert.equal(cli.exitCode, 1);
+  assert.equal(JSON.parse(cli.stderr).code, "PENDING_WORKSPACE_REQUIRED");
+  for (const leaked of PENDING_LIST_INTERNAL_CODES) {
+    assert.equal(cli.stderr.includes(leaked), false, `CLI stderr leaked ${leaked}`);
+    assert.equal(cli.stdout.includes(leaked), false, `CLI stdout leaked ${leaked}`);
+  }
+});
+
+test("directory without .dubsar marker yields PENDING_WORKSPACE_REQUIRED", async () => {
   const missing = await mkdtemp(path.join(os.tmpdir(), "dubsar-pending-list-missing-"));
   try {
     await mkdir(path.join(missing, ".git"));
@@ -889,7 +912,63 @@ test("pending list maps locator and snapshot failures onto the closed diagnostic
   } finally {
     await rm(missing, { recursive: true, force: true });
   }
+});
 
+test("missing canonical manifest.json yields PENDING_LIST_INVALID", async () => {
+  await withProject(async (root) => {
+    await rm(path.join(root, ".dubsar", "manifest.json"));
+    await expectListReject(
+      root,
+      () => listPendingCheckpoints({ start: root }),
+      "PENDING_LIST_INVALID",
+    );
+    const cli = await invoke(["pending", "list", "--start", root, "--json"]);
+    assert.equal(cli.exitCode, 1);
+    assert.equal(JSON.parse(cli.stderr).code, "PENDING_LIST_INVALID");
+    for (const leaked of PENDING_LIST_INTERNAL_CODES) {
+      assert.equal(cli.stderr.includes(leaked), false, `CLI stderr leaked ${leaked}`);
+      assert.equal(cli.stdout.includes(leaked), false, `CLI stdout leaked ${leaked}`);
+    }
+  });
+});
+
+test("missing canonical checkpoints.json yields PENDING_LIST_INVALID", async () => {
+  await withProject(async (root) => {
+    await rm(path.join(root, ".dubsar", "checkpoints.json"));
+    await expectListReject(
+      root,
+      () => listPendingCheckpoints({ start: root }),
+      "PENDING_LIST_INVALID",
+    );
+    const cli = await invoke(["pending", "list", "--start", root, "--json"]);
+    assert.equal(cli.exitCode, 1);
+    assert.equal(JSON.parse(cli.stderr).code, "PENDING_LIST_INVALID");
+    for (const leaked of PENDING_LIST_INTERNAL_CODES) {
+      assert.equal(cli.stderr.includes(leaked), false, `CLI stderr leaked ${leaked}`);
+      assert.equal(cli.stdout.includes(leaked), false, `CLI stdout leaked ${leaked}`);
+    }
+  });
+});
+
+test("missing canonical work directory yields PENDING_LIST_INVALID", async () => {
+  await withProject(async (root) => {
+    await rm(path.join(root, ".dubsar", "work"), { recursive: true, force: true });
+    await expectListReject(
+      root,
+      () => listPendingCheckpoints({ start: root }),
+      "PENDING_LIST_INVALID",
+    );
+    const cli = await invoke(["pending", "list", "--start", root, "--json"]);
+    assert.equal(cli.exitCode, 1);
+    assert.equal(JSON.parse(cli.stderr).code, "PENDING_LIST_INVALID");
+    for (const leaked of PENDING_LIST_INTERNAL_CODES) {
+      assert.equal(cli.stderr.includes(leaked), false, `CLI stderr leaked ${leaked}`);
+      assert.equal(cli.stdout.includes(leaked), false, `CLI stdout leaked ${leaked}`);
+    }
+  });
+});
+
+test("locator marker and boundary unsafe failures yield PENDING_ROOT_UNSAFE", async () => {
   const markerRoot = await mkdtemp(path.join(os.tmpdir(), "dubsar-pending-list-marker-"));
   try {
     const target = await mkdtemp(path.join(os.tmpdir(), "dubsar-pending-list-marker-target-"));
@@ -992,6 +1071,22 @@ test("pending list maps a canonical snapshot race to PENDING_CAPTURE_RACE", asyn
       },
     );
   });
+
+  await withProject(async (root) => {
+    const manifestPath = path.join(root, ".dubsar", "manifest.json");
+    await assert.rejects(
+      () => listPendingCheckpoints({
+        start: root,
+        afterCanonicalCapture: async () => {
+          await rm(manifestPath);
+        },
+      }),
+      (error) => {
+        assertClosedListError(error, "PENDING_CAPTURE_RACE");
+        return true;
+      },
+    );
+  });
 });
 
 test("pending list maps unknown internals to PENDING_LIST_INVALID without leaking them", async () => {
@@ -1029,6 +1124,22 @@ test("runtime, tests, and CLI reference share one pending-list diagnostic contra
     assert.equal(result.code, mapped, internal);
     assert.equal(PENDING_LIST_DIAGNOSTICS.includes(result.code), true);
   }
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("PATH_NOT_FOUND"), "locate").code,
+    "PENDING_WORKSPACE_REQUIRED",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("PATH_NOT_FOUND"), "snapshot").code,
+    "PENDING_LIST_INVALID",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("DIRECTORY_NOT_FOUND"), "locate").code,
+    "PENDING_WORKSPACE_REQUIRED",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("DIRECTORY_NOT_FOUND"), "snapshot").code,
+    "PENDING_LIST_INVALID",
+  );
   const source = await readFile(
     path.join(
       REPOSITORY_ROOT,

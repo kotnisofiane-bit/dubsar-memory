@@ -383,7 +383,6 @@ export const PENDING_LIST_DIAGNOSTICS = Object.freeze([
 const PENDING_LIST_DIAGNOSTIC_SET = new Set(PENDING_LIST_DIAGNOSTICS);
 
 const PENDING_LIST_INTERNAL_DIAGNOSTIC_PAIRS = Object.freeze([
-  Object.freeze(["DIRECTORY_NOT_FOUND", "PENDING_WORKSPACE_REQUIRED"]),
   Object.freeze(["FILE_CHANGED_DURING_SNAPSHOT", "PENDING_CAPTURE_RACE"]),
   Object.freeze(["INVALID_JSON", "PENDING_LIST_INVALID"]),
   Object.freeze(["INVALID_UTF8", "PENDING_LIST_INVALID"]),
@@ -394,8 +393,8 @@ const PENDING_LIST_INTERNAL_DIAGNOSTIC_PAIRS = Object.freeze([
   Object.freeze(["MEMORY_MARKDOWN_INVALID", "PENDING_LIST_INVALID"]),
   Object.freeze(["MEMORY_WORKSPACE_INVALID", "PENDING_LIST_INVALID"]),
   Object.freeze(["MEMORY_WORK_INVALID", "PENDING_LIST_INVALID"]),
-  Object.freeze(["PATH_NOT_FOUND", "PENDING_WORKSPACE_REQUIRED"]),
   Object.freeze(["PROJECT_BOUNDARY_UNSAFE", "PENDING_ROOT_UNSAFE"]),
+  Object.freeze(["REQUIRED_FILE_MISSING", "PENDING_LIST_INVALID"]),
   Object.freeze(["SNAPSHOT_CAPTURE_RACE", "PENDING_CAPTURE_RACE"]),
   Object.freeze(["WORKSPACE_MARKER_UNSAFE", "PENDING_ROOT_UNSAFE"]),
   Object.freeze(["WORKSPACE_NOT_FOUND", "PENDING_WORKSPACE_REQUIRED"]),
@@ -405,12 +404,38 @@ export const PENDING_LIST_INTERNAL_DIAGNOSTIC_MAP = Object.freeze(
   Object.fromEntries(PENDING_LIST_INTERNAL_DIAGNOSTIC_PAIRS),
 );
 
-export function mapPendingListDiagnostic(error) {
+export function mapPendingListDiagnostic(error, phase = null) {
   const code = error instanceof WorkbenchError && typeof error.code === "string"
     ? error.code
     : null;
   if (code !== null && PENDING_LIST_DIAGNOSTIC_SET.has(code)) {
     return error instanceof WorkbenchError ? error : new WorkbenchError(code);
+  }
+  if (phase === "locate") {
+    if (code === "PROJECT_BOUNDARY_UNSAFE" || code === "WORKSPACE_MARKER_UNSAFE") {
+      return new WorkbenchError("PENDING_ROOT_UNSAFE");
+    }
+    return new WorkbenchError("PENDING_WORKSPACE_REQUIRED");
+  }
+  if (phase === "snapshot") {
+    if (code === "FILE_CHANGED_DURING_SNAPSHOT" || code === "SNAPSHOT_CAPTURE_RACE") {
+      return new WorkbenchError("PENDING_CAPTURE_RACE");
+    }
+    return new WorkbenchError("PENDING_LIST_INVALID");
+  }
+  if (phase === "pending") {
+    if (code === "FILE_SIZE_LIMIT_EXCEEDED") {
+      return new WorkbenchError("PENDING_LIMIT_EXCEEDED");
+    }
+    if (
+      code === "FILE_CHANGED_DURING_SNAPSHOT" ||
+      code === "PATH_NOT_FOUND" ||
+      code === "REQUIRED_FILE_MISSING" ||
+      code === "SNAPSHOT_CAPTURE_RACE"
+    ) {
+      return new WorkbenchError("PENDING_CAPTURE_RACE");
+    }
+    return new WorkbenchError("PENDING_ROOT_UNSAFE");
   }
   if (code !== null) {
     for (const [internal, mapped] of PENDING_LIST_INTERNAL_DIAGNOSTIC_PAIRS) {
