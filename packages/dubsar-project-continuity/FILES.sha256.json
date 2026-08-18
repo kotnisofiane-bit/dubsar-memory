@@ -1,6 +1,6 @@
 {
   "format": "dubsar.public-file-inventory/1",
-  "root_sha256": "36fd53ca51902e41edae5bf3f5404af6b85d6df398afeac7cf6181d9c515243d",
+  "root_sha256": "4406467a20572e601a0e54cc835a68b68f34b3685ed5731f19f4bb53f66ea22e",
   "files": [
     {
       "path": ".claude-plugin/plugin.json",
@@ -76,7 +76,7 @@
     },
     {
       "path": "runtime/index.mjs",
-      "sha256": "895ed94bcdcfcc4fd1618246370ac2d1b11a6e2e3be116170f2f19d4e2b61036"
+      "sha256": "5ab6074d61925429ea504715ce6d4b210667ff4d5186e12a765c49713cf864d9"
     },
     {
       "path": "runtime/lite-initializer.mjs",
@@ -116,7 +116,7 @@
     },
     {
       "path": "runtime/memory-vnext-contracts.mjs",
-      "sha256": "a8e9487284a4d74a4ca8a17ad3beb37d95b0807a3b888bbb40543cfe222f4433"
+      "sha256": "134eb93a0f1f1686087f2dc31d3cba26f667e120b93b2e4dfa31bc48ad6a27a2"
     },
     {
       "path": "runtime/memory-vnext-evaluator.mjs",
@@ -140,7 +140,7 @@
     },
     {
       "path": "runtime/memory-vnext-pending-list.mjs",
-      "sha256": "2017c5dee34d1b1a0f196374a2281698a68d57ea7b1f2700fff1f06d08e0a92d"
+      "sha256": "478237fa02abd905c34135197e3d04bf5a08869d38989ec942cdc8953f537151"
     },
     {
       "path": "runtime/memory-vnext-pending-promotion.mjs",

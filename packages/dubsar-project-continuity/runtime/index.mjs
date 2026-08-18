@@ -89,13 +89,11 @@ export {
   MEMORY_PENDING_LIST_FORMAT,
   MEMORY_WORK_FORMAT,
   PENDING_LIST_DIAGNOSTICS,
-  PENDING_LIST_INTERNAL_DIAGNOSTIC_MAP,
   assertMemoryCheckpoints,
   assertMemoryKnowledge,
   assertMemoryLocalState,
   assertMemoryManifest,
   assertMemoryWork,
-  mapPendingListDiagnostic,
   memoryCheckpointDigest,
 } from "./memory-vnext-contracts.mjs";
 export { parseMemoryMarkdown, serializeMemoryMarkdown } from "./memory-vnext-markdown.mjs";

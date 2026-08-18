@@ -35,6 +35,16 @@ import { captureRegularFile } from "./safe-capture.mjs";
 const PENDING_ROOT_NAME = ".dubsar-pending";
 const MISSING_CODES = new Set(["PATH_NOT_FOUND", "REQUIRED_FILE_MISSING"]);
 
+let afterPendingRootOpened = null;
+
+/**
+ * @internal Test-only inventory seam. Not part of listPendingCheckpoints and
+ * not reexported by the public runtime entry.
+ */
+export function bindPendingListInventoryOpenProbe(probe) {
+  afterPendingRootOpened = typeof probe === "function" ? probe : null;
+}
+
 function displaySummary(value) {
   const result = safeDisplayText(value, 500);
   return result.redacted ? "[content withheld]" : result.text;
@@ -92,6 +102,9 @@ async function capturePendingInventory(projectRoot) {
   const opened = await openExactPendingRoot(projectRoot);
   if (opened === null) {
     return { kind: "absent", captures: [], ledger: null };
+  }
+  if (afterPendingRootOpened !== null) {
+    await afterPendingRootOpened(opened);
   }
 
   const captures = [];

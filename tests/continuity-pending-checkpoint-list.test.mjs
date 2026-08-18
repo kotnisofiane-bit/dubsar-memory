@@ -1141,6 +1141,80 @@ test("pending list maps a canonical snapshot race to PENDING_CAPTURE_RACE", asyn
   });
 });
 
+test("phase allowlists refuse public diagnostics that belong to another phase", async () => {
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("PENDING_LIMIT_EXCEEDED"), "locate").code,
+    "PENDING_LIST_INVALID",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("PENDING_WORKSPACE_REQUIRED"), "snapshot").code,
+    "PENDING_LIST_INVALID",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("PENDING_ENTRY_INVALID"), "pending").code,
+    "PENDING_LIST_INVALID",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("PENDING_LIMIT_EXCEEDED")).code,
+    "PENDING_LIMIT_EXCEEDED",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("PENDING_WORKSPACE_REQUIRED")).code,
+    "PENDING_WORKSPACE_REQUIRED",
+  );
+  assert.equal(
+    mapPendingListDiagnostic(new WorkbenchError("PENDING_ENTRY_INVALID")).code,
+    "PENDING_ENTRY_INVALID",
+  );
+
+  await withProject(async (root) => {
+    await expectListReject(
+      root,
+      () => listPendingCheckpoints({
+        start: root,
+        afterCanonicalCapture: async () => {
+          throw new WorkbenchError("PENDING_WORKSPACE_REQUIRED");
+        },
+      }),
+      "PENDING_LIST_INVALID",
+    );
+    await expectListReject(
+      root,
+      () => listPendingCheckpoints({
+        start: root,
+        afterInventoryPass: async () => {
+          throw new WorkbenchError("PENDING_ENTRY_INVALID");
+        },
+      }),
+      "PENDING_LIST_INVALID",
+    );
+  });
+});
+
+test("public runtime entry does not reexport pending-list mapping helpers", async () => {
+  const runtimePath = path.join(
+    REPOSITORY_ROOT,
+    "packages",
+    "dubsar-project-continuity",
+    "runtime",
+    "index.mjs",
+  );
+  const source = await readFile(runtimePath, "utf8");
+  assert.match(source, /PENDING_LIST_DIAGNOSTICS/u);
+  assert.match(source, /MEMORY_PENDING_LIST_FORMAT/u);
+  assert.equal(source.includes("PENDING_LIST_INTERNAL_DIAGNOSTIC_MAP"), false);
+  assert.equal(source.includes("mapPendingListDiagnostic"), false);
+
+  const runtime = await import(
+    "../packages/dubsar-project-continuity/runtime/index.mjs"
+  );
+  assert.equal(Object.hasOwn(runtime, "PENDING_LIST_DIAGNOSTICS"), true);
+  assert.equal(Object.hasOwn(runtime, "MEMORY_PENDING_LIST_FORMAT"), true);
+  assert.equal(Object.hasOwn(runtime, "PENDING_LIST_INTERNAL_DIAGNOSTIC_MAP"), false);
+  assert.equal(Object.hasOwn(runtime, "mapPendingListDiagnostic"), false);
+  assert.equal(Object.hasOwn(runtime, "bindPendingListInventoryOpenProbe"), false);
+});
+
 test("pending list maps unknown internals to PENDING_LIST_INVALID without leaking them in each phase", async () => {
   // Phase locate: unit and contract mapping
   assert.equal(
@@ -1216,7 +1290,8 @@ test("pending list maps unknown internals to PENDING_LIST_INVALID without leakin
     "PENDING_LIST_INVALID",
   );
 
-  // ENOENT during inventory -> PENDING_CAPTURE_RACE
+  // Mapper unit coverage for native ENOENT. The execution proof below
+  // removes a real directory after openDirectory() and before opendir().
   const enoentError = new Error("ENOENT: no such file or directory");
   enoentError.code = "ENOENT";
   assert.equal(
@@ -1224,23 +1299,46 @@ test("pending list maps unknown internals to PENDING_LIST_INVALID without leakin
     "PENDING_CAPTURE_RACE",
   );
 
+  const pendingListModule = await import(
+    "../packages/dubsar-project-continuity/runtime/memory-vnext-pending-list.mjs"
+  );
+  assert.equal(typeof pendingListModule.bindPendingListInventoryOpenProbe, "function");
+  const pendingListSource = await readFile(
+    path.join(
+      REPOSITORY_ROOT,
+      "packages",
+      "dubsar-project-continuity",
+      "runtime",
+      "memory-vnext-pending-list.mjs",
+    ),
+    "utf8",
+  );
+  assert.match(pendingListSource, /export async function listPendingCheckpoints\(\{\n  start,\n  afterInventoryPass,\n  afterCanonicalCapture,\n\} = \{\}\) \{/u);
+  assert.equal(pendingListSource.includes("bindPendingListInventoryOpenProbe,"), false);
+
   await withProject(async (root) => {
-    // Deterministic directory removal before second opendir -> PENDING_CAPTURE_RACE (ENOENT)
-    const pendingRoot = path.join(root, ".dubsar-pending");
-    await mkdir(path.join(pendingRoot, "worktree-a"), { recursive: true });
-    await writeFile(path.join(pendingRoot, "worktree-a", "cp-race.md"), "x\n");
-    const enoentDuringOpendir = new Error("ENOENT: no such file or directory");
-    enoentDuringOpendir.code = "ENOENT";
-    await expectListReject(
-      root,
-      () => listPendingCheckpoints({
-        start: root,
-        afterInventoryPass: async () => {
-          throw enoentDuringOpendir;
+    await recordCandidate(root, pendingProposal({ checkpointId: "cp-opendir-race" }));
+    let inventoryPasses = 0;
+    pendingListModule.bindPendingListInventoryOpenProbe(async (opened) => {
+      inventoryPasses += 1;
+      if (inventoryPasses === 2) {
+        await rm(opened, { recursive: true, force: true });
+      }
+    });
+    const beforeDubsar = await dubsarFingerprint(root);
+    try {
+      await assert.rejects(
+        () => listPendingCheckpoints({ start: root }),
+        (error) => {
+          assertClosedListError(error, "PENDING_CAPTURE_RACE");
+          return true;
         },
-      }),
-      "PENDING_CAPTURE_RACE",
-    );
+      );
+    } finally {
+      pendingListModule.bindPendingListInventoryOpenProbe(null);
+    }
+    assert.equal(inventoryPasses, 2);
+    assert.equal(await dubsarFingerprint(root), beforeDubsar);
 
     // Native unknown error during inventory -> PENDING_LIST_INVALID
     await expectListReject(
