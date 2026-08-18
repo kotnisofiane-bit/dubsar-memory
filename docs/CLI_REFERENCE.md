@@ -35,13 +35,15 @@ advisory and grants no execution authority.
 codes: `PENDING_CAPTURE_RACE`, `PENDING_ENTRY_INVALID`,
 `PENDING_LIMIT_EXCEEDED`, `PENDING_LIST_INVALID`, `PENDING_ROOT_UNSAFE`, and
 `PENDING_WORKSPACE_REQUIRED`. Locator, snapshot, and filesystem codes never
-cross this boundary. `WORKSPACE_NOT_FOUND`, `PATH_NOT_FOUND`, and
-`DIRECTORY_NOT_FOUND` during locate become `PENDING_WORKSPACE_REQUIRED`.
-Unsafe path, directory, marker, and boundary errors (`DIRECTORY_UNSAFE`,
-`DIRECTORY_ALIAS_REJECTED`, `WORKSPACE_MARKER_UNSAFE`, `PROJECT_BOUNDARY_UNSAFE`)
-become `PENDING_ROOT_UNSAFE`. `SNAPSHOT_CAPTURE_RACE` and concurrent file
-changes become `PENDING_CAPTURE_RACE`. Invalid or missing canonical content
-becomes `PENDING_LIST_INVALID`. Any other internal failure becomes
+cross this boundary. Each failure phase uses only its own allowlist; a public
+diagnostic used in the wrong phase becomes `PENDING_LIST_INVALID`.
+`WORKSPACE_NOT_FOUND`, `PATH_NOT_FOUND`, and `DIRECTORY_NOT_FOUND` during
+locate become `PENDING_WORKSPACE_REQUIRED`. Unsafe path, directory, marker,
+and boundary errors (`DIRECTORY_UNSAFE`, `DIRECTORY_ALIAS_REJECTED`,
+`WORKSPACE_MARKER_UNSAFE`, `PROJECT_BOUNDARY_UNSAFE`) become
+`PENDING_ROOT_UNSAFE`. `SNAPSHOT_CAPTURE_RACE` and concurrent file changes
+become `PENDING_CAPTURE_RACE`. Invalid or missing canonical content becomes
+`PENDING_LIST_INVALID`. Any other internal failure becomes
 `PENDING_LIST_INVALID`.
 
 Integrations should test the exact token they require from

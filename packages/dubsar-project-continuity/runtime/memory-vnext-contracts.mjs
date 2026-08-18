@@ -385,6 +385,7 @@ const PENDING_LIST_DIAGNOSTIC_SET = new Set(PENDING_LIST_DIAGNOSTICS);
 const LOCATE_REQUIRED_CODES = new Set([
   "DIRECTORY_NOT_FOUND",
   "PATH_NOT_FOUND",
+  "PENDING_WORKSPACE_REQUIRED",
   "WORKSPACE_NOT_FOUND",
 ]);
 
@@ -460,13 +461,19 @@ export const PENDING_LIST_INTERNAL_DIAGNOSTIC_MAP = Object.freeze(
   Object.fromEntries(PENDING_LIST_INTERNAL_DIAGNOSTIC_PAIRS),
 );
 
+/**
+ * Closed pending-list classification.
+ *
+ * 1. A named phase uses only that phase's allowlist. Public or internal
+ *    diagnostics outside it become PENDING_LIST_INVALID.
+ * 2. The unphased pass may preserve an already-normalized public diagnostic.
+ * 3. Remaining documented internals map through PENDING_LIST_INTERNAL_DIAGNOSTIC_MAP.
+ * 4. Native or unknown failures become PENDING_LIST_INVALID.
+ */
 export function mapPendingListDiagnostic(error, phase = null) {
   const code = error instanceof WorkbenchError && typeof error.code === "string"
     ? error.code
     : null;
-  if (code !== null && PENDING_LIST_DIAGNOSTIC_SET.has(code)) {
-    return error instanceof WorkbenchError ? error : new WorkbenchError(code);
-  }
   if (phase === "locate") {
     if (code !== null && LOCATE_REQUIRED_CODES.has(code)) {
       return new WorkbenchError("PENDING_WORKSPACE_REQUIRED");
@@ -483,19 +490,22 @@ export function mapPendingListDiagnostic(error, phase = null) {
     return new WorkbenchError("PENDING_LIST_INVALID");
   }
   if (phase === "pending") {
-    if (error?.code === "ENOENT") {
-      return new WorkbenchError("PENDING_CAPTURE_RACE");
-    }
     if (code !== null && PENDING_LIMIT_CODES.has(code)) {
       return new WorkbenchError("PENDING_LIMIT_EXCEEDED");
     }
-    if (code !== null && PENDING_RACE_CODES.has(code)) {
+    if (
+      (code !== null && PENDING_RACE_CODES.has(code))
+      || (code === null && error?.code === "ENOENT")
+    ) {
       return new WorkbenchError("PENDING_CAPTURE_RACE");
     }
     if (code !== null && PENDING_UNSAFE_CODES.has(code)) {
       return new WorkbenchError("PENDING_ROOT_UNSAFE");
     }
     return new WorkbenchError("PENDING_LIST_INVALID");
+  }
+  if (code !== null && PENDING_LIST_DIAGNOSTIC_SET.has(code)) {
+    return error instanceof WorkbenchError ? error : new WorkbenchError(code);
   }
   if (code !== null) {
     for (const [internal, mapped] of PENDING_LIST_INTERNAL_DIAGNOSTIC_PAIRS) {

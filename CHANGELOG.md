@@ -8,8 +8,9 @@ separate, explicitly reviewed decision.
 - close Lot 2 `pending list` diagnostics at the runtime boundary so locator,
   snapshot, and filesystem errors map to closed public codes
   (`PENDING_LIST_INVALID`, `PENDING_WORKSPACE_REQUIRED`, `PENDING_ROOT_UNSAFE`,
-  `PENDING_CAPTURE_RACE`), and lock that contract in tests and the CLI
-  reference;
+  `PENDING_CAPTURE_RACE`), apply that mapping strictly by phase, keep mapping
+  helpers off the public runtime entry, and lock that contract in tests and
+  the CLI reference;
 - classify Lot 2 `pending list` as a read command in the CLI reference and lock
   its fail-closed diagnostics, exact `.dubsar-pending` basename, traversal
   refusals, and non-observation of references in tests;
