@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -12,6 +13,11 @@ import {
 } from "../packages/dubsar-project-continuity/runtime/memory-vnext-bootstrap.mjs";
 import { openSession } from "../tools/cursor-cloud/open-session.mjs";
 import { qualifyRepository } from "../tools/cursor-cloud/qualify.mjs";
+import {
+  readPendingCandidateReferences,
+  verifyCandidateReference,
+  verifyPendingCandidateReferences,
+} from "../tools/cursor-cloud/verify-candidate-references.mjs";
 import {
   loadLotContract,
   parseRecordPendingArgs,
@@ -30,6 +36,16 @@ const LOT_CONTRACT = path.join(
   "contracts",
   "LOT-MEM-002.json",
 );
+
+const LOT_MEM_002R1_OBSOLETE = Object.freeze({
+  "tools/cursor-cloud/runtime.mjs": "f7c8e7eeebb55312171f1be499b5b17c7364e6e987caaa3ecff9306090fd9e7f",
+  "tests/cursor-cloud-continuity.test.mjs": "b90115ffa15aeca7ed0fea5ca52fecb7838ac4b9c87669aab4a85120e028985b",
+});
+
+async function sha256File(relativePath) {
+  const content = await readFile(path.join(REPOSITORY_ROOT, relativePath));
+  return createHash("sha256").update(content).digest("hex");
+}
 
 function bootstrapProposal() {
   return {
@@ -390,6 +406,143 @@ test("lot contract and record adapter never authorize promotion", async () => {
   assert.match(source, /pending",\s*"record"/u);
 });
 
+test("LOT-MEM-002R1 regression documents stale digests recorded at base f7d238e", () => {
+  assert.equal(
+    LOT_MEM_002R1_OBSOLETE["tools/cursor-cloud/runtime.mjs"],
+    "f7c8e7eeebb55312171f1be499b5b17c7364e6e987caaa3ecff9306090fd9e7f",
+  );
+  assert.equal(
+    LOT_MEM_002R1_OBSOLETE["tests/cursor-cloud-continuity.test.mjs"],
+    "b90115ffa15aeca7ed0fea5ca52fecb7838ac4b9c87669aab4a85120e028985b",
+  );
+});
+
+test("LOT-MEM-002R1 regression proves HEAD diverged from obsolete recorded digests", async () => {
+  for (const [relativePath, obsoleteDigest] of Object.entries(LOT_MEM_002R1_OBSOLETE)) {
+    assert.notEqual(await sha256File(relativePath), obsoleteDigest);
+  }
+});
+
+test("LOT-MEM-002R1 qualification rejects stale candidate references", async () => {
+  const references = await readPendingCandidateReferences({
+    repositoryRoot: REPOSITORY_ROOT,
+    declaredSource: "cursor-cloud",
+    checkpointId: "cp-lot-mem-002",
+  });
+  const stale = references.map((item) => (
+    item.path === "tools/cursor-cloud/runtime.mjs"
+      ? { ...item, sha256: "0".repeat(64) }
+      : item
+  ));
+  await assert.rejects(
+    () => verifyPendingCandidateReferences({
+      repositoryRoot: REPOSITORY_ROOT,
+      declaredSource: "cursor-cloud",
+      checkpointId: "cp-lot-mem-002",
+      references: stale,
+    }),
+    (error) => error.code === "CURSOR_CLOUD_CANDIDATE_REFERENCE_INVALID",
+  );
+});
+
+test("candidate reference verification accepts coherent references without mutating memory", async () => {
+  const references = await readPendingCandidateReferences({
+    repositoryRoot: REPOSITORY_ROOT,
+    declaredSource: "cursor-cloud",
+    checkpointId: "cp-lot-mem-002",
+  });
+  const currentReferences = [];
+  for (const item of references) {
+    currentReferences.push({
+      path: item.path,
+      sha256: await sha256File(item.path),
+    });
+  }
+  const proof = await verifyPendingCandidateReferences({
+    repositoryRoot: REPOSITORY_ROOT,
+    declaredSource: "cursor-cloud",
+    checkpointId: "cp-lot-mem-002",
+    references: currentReferences,
+  });
+  assert.equal(proof.inventories.unchanged, true);
+  assert.equal(proof.count, references.length);
+});
+
+test("candidate reference verification refuses modified missing unsafe and oversized files", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "dubsar-ref-verify-"));
+  try {
+    await mkdir(path.join(root, "notes"));
+    await writeFile(path.join(root, "notes", "good.txt"), "good\n");
+    const goodDigest = createHash("sha256").update("good\n").digest("hex");
+    const good = { path: "notes/good.txt", sha256: goodDigest };
+
+    await verifyPendingCandidateReferences({
+      repositoryRoot: root,
+      declaredSource: "fixture",
+      checkpointId: "cp-ref-good",
+      references: [good],
+    });
+
+    await assert.rejects(
+      () => verifyPendingCandidateReferences({
+        repositoryRoot: root,
+        declaredSource: "fixture",
+        checkpointId: "cp-ref-stale",
+        references: [{ path: "notes/good.txt", sha256: "a".repeat(64) }],
+      }),
+      (error) => error.code === "CURSOR_CLOUD_CANDIDATE_REFERENCE_INVALID",
+    );
+
+    await assert.rejects(
+      () => verifyCandidateReference({
+        repositoryRoot: root,
+        reference: { path: "notes/missing.txt", sha256: goodDigest },
+      }),
+      (error) => error.code === "CURSOR_CLOUD_CANDIDATE_REFERENCE_MISSING",
+    );
+
+    for (const unsafePath of ["../outside.txt", "/etc/passwd", "foo/../bar.txt"]) {
+      await assert.rejects(
+        () => verifyCandidateReference({
+          repositoryRoot: root,
+          reference: { path: unsafePath, sha256: goodDigest },
+        }),
+        (error) => error.code === "CURSOR_CLOUD_CANDIDATE_REFERENCE_UNSAFE",
+      );
+    }
+
+    const linkTarget = path.join(root, "notes", "link-target.txt");
+    const linkAlias = path.join(root, "notes", "link-alias.txt");
+    await writeFile(linkTarget, "linked\n");
+    const linkedDigest = createHash("sha256").update("linked\n").digest("hex");
+    try {
+      await symlink(linkTarget, linkAlias);
+      await assert.rejects(
+        () => verifyCandidateReference({
+          repositoryRoot: root,
+          reference: { path: "notes/link-alias.txt", sha256: linkedDigest },
+        }),
+        (error) => error.code === "CURSOR_CLOUD_CANDIDATE_REFERENCE_UNSAFE",
+      );
+    } catch (error) {
+      if (error?.code !== "EPERM" && error?.code !== "ENOTSUP") throw error;
+    }
+
+    await writeFile(path.join(root, "notes", "big.txt"), "x".repeat(2048));
+    const bigDigest = createHash("sha256").update("x".repeat(2048)).digest("hex");
+    await assert.rejects(
+      () => verifyCandidateReference({
+        repositoryRoot: root,
+        reference: { path: "notes/big.txt", sha256: bigDigest },
+        maxBytes: 512,
+      }),
+      (error) => error.code === "CURSOR_CLOUD_CANDIDATE_REFERENCE_TOO_LARGE",
+    );
+  } finally {
+    await removeTree(root);
+  }
+});
+
 test("this repository memory is readable through the session bridge", async () => {
   const session = await openSession({ start: REPOSITORY_ROOT });
   assert.equal(session.format, "dubsar.cursor-cloud-session/1");
@@ -406,5 +559,7 @@ test("this repository memory is readable through the session bridge", async () =
   assert.equal(qualification.status, "ready");
   assert.equal(qualification.inventories.unchanged, true);
   assert.equal(qualification.session.pending_checkpoint_id, "cp-lot-mem-002");
+  assert.equal(qualification.candidate_references.verified, true);
+  assert.equal(qualification.refusals.stale_reference, "CURSOR_CLOUD_CANDIDATE_REFERENCE_INVALID");
   assert.equal(qualification.refusals.pending_promote, false);
 });
