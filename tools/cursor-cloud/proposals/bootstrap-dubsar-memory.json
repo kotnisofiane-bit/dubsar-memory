@@ -1,0 +1,47 @@
+{
+  "format": "dubsar.memory-bootstrap-proposal/1",
+  "project_id": "dubsar-memory",
+  "title": "Local deterministic project continuity for supported agents",
+  "work": {
+    "format": "dubsar.work/1",
+    "work_id": "integrate-cursor-cloud-continuity",
+    "title": "Integrate Cursor Cloud continuity",
+    "status": "open",
+    "scope": "multi_session",
+    "objective": "Make DUBSAR Memory usable by Cursor Cloud in this repository without treating advisory routing as authority.",
+    "acceptance_criteria": [
+      "A versioned Cursor Cloud environment resolves the in-repository runtime.",
+      "Session open loads resume, route, and pending list without writing memory.",
+      "A pending candidate is recorded only with an explicit lot-contract authorization."
+    ],
+    "knowledge_ids": [],
+    "references": []
+  },
+  "work_body": "This Work records the Cursor Cloud continuity pilot for the public dubsar-memory repository. It does not claim that the integration is validated, mergeable, or ready to copy into another repository.",
+  "selected_work_id": "integrate-cursor-cloud-continuity",
+  "checkpoint": {
+    "checkpoint_id": "cp-cursor-cloud-base",
+    "work_id": "integrate-cursor-cloud-continuity",
+    "kind": "progress",
+    "summary": "Canonical project memory exists for the Cursor Cloud continuity pilot.",
+    "references": [
+      {
+        "path": "README.md",
+        "sha256": "a6141b8901ff4371c3d893967453c554d20f75c005515c4a91e081040442000c"
+      }
+    ],
+    "validation": [],
+    "limitations": [
+      "No other repository has received this pilot.",
+      "No pending candidate has been promoted into canonical checkpoints."
+    ],
+    "resolves": null,
+    "attempt": null,
+    "resulting_state": {
+      "status": "active",
+      "summary": "Canonical memory is ready for the Cursor Cloud session bridges.",
+      "blockers": [],
+      "next_action": "Have the Cursor Cloud continuity pilot audited before any deployment to another repository."
+    }
+  }
+}

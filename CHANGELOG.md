@@ -5,6 +5,9 @@ separate, explicitly reviewed decision.
 
 ## Public technical preview — 0.3.0-dev
 
+- add a versioned Cursor Cloud environment, session-open bridge, and
+  pending-record bridge so this repository can resume, route, and record a
+  pending candidate without treating `route` as execution authority;
 - close Lot 2 `pending list` diagnostics at the runtime boundary so locator,
   snapshot, and filesystem errors map to closed public codes
   (`PENDING_LIST_INVALID`, `PENDING_WORKSPACE_REQUIRED`, `PENDING_ROOT_UNSAFE`,

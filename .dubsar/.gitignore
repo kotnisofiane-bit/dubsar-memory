@@ -1,0 +1,5 @@
+inbox/*
+!inbox/.gitkeep
+generated/*
+!generated/.gitkeep
+local.json

@@ -78,7 +78,9 @@ deletes or rewrites the pending file. See the
 - the JSON CLI is the supported integration boundary for the preview;
 - the JavaScript module graph and HTML data contracts may still evolve before
   a stable release;
-- no npm package is published yet.
+- no npm package is published yet;
+- this repository's Cursor Cloud environment is install-only: it verifies the
+  in-tree runtime and never starts a daemon, hook, MCP server, or the next lot.
 
 ## Product scope
 

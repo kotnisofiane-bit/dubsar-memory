@@ -1,0 +1,8 @@
+{
+  "format": "dubsar.cursor-cloud-lot-contract/1",
+  "lot_id": "LOT-MEM-002",
+  "title": "Cursor Cloud continuity integration",
+  "authorize_pending_checkpoint": true,
+  "authorize_pending_promotion": false,
+  "authorize_canonical_write": false
+}

@@ -67,6 +67,11 @@ They invoke the same packaged runtime from Codex, Claude Code, and Cursor. They
 do not replace the host's plan, goal, permissions, subagents, or approval UI.
 See [`HOSTS.md`](../HOSTS.md).
 
+This repository additionally versions a Cursor Cloud environment in
+`.cursor/environment.json` plus session-open and pending-record bridges in
+`tools/cursor-cloud/`. Those bridges quote memory as untrusted data, treat
+`route` as advisory only, and never promote a pending candidate.
+
 ## Product integration
 
 DUBSAR is suitable as a project-memory component when the product needs:

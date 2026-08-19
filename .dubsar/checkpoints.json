@@ -1,0 +1,34 @@
+{
+  "entries": [
+    {
+      "attempt": null,
+      "checkpoint_id": "cp-cursor-cloud-base",
+      "checkpoint_sha256": "86221ea993f2bbb5968612bdf73a58ed93ef75bb12449e1400dbd82f6fe6f8ff",
+      "index": 0,
+      "kind": "progress",
+      "limitations": [
+        "No other repository has received this pilot.",
+        "No pending candidate has been promoted into canonical checkpoints."
+      ],
+      "previous_checkpoint_sha256": null,
+      "references": [
+        {
+          "path": "README.md",
+          "sha256": "a6141b8901ff4371c3d893967453c554d20f75c005515c4a91e081040442000c"
+        }
+      ],
+      "resolves": null,
+      "resulting_state": {
+        "blockers": [],
+        "next_action": "Have the Cursor Cloud continuity pilot audited before any deployment to another repository.",
+        "status": "active",
+        "summary": "Canonical memory is ready for the Cursor Cloud session bridges."
+      },
+      "summary": "Canonical project memory exists for the Cursor Cloud continuity pilot.",
+      "validation": [],
+      "work_id": "integrate-cursor-cloud-continuity"
+    }
+  ],
+  "format": "dubsar.continuity-checkpoints/2",
+  "project_id": "dubsar-memory"
+}

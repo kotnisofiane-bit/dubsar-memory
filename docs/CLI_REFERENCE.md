@@ -101,3 +101,20 @@ formats as unsupported rather than guessing their meaning.
 
 Consumers should fail closed on any non-zero code and should not retry a write
 automatically.
+
+## Cursor Cloud repository bridges
+
+These adapters are not CLI verbs. They resolve
+`packages/dubsar-project-continuity/bin/dubsar.mjs` from the checkout, never
+from `PATH`, and they never change `resume`, `route`, `pending list`,
+`pending record`, or `pending promote` semantics.
+
+```bash
+node tools/cursor-cloud/install.mjs
+node tools/cursor-cloud/open-session.mjs --start .
+node tools/cursor-cloud/record-pending.mjs --start . --contract <lot-contract.json> --proposal <outside-project.json>
+```
+
+`open-session` is read-only. `record-pending` writes only under `.dubsar-pending/`
+and only when the lot contract sets `authorize_pending_checkpoint` to `true`.
+It never runs `pending promote`.
