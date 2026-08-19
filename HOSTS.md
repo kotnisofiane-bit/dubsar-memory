@@ -35,9 +35,18 @@ independent of DUBSAR.
 
 ## Cursor
 
-Copy the complete `packages/dubsar-project-continuity` directory into Cursor's
-local plugin directory, then reload the window. Copying only `skills/` is not
-sufficient because adapters invoke the packaged runtime.
+This repository versions a Cursor Cloud environment in `.cursor/environment.json`.
+The install command resolves `packages/dubsar-project-continuity/bin/dubsar.mjs`
+from the checkout and verifies capabilities. It never searches `PATH`, never
+starts a daemon, and never writes project memory.
+
+Session open and pending-record adapters live in `tools/cursor-cloud/`. They are
+repository bridges, not additional published host skills.
+
+Copying the complete `packages/dubsar-project-continuity` directory into Cursor's
+local plugin directory remains the optional adapter install for other projects.
+Copying only `skills/` is not sufficient because adapters invoke the packaged
+runtime.
 
 ## Product boundary
 

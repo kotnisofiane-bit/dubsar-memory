@@ -1,0 +1,4 @@
+{
+  "name": "DUBSAR Memory",
+  "install": "node tools/cursor-cloud/install.mjs"
+}
