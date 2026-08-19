@@ -114,6 +114,20 @@ async function invoke(bin, args, { cwd = REPOSITORY_ROOT, env = process.env } = 
   });
 }
 
+async function removeTree(root) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      await rm(root, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (!["EBUSY", "ENOTEMPTY", "EPERM"].includes(error?.code) || attempt === 7) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)));
+    }
+  }
+}
+
 async function withProject(run) {
   const root = await mkdtemp(path.join(os.tmpdir(), "dubsar-cursor-cloud-"));
   try {
@@ -287,7 +301,7 @@ test("session open refuses missing memory and oversized output", async () => {
       (error) => error.code === "CURSOR_CLOUD_OUTPUT_INVALID",
     );
   } finally {
-    await rm(stubRoot, { recursive: true, force: true });
+    await removeTree(stubRoot);
   }
 });
 

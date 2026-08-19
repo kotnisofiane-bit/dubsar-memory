@@ -190,10 +190,7 @@ export async function invokeDubsar({
     let stdout = Buffer.alloc(0);
     let stderr = Buffer.alloc(0);
     let settled = false;
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM");
-      finish(new CursorCloudError("CURSOR_CLOUD_TIMEOUT"));
-    }, timeoutMs);
+    let failure = null;
     const finish = (error, value) => {
       if (settled) return;
       settled = true;
@@ -201,27 +198,35 @@ export async function invokeDubsar({
       if (error) reject(error);
       else resolve(value);
     };
+    const abort = (error) => {
+      failure = failure ?? error;
+      child.kill("SIGTERM");
+    };
+    const timer = setTimeout(() => {
+      abort(new CursorCloudError("CURSOR_CLOUD_TIMEOUT"));
+    }, timeoutMs);
     child.stdout.on("data", (chunk) => {
       stdout = Buffer.concat([stdout, chunk]);
       if (stdout.length > maxBytes) {
-        child.kill("SIGTERM");
-        finish(new CursorCloudError("CURSOR_CLOUD_OUTPUT_TOO_LARGE"));
+        abort(new CursorCloudError("CURSOR_CLOUD_OUTPUT_TOO_LARGE"));
       }
     });
     child.stderr.on("data", (chunk) => {
       stderr = Buffer.concat([stderr, chunk]);
       if (stderr.length > maxBytes) {
-        child.kill("SIGTERM");
-        finish(new CursorCloudError("CURSOR_CLOUD_OUTPUT_TOO_LARGE"));
+        abort(new CursorCloudError("CURSOR_CLOUD_OUTPUT_TOO_LARGE"));
       }
     });
-    child.once("error", (error) => finish(error));
+    child.once("error", (error) => abort(error));
     child.once("close", (exitCode) => {
-      finish(null, {
-        exitCode: exitCode ?? 1,
-        stdout: stdout.toString("utf8"),
-        stderr: stderr.toString("utf8"),
-      });
+      if (failure) finish(failure);
+      else {
+        finish(null, {
+          exitCode: exitCode ?? 1,
+          stdout: stdout.toString("utf8"),
+          stderr: stderr.toString("utf8"),
+        });
+      }
     });
   });
 }
