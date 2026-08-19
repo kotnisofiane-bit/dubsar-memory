@@ -5,6 +5,7 @@ import path from "node:path";
 import { installEnvironment } from "./install.mjs";
 import { openSession } from "./open-session.mjs";
 import { recordPendingCheckpoint } from "./record-pending.mjs";
+import { verifyPendingCandidateReferences } from "./verify-candidate-references.mjs";
 import {
   CursorCloudError,
   REQUIRED_INSTALL_CAPABILITIES,
@@ -173,6 +174,12 @@ export async function qualifyRepository(repositoryRoot = REPOSITORY_ROOT) {
     throw new CursorCloudError("CURSOR_CLOUD_FORMAT_INVALID");
   }
 
+  const referenceProof = await verifyPendingCandidateReferences({
+    repositoryRoot,
+    declaredSource: EXPECTED_PENDING_SOURCE,
+    checkpointId: EXPECTED_PENDING_ID,
+  });
+
   const afterDubsar = await inventoryFingerprint(path.join(repositoryRoot, ".dubsar"));
   const afterPending = await inventoryFingerprint(path.join(repositoryRoot, ".dubsar-pending"));
   if (afterDubsar !== beforeDubsar || afterPending !== beforePending) {
@@ -201,6 +208,10 @@ export async function qualifyRepository(repositoryRoot = REPOSITORY_ROOT) {
       pending_checkpoint_id: candidate.checkpoint_id,
       pending_declared_source: candidate.declared_source,
     },
+    candidate_references: {
+      count: referenceProof.count,
+      verified: true,
+    },
     inventories: {
       dubsar_sha256: afterDubsar,
       pending_sha256: afterPending,
@@ -210,6 +221,7 @@ export async function qualifyRepository(repositoryRoot = REPOSITORY_ROOT) {
       malformed_output: "CURSOR_CLOUD_OUTPUT_INVALID",
       oversized_output: "CURSOR_CLOUD_OUTPUT_TOO_LARGE",
       unauthorized_record: "CURSOR_CLOUD_AUTHORIZATION_REQUIRED",
+      stale_reference: "CURSOR_CLOUD_CANDIDATE_REFERENCE_INVALID",
       pending_promote: false,
     },
   };
