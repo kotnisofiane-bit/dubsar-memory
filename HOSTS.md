@@ -43,6 +43,15 @@ starts a daemon, and never writes project memory.
 Session open and pending-record adapters live in `tools/cursor-cloud/`. They are
 repository bridges, not additional published host skills.
 
+LOT-MEM-002's Cursor Cloud continuity implementation is merged source that
+the in-tree `qualify` gate and continuity tests have technically verified.
+That observed technical qualification is not human admission, not promotion
+into canonical `.dubsar/checkpoints.json`, and not merge, deployment, or
+rollout authority. The pending candidate
+`.dubsar-pending/cursor-cloud/cp-lot-mem-002.md` remains advisory and awaits
+a separate human audit; a green CI run, a merged implementation, or a
+pending-candidate file does not grant `pending promote`.
+
 Copying the complete `packages/dubsar-project-continuity` directory into Cursor's
 local plugin directory remains the optional adapter install for other projects.
 Copying only `skills/` is not sufficient because adapters invoke the packaged
