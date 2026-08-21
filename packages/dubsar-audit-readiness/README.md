@@ -1,7 +1,14 @@
 # DUBSAR Audit Readiness
 
+> **Historical / frozen / non-active.** This package is retained only as
+> compatibility material. It is excluded from the active DUBSAR Memory /
+> Project Continuity product (`0.3.0-dev`) and from the Continuity
+> marketplaces and release registry. See [`LEGACY.md`](LEGACY.md) and the
+> repository-level [`PUBLIC_BOUNDARY.md`](../../PUBLIC_BOUNDARY.md).
+
 Portable Agent Skills for preparing a bounded automation or AI-agent audit
-from user-approved local evidence.
+from user-approved local evidence. The description below is historical: it
+documents the frozen pack, not an active product surface.
 
 ## Skills
 
@@ -71,6 +78,12 @@ the self-contained umbrella skill mirrored under the repository root
 
 ## Status
 
-Public beta v0.2.0 under the MIT License. The package includes reviewed
-clean-room provenance and a deterministic release inventory. See the
-repository-level `PUBLIC_BOUNDARY.md`.
+This package is historical, frozen, and not an active product. It is not a
+public beta of DUBSAR Memory and must not be presented as one.
+
+Its last recorded historical version is v0.2.0 under the MIT License. The
+frozen pack still includes the reviewed clean-room provenance and
+deterministic release inventory captured for that historical snapshot. Those
+facts describe the frozen material; they do not mark this pack as current,
+operational, or released. See [`LEGACY.md`](LEGACY.md) and the
+repository-level [`PUBLIC_BOUNDARY.md`](../../PUBLIC_BOUNDARY.md).
