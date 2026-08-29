@@ -4,7 +4,7 @@
 
 ## Identité et stockage
 
-Les identifiants affichés sont alloués séquentiellement de `DUB-001` à `DUB-999`. Le compteur et les tickets sont conservés dans `.dubsar/tickets.json`; la lecture d'un registre absent retourne une vue vide en mémoire et ne crée aucun fichier. Un ticket peut référencer un `work_id` existant.
+Les identifiants affichés sont alloués séquentiellement de `DUB-001` à `DUB-999`. Les tickets restent dans `.dubsar/tickets.json` de leur projet, tandis que le launcher conserve le compteur mono-utilisateur global dans `ticket-allocations.json`, à côté de son registre de projets. Deux projets ne peuvent donc pas recevoir le même identifiant, y compris après redémarrage. La lecture d'un registre absent retourne une vue vide en mémoire et ne crée aucun fichier. Un ticket peut référencer un `work_id` existant.
 
 ## Écritures
 
@@ -20,7 +20,7 @@ La CLI accepte `dubsar tickets list|create|transition|activity`. Les opérations
 
 États : Backlog, To Do, In Progress, In Review, Blocked, Paused, Done, Cancelled, Duplicate. `Duplicate` exige la cible d'un autre ticket. Sortir de Done, Cancelled ou Duplicate exige `reopen_confirmed: true` lors d'une action distincte et confirmée.
 
-Le passage à Done exige une preuve structurée `github_merge` réellement vérifiée : URL de pull request GitHub, indicateur `merged`, indicateur `verified` et SHA de commit de fusion. Un rapport textuel d'agent n'est jamais accepté.
+Le passage à Done reçoit seulement une déclaration `github_claim`. Le moteur n'accorde aucune autorité à ses booléens et échoue si aucun observer de confiance n'est injecté. Cet observer doit corroborer exactement le dépôt, la PR, le SHA de fusion et l'identifiant du ticket sous l'autorité `trusted_github_observer`; toute divergence est refusée. Aucun accès réseau n'existe dans le moteur pur et un rapport textuel d'agent n'est jamais accepté.
 
 ## Activité
 
@@ -28,4 +28,4 @@ Chaque entrée possède un index enregistré strictement croissant et un digest 
 
 ## Sécurité et limites
 
-Le registre est local. Le serveur Workbench reste exclusivement sur IPv4 loopback, sans CORS large, chemin libre ni accès sortant. Les vues Resume, Memory et Graph demeurent disponibles dans la section Advanced.
+Le registre est local. Le serveur Workbench reste exclusivement sur IPv4 loopback, sans CORS large, chemin libre ni accès sortant. Son canal d'action accepte uniquement deux routes de capability same-origin (`tickets/preview/` et `tickets/apply/`), des corps JSON bornés et le projet d'une allowlist construite par le launcher. My Work fournit groupes d'état, recherche, filtres projet/état, fiche détaillée, aperçu et confirmation. Le français est la langue initiale et l'anglais est sélectionnable. Les vues Resume, Memory et Graph demeurent disponibles dans la section Advanced.

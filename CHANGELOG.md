@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Add the versioned local `dubsar.tickets/1` contract, deterministic DUB-### allocation, digest-linked bounded activity, preview/apply receipts, ticket CLI, and the My Work landing view (KOT-116).
+- Harden KOT-116 with launcher-global multi-project allocation, injected GitHub merge corroboration, an allowlisted loopback preview/apply channel, actionable filters/details, bilingual UI, and transversal acceptance coverage.
 
 All notable source changes are documented here. Package publication remains a
 separate, explicitly reviewed decision.

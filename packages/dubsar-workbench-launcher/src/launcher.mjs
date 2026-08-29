@@ -24,6 +24,7 @@ import {
 import {
   startLiveInteractiveWorkbenchServer,
   startOneShotInteractiveWorkbenchServer,
+  startTicketInteractiveWorkbenchServer,
 } from "../../dubsar-workbench-server/src/index.mjs";
 import { capturePersonalMemory } from "./personal-memory.mjs";
 import { selectProjectFolder } from "./folder-picker.mjs";
@@ -105,7 +106,7 @@ async function resolveChrome(environment, override) {
   throw new WorkbenchLauncherError("CHROME_NOT_FOUND");
 }
 
-async function generateReport(start, includeReviews, memoryRoot) {
+async function generateReport(start, includeReviews, memoryRoot, ticketActions = false) {
   let inspection;
   let memory;
   try {
@@ -134,6 +135,7 @@ async function generateReport(start, includeReviews, memoryRoot) {
       ...(includeReviews ? { reviewLedger: inspection.review_ledger } : {}),
       ...(memory === undefined ? {} : { memory }),
       tickets,
+      ticketActions,
     });
   } catch {
     throw new WorkbenchLauncherError("REPORT_GENERATION_FAILED");
@@ -302,6 +304,18 @@ async function serveReportOnce(chrome, report, runtime, isolated = true) {
   }
 }
 
+async function serveTicketReport(chrome, report, handler, runtime) {
+  let session;
+  try {
+    session = await runtime.startTicketServer(liveInteractiveServerPayload(report), handler);
+    await openChrome(chrome, session.url, runtime.spawnProcess, false);
+    await session.closed;
+  } catch (error) {
+    if (error instanceof WorkbenchLauncherError) throw error;
+    throw new WorkbenchLauncherError("CHROME_DELIVERY_FAILED");
+  } finally { await session?.close("launcher-finalize"); }
+}
+
 async function refreshCatalogProject(registry, includeReviews, projectId) {
   const entry = registry.projects.find((project) => project.project_id === projectId);
   if (!entry) throw new WorkbenchLauncherError("PROJECT_NOT_FOUND");
@@ -369,11 +383,12 @@ async function executeLaunch(options, runtime) {
     });
   }
 
+  const safeOutputRoot = await resolveOutputRoot(runtime.environment, runtime.outputRoot);
   let registry;
   let report;
   let sourceSnapshotSha256;
   if (memoryRoot !== undefined) {
-    report = await generateReport(startPath, includeReviews, memoryRoot);
+    report = await generateReport(startPath, includeReviews, memoryRoot, transport === "loopback");
     sourceSnapshotSha256 = report.manifest.source_snapshot_sha256;
   } else {
     registry = createProjectRegistry([{
@@ -394,11 +409,11 @@ async function executeLaunch(options, runtime) {
     sourceSnapshotSha256 = report.catalog.projects.at(0).snapshot_sha256;
   }
 
-  const safeOutputRoot = await resolveOutputRoot(runtime.environment, runtime.outputRoot);
   const reportPath = await publishReport(safeOutputRoot, report);
   if (transport === "loopback") {
     if (registry === undefined) {
-      await serveReportOnce(chrome, report, runtime, false);
+      const handler = createTicketDashboardHandler({ allocationRoot: safeOutputRoot, projects: [{ project_id: DIRECT_PROJECT_ID, root: location.project_root }], observeGithubMerge: runtime.observeGithubMerge });
+      await serveTicketReport(chrome, report, handler, runtime);
     } else {
       const liveReport = renderCatalogSnapshot(report.catalog, true);
       await serveReportLive(
@@ -496,6 +511,7 @@ export async function launchWorkbench({
     selectFolder: selectProjectFolder,
     startLiveServer: startLiveInteractiveWorkbenchServer,
     startOneShotServer: startOneShotInteractiveWorkbenchServer,
+    startTicketServer: startTicketInteractiveWorkbenchServer,
   };
   return start === undefined
     ? executeCatalogLaunch(
@@ -579,6 +595,8 @@ export async function launchWorkbenchForTest({
   transport = "file",
   startLiveServer = startLiveInteractiveWorkbenchServer,
   startOneShotServer = startOneShotInteractiveWorkbenchServer,
+  startTicketServer,
+  observeGithubMerge,
 }) {
   const runtime = {
     environment: { localAppData: outputRoot, systemRoot },
@@ -588,6 +606,8 @@ export async function launchWorkbenchForTest({
     selectFolder,
     startLiveServer,
     startOneShotServer,
+    startTicketServer: startTicketServer ?? ((payload) => startOneShotServer(payload)),
+    observeGithubMerge,
   };
   return start === undefined
     ? executeCatalogLaunch(
@@ -614,12 +634,14 @@ function parseTicketArguments(argv) {
     if (token === "--start") options.start = value;
     else if (token === "--proposal") options.proposal = value;
     else if (token === "--expected-change") options.expected_change = value;
+    else if (token === "--allocation-root") options.allocation_root = value;
+    else if (token === "--project-id") options.project_id = value;
     else throw new TicketError("TICKET_CLI_ARGUMENT_INVALID");
   }
-  if (!options.start) throw new TicketError("TICKET_CLI_ARGUMENT_INVALID");
+  if (!options.start || !options.allocation_root || !options.project_id) throw new TicketError("TICKET_CLI_ARGUMENT_INVALID");
   return { action, options };
 }
-export async function runTicketCli(argv, io = console) {
+export async function runTicketCli(argv, io = console, boundaries = {}) {
   try {
     const { action, options } = parseTicketArguments(argv); let value;
     if (action === "list") {
@@ -630,11 +652,24 @@ export async function runTicketCli(argv, io = console) {
       const proposalPath = path.resolve(options.proposal);
       const operation = JSON.parse((await captureRegularFile(path.dirname(proposalPath), path.basename(proposalPath), 64 * 1024)).content.toString("utf8"));
       if (operation.type !== action) throw new TicketError("TICKET_CLI_ARGUMENT_INVALID");
-      value = options.apply ? await applyTicketChange({ start: options.start, operation: { ...operation, ...(options.reopen_confirmed ? { reopen_confirmed: true } : {}) }, expectedChange: options.expected_change }) : await previewTicketChange({ start: options.start, operation });
+      const request = { start: options.start, allocationRoot: options.allocation_root, projectId: options.project_id, operation: { ...operation, ...(options.reopen_confirmed ? { reopen_confirmed: true } : {}) }, observeGithubMerge: boundaries.observeGithubMerge };
+      value = options.apply ? await applyTicketChange({ ...request, expectedChange: options.expected_change }) : await previewTicketChange(request);
     }
     io.log(JSON.stringify(value, null, options.json ? 0 : 2)); return { exitCode: 0, value };
   } catch (error) {
     const code = error instanceof TicketError ? error.code : "TICKET_CLI_FAILED";
     io.error(JSON.stringify({ format: "dubsar.ticket-cli-error/1", code })); return { exitCode: 1, error: code };
   }
+}
+
+export function createTicketDashboardHandler({ allocationRoot, projects, observeGithubMerge }) {
+  if (!Array.isArray(projects) || projects.length === 0 || projects.some((item) => !item || typeof item.project_id !== "string" || typeof item.root !== "string")) throw new TicketError("TICKET_DASHBOARD_CONFIGURATION_INVALID");
+  const allowlist = new Map(projects.map((item) => [item.project_id, item.root]));
+  return async (action, input) => {
+    if (!input || typeof input !== "object" || Array.isArray(input) || !new Set(["preview", "apply"]).has(action) || typeof input.project_id !== "string" || !allowlist.has(input.project_id) || !input.operation || typeof input.operation !== "object") throw new TicketError("TICKET_DASHBOARD_REQUEST_INVALID");
+    const request = { start: allowlist.get(input.project_id), allocationRoot, projectId: input.project_id, operation: input.operation, observeGithubMerge };
+    if (action === "preview") return previewTicketChange(request);
+    if (typeof input.expected_change_sha256 !== "string") throw new TicketError("TICKET_EXPECTED_CHANGE_INVALID");
+    return applyTicketChange({ ...request, expectedChange: input.expected_change_sha256 });
+  };
 }

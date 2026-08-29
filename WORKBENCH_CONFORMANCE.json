@@ -781,8 +781,8 @@
     },
     {
       "path": "packages/dubsar-workbench-launcher/src/launcher.mjs",
-      "bytes": 21876,
-      "sha256": "3106aa095f46be0783d9b2cf5fd0bcf689492dbfdd91d9a3253b1b2f87b6dcb9",
+      "bytes": 24449,
+      "sha256": "188212c639761aee4addaf8da2703d38a927beed685079fe1d354c610d1e8027",
       "role": "runtime"
     },
     {
@@ -793,8 +793,8 @@
     },
     {
       "path": "packages/dubsar-workbench-launcher/src/registry-store.mjs",
-      "bytes": 13102,
-      "sha256": "03bbbbbc336cc8296cc486b377c0555982130bd0fd1844566939e969e2897d12",
+      "bytes": 17677,
+      "sha256": "28a685cb3efd491ddabac982993c285e8d72ab36938677bc4fcdd18ad7b85996",
       "role": "runtime"
     },
     {
@@ -829,14 +829,14 @@
     },
     {
       "path": "packages/dubsar-workbench-report/src/interactive-assets.mjs",
-      "bytes": 37839,
-      "sha256": "c5e591fdb61ce76bea8e98cd6ce34e774d139f190914b184459fb165b525327c",
+      "bytes": 44166,
+      "sha256": "5346b7857bc7141a9d8d56bb4acbbe83c7b91ee586261e701893a401def9bf7e",
       "role": "runtime"
     },
     {
       "path": "packages/dubsar-workbench-report/src/interactive.mjs",
-      "bytes": 31510,
-      "sha256": "3bbb40a85ae3ba75f8e22646a0b9c0eaa33f76c759753268ba240917d0adf659",
+      "bytes": 33394,
+      "sha256": "04d02e671331483f11e6b138735191128b07d606019a847739fba8fb0a9d52d7",
       "role": "runtime"
     },
     {
@@ -865,16 +865,16 @@
     },
     {
       "path": "packages/dubsar-workbench-server/src/index.mjs",
-      "bytes": 217,
-      "sha256": "9324bcfa2bb70ff71a9be5bbc2954f6b4ecc19a33d5fee0eb65a71ddc6408101",
+      "bytes": 258,
+      "sha256": "3485fbf845d1639b8933c2e3bbe5b08e120b1cef81788b955c097397a5eeb385",
       "role": "runtime"
     },
     {
       "path": "packages/dubsar-workbench-server/src/server.mjs",
-      "bytes": 25746,
-      "sha256": "dcf7cdbffa01d9c355760d17d28ba496b45dbebb6b6e730f14393a4d5b210d8f",
+      "bytes": 28655,
+      "sha256": "1f67dc32447ccaf88dd8ce4950ab389c750c30e552d6fdb7fc6a83113493133f",
       "role": "runtime"
     }
   ],
-  "content_root_sha256": "0af022bbe44d0e28b45094c5aaa73610b47b446354b1dea0af13a76cb31698be"
+  "content_root_sha256": "5b1aec610798f957245dbf042c76803f5338bc4af46286d65f2e3645189941ec"
 }

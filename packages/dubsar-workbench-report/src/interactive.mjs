@@ -415,7 +415,7 @@ export function graphProjection(graph, view) {
   });
 }
 
-function interactiveData(view, reviews, graph, memory) {
+function interactiveData(view, reviews, graph, memory, tickets) {
   return Object.freeze({
     format: WORKBENCH_INTERACTIVE_DATA_FORMAT,
     authority: WORKBENCH_AUTHORITY,
@@ -423,6 +423,7 @@ function interactiveData(view, reviews, graph, memory) {
     graph,
     reviews,
     memory,
+    tickets,
   });
 }
 
@@ -548,7 +549,7 @@ function technicalFormatLines(formats) {
   return formats.map((format) => escapeHtmlText(format)).join(", ");
 }
 
-function renderInteractiveDocument(view, reviews, graph, memory, dataJson, tickets = []) {
+function renderInteractiveDocument(view, reviews, graph, memory, dataJson, tickets = [], ticketActions = false) {
   const status = statusFor(view);
   const categories = memory.categories;
   const lotsComplete = countValue(view.overview.counts.complete_lots);
@@ -567,9 +568,13 @@ function renderInteractiveDocument(view, reviews, graph, memory, dataJson, ticke
   const styleHash = cspHash(INTERACTIVE_STYLE);
   const scriptHash = cspHash(INTERACTIVE_SCRIPT);
   const sourceId = view.source.id ?? "non affiché";
-  const ticketRows = tickets.length === 0
-    ? ["          <li class=\"empty-state\">Aucun ticket local. Créez-en un avec la CLI DUBSAR.</li>"]
-    : tickets.map((ticket) => `          <li class="ticket-card"><button type="button" aria-label="Ouvrir ${escapeHtmlText(ticket.id)}"><strong>${escapeHtmlText(ticket.id)} · ${escapeHtmlText(ticket.title)}</strong><span class="state-detail">${escapeHtmlText(ticket.state)} — ${escapeHtmlText(ticket.objective)}</span></button></li>`);
+  const orderedStates = ["Backlog", "To Do", "In Progress", "In Review", "Blocked", "Paused", "Done", "Cancelled", "Duplicate"];
+  const ticketRows = orderedStates.flatMap((state) => [
+    `          <li class="ticket-group" data-ticket-group="${state}"><h3>${state}</h3><ul>`,
+    ...(tickets.filter((ticket) => ticket.state === state).map((ticket) => `            <li class="ticket-card" data-ticket-state="${escapeHtmlText(ticket.state)}" data-ticket-project="${escapeHtmlText(ticket.project ?? "")}" data-ticket-search="${escapeHtmlText(`${ticket.id} ${ticket.title} ${ticket.objective}`.toLocaleLowerCase("fr"))}"><button type="button" data-ticket-id="${escapeHtmlText(ticket.id)}" aria-label="Ouvrir ${escapeHtmlText(ticket.id)}"><strong>${escapeHtmlText(ticket.id)} · ${escapeHtmlText(ticket.title)}</strong><span class="state-detail">${escapeHtmlText(ticket.state)} — ${escapeHtmlText(ticket.objective)}</span></button></li>`)),
+    ...(tickets.some((ticket) => ticket.state === state) ? [] : ["            <li class=\"empty-state\">Aucun ticket</li>"]),
+    "          </ul></li>",
+  ]);
 
   return [
     "<!doctype html>",
@@ -578,7 +583,7 @@ function renderInteractiveDocument(view, reviews, graph, memory, dataJson, ticke
     "  <meta charset=\"utf-8\">",
     "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
     "  <meta name=\"referrer\" content=\"no-referrer\">",
-    `  <meta http-equiv="Content-Security-Policy" content="base-uri 'none'; connect-src 'none'; default-src 'none'; font-src 'none'; form-action 'none'; frame-src 'none'; img-src 'none'; manifest-src 'none'; media-src 'none'; object-src 'none'; script-src 'sha256-${scriptHash}'; script-src-attr 'none'; style-src 'sha256-${styleHash}'; style-src-attr 'none'; worker-src 'none'">`,
+    `  <meta http-equiv="Content-Security-Policy" content="base-uri 'none'; connect-src '${ticketActions ? "self" : "none"}'; default-src 'none'; font-src 'none'; form-action 'none'; frame-src 'none'; img-src 'none'; manifest-src 'none'; media-src 'none'; object-src 'none'; script-src 'sha256-${scriptHash}'; script-src-attr 'none'; style-src 'sha256-${styleHash}'; style-src-attr 'none'; worker-src 'none'">`,
     "  <meta name=\"color-scheme\" content=\"dark\">",
     "  <title>DUBSAR Workbench — Vue locale</title>",
     `  <style>${INTERACTIVE_STYLE}</style>`,
@@ -601,10 +606,12 @@ function renderInteractiveDocument(view, reviews, graph, memory, dataJson, ticke
     "  <main class=\"workspace\">",
     "    <section id=\"my-work-view\" role=\"tabpanel\" aria-label=\"My Work\">",
     "      <header class=\"project-header\"><span class=\"project-kicker\">Travail personnel local</span><h1>My Work</h1><p>Tickets DUB-### liés aux travaux du projet. L’ordre d’activité est un index enregistré, pas une chronologie.</p></header>",
-    "      <div class=\"state-row\" role=\"search\"><label>Rechercher <input id=\"ticket-search\" type=\"search\" autocomplete=\"off\"></label><label>État <select id=\"ticket-state\"><option value=\"\">Tous les états</option></select></label></div>",
+    "      <div class=\"ticket-filters\" role=\"search\"><label data-i18n=\"search\">Rechercher <input id=\"ticket-search\" type=\"search\" autocomplete=\"off\"></label><label>Projet <select id=\"ticket-project\"><option value=\"\">Tous les projets</option></select></label><label>État <select id=\"ticket-state\"><option value=\"\">Tous les états</option></select></label><label>Langue <select id=\"workbench-language\"><option value=\"fr\">Français</option><option value=\"en\">English</option></select></label></div>",
     "      <section aria-labelledby=\"tickets-heading\"><h2 id=\"tickets-heading\">Tickets groupés par état</h2><ul class=\"decision-list\" id=\"ticket-list\">",
     ...ticketRows,
     "      </ul><p class=\"snapshot-note\">Les écritures utilisent aperçu, empreinte de changement puis confirmation exacte dans le canal local.</p></section>",
+    "      <aside id=\"ticket-detail\" class=\"ticket-detail\" aria-live=\"polite\" aria-labelledby=\"ticket-detail-heading\"><h2 id=\"ticket-detail-heading\">Fiche ticket</h2><p>Sélectionnez un ticket.</p></aside>",
+    "      <section class=\"ticket-actions\" aria-labelledby=\"ticket-actions-heading\"><h2 id=\"ticket-actions-heading\">Action locale</h2><label>Type <select id=\"ticket-action-type\"><option value=\"create\">Créer</option><option value=\"transition\">Transition</option><option value=\"activity\">Activité</option></select></label><textarea id=\"ticket-action-json\" aria-label=\"Données structurées de l’action\"></textarea><button type=\"button\" id=\"ticket-preview\">Aperçu</button><output id=\"ticket-preview-output\" aria-live=\"polite\"></output><button type=\"button\" id=\"ticket-confirm\" disabled>Confirmer l’empreinte</button></section>",
     "    </section>",
     "    <section id=\"dashboard-view\" role=\"tabpanel\" aria-label=\"Resume et Memory\" hidden>",
     "      <header class=\"project-header\">",
@@ -743,10 +750,10 @@ export function renderWorkbenchInteractiveReport(view, options = {}) {
   const reviews = reviewSummary(options.reviewLedger);
   const graph = graphProjection(options.graph, view);
   const memory = memoryProjection(options.memory);
-  const dataJson = encodeJsonForHtml(interactiveData(view, reviews, graph, memory));
   const tickets = options.tickets?.tickets ?? [];
   if (!Array.isArray(tickets) || tickets.length > 999) throw new WorkbenchError("INTERACTIVE_TICKETS_INVALID");
-  const html = renderInteractiveDocument(view, reviews, graph, memory, dataJson, tickets);
+  const dataJson = encodeJsonForHtml(interactiveData(view, reviews, graph, memory, tickets));
+  const html = renderInteractiveDocument(view, reviews, graph, memory, dataJson, tickets, options.ticketActions === true);
   const bytes = Buffer.byteLength(html, "utf8");
   if (bytes > maxBytes) {
     throw new WorkbenchError("REPORT_SIZE_LIMIT_EXCEEDED");

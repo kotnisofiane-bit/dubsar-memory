@@ -220,7 +220,8 @@ test("interactive code and style are exact CSP hash sources", () => {
   assert.match(application, /function tickSimulation\(\)/u);
   assert.match(application, /requestAnimationFrame\(animateGraph\)/u);
   assert.doesNotMatch(application, /Math\.random/u);
-  assert.doesNotMatch(application, /\b(?:fetch|eval|WebSocket|XMLHttpRequest)\s*\(/u);
+  assert.doesNotMatch(application, /\b(?:eval|WebSocket|XMLHttpRequest)\s*\(/u);
+  assert.equal(application.match(/fetch\(location\.pathname \+ "tickets\/(?:preview|apply)\/"/gu)?.length, 2);
   assert.doesNotMatch(application, /\b(?:innerHTML|outerHTML|insertAdjacentHTML)\b/u);
 });
 
