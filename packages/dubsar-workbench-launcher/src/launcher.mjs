@@ -32,6 +32,7 @@ import {
   addLocalProject,
   loadLocalProjectRegistry,
   removeLocalProject,
+  applyTicketChange, previewTicketChange, readTickets, TicketError,
 } from "./registry-store.mjs";
 
 const MAX_HTML_BYTES = 2 * 1024 * 1024;
@@ -122,6 +123,7 @@ async function generateReport(start, includeReviews, memoryRoot) {
     memory = memoryRoot === undefined
       ? undefined
       : await capturePersonalMemory(supportedAbsolute(memoryRoot));
+    var tickets = await readTickets({ start });
   } catch {
     throw new WorkbenchLauncherError("REPORT_GENERATION_FAILED");
   }
@@ -131,6 +133,7 @@ async function generateReport(start, includeReviews, memoryRoot) {
       graph: inspection.graph,
       ...(includeReviews ? { reviewLedger: inspection.review_ledger } : {}),
       ...(memory === undefined ? {} : { memory }),
+      tickets,
     });
   } catch {
     throw new WorkbenchLauncherError("REPORT_GENERATION_FAILED");
@@ -595,4 +598,43 @@ export async function launchWorkbenchForTest({
         { start, includeReviews, checkOnly, memoryRoot, transport },
         runtime,
       );
+}
+
+function parseTicketArguments(argv) {
+  const action = argv.at(1);
+  if (argv.at(0) !== "tickets" || !new Set(["list", "create", "transition", "activity"]).has(action)) throw new TicketError("TICKET_CLI_ARGUMENT_INVALID");
+  const options = { apply: false, json: false };
+  for (let index = 2; index < argv.length; index += 1) {
+    const token = argv.at(index);
+    if (token === "--apply") { options.apply = true; continue; }
+    if (token === "--json") { options.json = true; continue; }
+    if (token === "--reopen-confirmed") { options.reopen_confirmed = true; continue; }
+    const value = argv.at(++index);
+    if (value === undefined) throw new TicketError("TICKET_CLI_ARGUMENT_INVALID");
+    if (token === "--start") options.start = value;
+    else if (token === "--proposal") options.proposal = value;
+    else if (token === "--expected-change") options.expected_change = value;
+    else throw new TicketError("TICKET_CLI_ARGUMENT_INVALID");
+  }
+  if (!options.start) throw new TicketError("TICKET_CLI_ARGUMENT_INVALID");
+  return { action, options };
+}
+export async function runTicketCli(argv, io = console) {
+  try {
+    const { action, options } = parseTicketArguments(argv); let value;
+    if (action === "list") {
+      if (options.apply || options.proposal || options.expected_change) throw new TicketError("TICKET_CLI_ARGUMENT_INVALID");
+      value = await readTickets({ start: options.start });
+    } else {
+      if (!options.proposal) throw new TicketError("TICKET_CLI_ARGUMENT_INVALID");
+      const proposalPath = path.resolve(options.proposal);
+      const operation = JSON.parse((await captureRegularFile(path.dirname(proposalPath), path.basename(proposalPath), 64 * 1024)).content.toString("utf8"));
+      if (operation.type !== action) throw new TicketError("TICKET_CLI_ARGUMENT_INVALID");
+      value = options.apply ? await applyTicketChange({ start: options.start, operation: { ...operation, ...(options.reopen_confirmed ? { reopen_confirmed: true } : {}) }, expectedChange: options.expected_change }) : await previewTicketChange({ start: options.start, operation });
+    }
+    io.log(JSON.stringify(value, null, options.json ? 0 : 2)); return { exitCode: 0, value };
+  } catch (error) {
+    const code = error instanceof TicketError ? error.code : "TICKET_CLI_FAILED";
+    io.error(JSON.stringify({ format: "dubsar.ticket-cli-error/1", code })); return { exitCode: 1, error: code };
+  }
 }

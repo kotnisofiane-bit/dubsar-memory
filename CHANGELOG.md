@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add the versioned local `dubsar.tickets/1` contract, deterministic DUB-### allocation, digest-linked bounded activity, preview/apply receipts, ticket CLI, and the My Work landing view (KOT-116).
+
 All notable source changes are documented here. Package publication remains a
 separate, explicitly reviewed decision.
 

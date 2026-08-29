@@ -63,6 +63,10 @@ button { color: inherit; }
 }
 
 .nav-list { display: grid; gap: 8px; }
+.nav-list > .section-label { padding: 20px 20px 2px; }
+.ticket-card button { width: 100%; padding: 18px; border: 1px solid var(--line); background: var(--panel); color: var(--text); text-align: left; cursor: pointer; }
+input, select { width: 100%; margin-top: 8px; padding: 10px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--text); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
 
 .nav-button {
   position: relative;
@@ -686,6 +690,7 @@ export const INTERACTIVE_SCRIPT = String.raw`
   const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
   const dataNode = document.getElementById("workbench-data");
   const dashboard = document.getElementById("dashboard-view");
+  const myWork = document.getElementById("my-work-view");
   const graphView = document.getElementById("graph-view");
   const canvas = document.getElementById("graph-canvas");
 
@@ -1237,9 +1242,11 @@ export const INTERACTIVE_SCRIPT = String.raw`
 
   function setView(next) {
     const graphActive = next === "graph";
-    dashboard.hidden = graphActive;
+    const workActive = next === "my-work";
+    dashboard.hidden = graphActive || workActive;
+    myWork.hidden = !workActive;
     graphView.hidden = !graphActive;
-    document.getElementById("memory-panel").hidden = graphActive;
+    document.getElementById("memory-panel").hidden = graphActive || workActive;
     document.getElementById("app-shell").classList.toggle("graph-mode", graphActive);
     document.querySelectorAll(".nav-button").forEach((button) => {
       button.setAttribute("aria-selected", String(button.dataset.view === next));

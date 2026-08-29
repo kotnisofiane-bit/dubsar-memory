@@ -548,7 +548,7 @@ function technicalFormatLines(formats) {
   return formats.map((format) => escapeHtmlText(format)).join(", ");
 }
 
-function renderInteractiveDocument(view, reviews, graph, memory, dataJson) {
+function renderInteractiveDocument(view, reviews, graph, memory, dataJson, tickets = []) {
   const status = statusFor(view);
   const categories = memory.categories;
   const lotsComplete = countValue(view.overview.counts.complete_lots);
@@ -567,6 +567,9 @@ function renderInteractiveDocument(view, reviews, graph, memory, dataJson) {
   const styleHash = cspHash(INTERACTIVE_STYLE);
   const scriptHash = cspHash(INTERACTIVE_SCRIPT);
   const sourceId = view.source.id ?? "non affiché";
+  const ticketRows = tickets.length === 0
+    ? ["          <li class=\"empty-state\">Aucun ticket local. Créez-en un avec la CLI DUBSAR.</li>"]
+    : tickets.map((ticket) => `          <li class="ticket-card"><button type="button" aria-label="Ouvrir ${escapeHtmlText(ticket.id)}"><strong>${escapeHtmlText(ticket.id)} · ${escapeHtmlText(ticket.title)}</strong><span class="state-detail">${escapeHtmlText(ticket.state)} — ${escapeHtmlText(ticket.objective)}</span></button></li>`);
 
   return [
     "<!doctype html>",
@@ -585,7 +588,9 @@ function renderInteractiveDocument(view, reviews, graph, memory, dataJson) {
     "  <aside class=\"rail\" aria-label=\"Navigation principale\">",
     "    <div class=\"brand\">DUBSAR</div>",
     "    <nav class=\"nav-list\" role=\"tablist\" aria-label=\"Vues du Workbench\">",
-    "      <button type=\"button\" class=\"nav-button\" data-view=\"dashboard\" role=\"tab\" aria-controls=\"dashboard-view\" aria-selected=\"true\">Dashboard</button>",
+    "      <button type=\"button\" class=\"nav-button\" data-view=\"my-work\" role=\"tab\" aria-controls=\"my-work-view\" aria-selected=\"true\">My Work</button>",
+    "      <span class=\"section-label\">Advanced</span>",
+    "      <button type=\"button\" class=\"nav-button\" data-view=\"dashboard\" role=\"tab\" aria-controls=\"dashboard-view\" aria-selected=\"false\">Dashboard · Resume / Memory</button>",
     "      <button type=\"button\" class=\"nav-button\" data-view=\"graph\" role=\"tab\" aria-controls=\"graph-view\" aria-selected=\"false\">Graph</button>",
     "    </nav>",
     "    <div class=\"rail-meta\">",
@@ -594,7 +599,14 @@ function renderInteractiveDocument(view, reviews, graph, memory, dataJson) {
     "    </div>",
     "  </aside>",
     "  <main class=\"workspace\">",
-    "    <section id=\"dashboard-view\" role=\"tabpanel\" aria-label=\"Dashboard\">",
+    "    <section id=\"my-work-view\" role=\"tabpanel\" aria-label=\"My Work\">",
+    "      <header class=\"project-header\"><span class=\"project-kicker\">Travail personnel local</span><h1>My Work</h1><p>Tickets DUB-### liés aux travaux du projet. L’ordre d’activité est un index enregistré, pas une chronologie.</p></header>",
+    "      <div class=\"state-row\" role=\"search\"><label>Rechercher <input id=\"ticket-search\" type=\"search\" autocomplete=\"off\"></label><label>État <select id=\"ticket-state\"><option value=\"\">Tous les états</option></select></label></div>",
+    "      <section aria-labelledby=\"tickets-heading\"><h2 id=\"tickets-heading\">Tickets groupés par état</h2><ul class=\"decision-list\" id=\"ticket-list\">",
+    ...ticketRows,
+    "      </ul><p class=\"snapshot-note\">Les écritures utilisent aperçu, empreinte de changement puis confirmation exacte dans le canal local.</p></section>",
+    "    </section>",
+    "    <section id=\"dashboard-view\" role=\"tabpanel\" aria-label=\"Resume et Memory\" hidden>",
     "      <header class=\"project-header\">",
     "        <div class=\"project-topline\">",
     "          <span class=\"project-kicker\">Projet</span>",
@@ -732,7 +744,9 @@ export function renderWorkbenchInteractiveReport(view, options = {}) {
   const graph = graphProjection(options.graph, view);
   const memory = memoryProjection(options.memory);
   const dataJson = encodeJsonForHtml(interactiveData(view, reviews, graph, memory));
-  const html = renderInteractiveDocument(view, reviews, graph, memory, dataJson);
+  const tickets = options.tickets?.tickets ?? [];
+  if (!Array.isArray(tickets) || tickets.length > 999) throw new WorkbenchError("INTERACTIVE_TICKETS_INVALID");
+  const html = renderInteractiveDocument(view, reviews, graph, memory, dataJson, tickets);
   const bytes = Buffer.byteLength(html, "utf8");
   if (bytes > maxBytes) {
     throw new WorkbenchError("REPORT_SIZE_LIMIT_EXCEEDED");
