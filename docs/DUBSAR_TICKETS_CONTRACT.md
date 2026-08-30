@@ -14,7 +14,13 @@ Création, transition et activité passent par le même moteur pour la CLI et le
 2. l'utilisateur confirme cette empreinte exacte ;
 3. `applyTicketChange` recalcule l'aperçu depuis l'état courant et refuse une empreinte obsolète avant publication atomique.
 
-La CLI accepte `dubsar tickets list|create|transition|activity`. Les opérations d'écriture sont fournies dans un fichier de proposition, jamais comme commande arbitraire issue du Dashboard.
+La CLI du launcher accepte `tickets list|create|transition|activity|attach-cursor-launch|fail-cursor-launch`. Les opérations d'écriture sont fournies dans un fichier de proposition, jamais comme commande arbitraire issue du Dashboard.
+
+### Lancement Cursor borné
+
+`attach-cursor-launch` vise un ticket existant. Une seule publication atomique conserve le reçu Controller exact : `receipt_version` (`dubsar.cursor-launch-receipt/1` ou `dubsar.cursor-run-receipt/1`), `target_repository_url`, `contract_fingerprint`, `repository_refs`, `ticket_id`, `agent_id`, `run_id`, `source_url`, `status` et `bounds`, puis place le ticket `In Progress`. Le dépôt cible est une URL GitHub HTTPS complète, chaque référence est exactement `{repository_url, starting_sha}`, et l'empreinte est exactement `sha256:` suivi de 64 caractères hexadécimaux minuscules. Le reçu doit porter le même `ticket_id`; l'ancien schéma local `format`/`target_repository`/hex64 est refusé. `fail-cursor-launch` ne crée aucun identifiant d'agent : il ajoute seulement une activité bornée avec un code, conserve le résumé comme blocage et place atomiquement le ticket `Blocked`.
+
+Ces opérations ne contactent aucun MCP. L'orchestrateur doit d'abord appliquer et relire la création du ticket, puis appeler une seule fois le Controller, comparer `ticket_id` et le `contract_fingerprint` obtenu par la canonicalisation exacte du Controller, préfixe `sha256:` inclus, et enfin prévisualiser/appliquer l'attachement. My Work ne fait qu'afficher le reçu local. Aucun secret n'appartient au registre.
 
 ## États et preuves
 
@@ -32,7 +38,7 @@ Le registre est local. Le serveur Workbench reste exclusivement sur IPv4 loopbac
 
 Le lancement public sans `--start`, utilisé par le raccourci standard, agrège les tickets de tous les projets du registre sûr et route chaque écriture par son `project_id`. Les créations globales sont sérialisées par un verrou local exclusif; une confirmation concurrente devenue obsolète est refusée sans doublon ni allocation partielle. Après `apply`, le reçu transporte la nouvelle projection agrégée pour rafraîchir My Work.
 
-La frontière GitHub demeure volontairement **non raccordée** : sans observer de confiance injecté, `Done` échoue fermé. Le raccordement réel est réservé au macro-lot MCP Cursor suivant.
+La frontière GitHub demeure volontairement **non raccordée** : sans observer de confiance injecté, `Done` échoue fermé. Le lot de lancement ne fait ni polling Cursor/GitHub, ni webhook, ni transition automatique vers In Review ou Done.
 
 ## Récupération du verrou d'allocation
 

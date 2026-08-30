@@ -271,14 +271,14 @@
     },
     {
       "path": "packages/dubsar-codex-workbench/CAPABILITIES.json",
-      "bytes": 516,
-      "sha256": "a46e07dd846214a57f83e226557d1c65031107877819c5002a6f92a453c6f818",
+      "bytes": 629,
+      "sha256": "9a6ef6b753290a7a622d0ba425f48308c85335fd3f84213f22b90587613e70d9",
       "role": "runtime"
     },
     {
       "path": "packages/dubsar-codex-workbench/README.md",
-      "bytes": 593,
-      "sha256": "cc29f189b760169858036347158ad07e625ca93302b45e891d4d26866aed024a",
+      "bytes": 888,
+      "sha256": "3694a84a2b4439dd2745e5bdab3e50abeaebb01447aa9c2b8a64c6942eccabff",
       "role": "documentation"
     },
     {
@@ -286,6 +286,12 @@
       "bytes": 269,
       "sha256": "9ce176797514114330b9dd8231e4dbf0b3fd3aaf5d05dbae9f13cf26af84826d",
       "role": "metadata"
+    },
+    {
+      "path": "packages/dubsar-codex-workbench/skills/launch-dubsar-work/SKILL.md",
+      "bytes": 3947,
+      "sha256": "75ac4a6977ad45149e6b147cca74e53308b6881834c3979892225cd157abf288",
+      "role": "runtime"
     },
     {
       "path": "packages/dubsar-codex-workbench/skills/resume-dubsar-workbench/SKILL.md",
@@ -781,8 +787,8 @@
     },
     {
       "path": "packages/dubsar-workbench-launcher/src/launcher.mjs",
-      "bytes": 25423,
-      "sha256": "669023da66764a5c3c2da0b3e5788982baa96700d36700e1e42704d0db5c7957",
+      "bytes": 25469,
+      "sha256": "8f7b94adfdba9744680b13e5d34e2beccf8bf5db5522056c427e91dadbfeab8d",
       "role": "runtime"
     },
     {
@@ -793,8 +799,8 @@
     },
     {
       "path": "packages/dubsar-workbench-launcher/src/registry-store.mjs",
-      "bytes": 22098,
-      "sha256": "085ab5c016ed4eaf80b255eaca4818c5c70cda28349ca973a904ba24399abf51",
+      "bytes": 26248,
+      "sha256": "ec26fd6d1113d7874fb946b729ee624307ae3f4aa15a8a79e5eb923711a9463e",
       "role": "runtime"
     },
     {
@@ -811,8 +817,8 @@
     },
     {
       "path": "packages/dubsar-workbench-report/src/catalog-interactive-assets.mjs",
-      "bytes": 118054,
-      "sha256": "9c857bb9a9bb1fa16b3665eec32d134ebf7c80b95bcf9f99826d985ffd44b4e5",
+      "bytes": 118259,
+      "sha256": "eb553c7254d9f607684b3a3193b5e3a6a4079566fc679cfd90d7e7a166d4ffc0",
       "role": "runtime"
     },
     {
@@ -829,8 +835,8 @@
     },
     {
       "path": "packages/dubsar-workbench-report/src/interactive-assets.mjs",
-      "bytes": 44278,
-      "sha256": "7c3c8f6eb939b3a09b8acf797dc3728268cabea958e9ff10cf634f992d65a892",
+      "bytes": 44594,
+      "sha256": "a2c1d8d0b9da2a023994da0f02b2afb8ddd6bfee5ab609566911650461beb53e",
       "role": "runtime"
     },
     {
@@ -876,5 +882,5 @@
       "role": "runtime"
     }
   ],
-  "content_root_sha256": "6cf03bd35ff40b3887753972745f42e9c407b0350e0ef13c9ff3639169f3fed9"
+  "content_root_sha256": "fc3cfcf39b600da588351796131c707f867b2f701c765fc8579b06c13415e25c"
 }
