@@ -59,11 +59,15 @@ repository (`owner/name`). My Work is a local view, not an MCP client.
 8. Otherwise put the complete receipt in a temporary `attach-cursor-launch`
    proposal. Preview and apply that CLI operation with the returned digest.
    Re-read the ticket and require `In Progress` plus the exact persisted
-   receipt before presenting/opening My Work with
+   receipt.
+9. Before presenting My Work, run the `sync-dubsar-work` workflow for this
+   ticket using only the persisted `agent_id` and `run_id`. Do not launch,
+   retry, discover, or switch agents. Then open My Work exactly once with
    `node "<launcher-bin>" --start <root>`.
 
 ## Limits
 
-No polling, webhook, GitHub observation, automatic In Review/Done transition,
-deployment, merge, secret storage, second launch, or retry. Temporary proposals
-must be outside user memory and deleted when the workflow stops.
+No polling, webhook, daemon, secret storage, second launch, or retry.
+Temporary proposals must be outside user memory and deleted when the workflow
+stops. The launcher remains local-only: it is not an MCP client and it does
+not open outbound network.

@@ -175,6 +175,134 @@ function cursorReceipt(value, ticketId) {
   boundedJson(receipt.bounds); boundedJson({ repository_refs: receipt.repository_refs });
   return Object.freeze({ receipt_version: receipt.receipt_version, target_repository_url: targetRepositoryUrl, contract_fingerprint: receipt.contract_fingerprint, repository_refs: structuredClone(receipt.repository_refs), ticket_id: ticketId, agent_id: agentId, run_id: runId, source_url: sourceUrl, status, bounds: structuredClone(receipt.bounds) });
 }
+const CURSOR_LIFECYCLES = new Set(["running", "failed", "completed"]);
+const GITHUB_PR_STATES = new Set(["open", "draft", "closed", "merged"]);
+const OWNER_REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
+const SHA40 = /^[0-9a-f]{40}$/u;
+export function isTicketSyncEligible(ticket) {
+  return Boolean(ticket && !terminal.has(ticket.state) && ticket.cursor_launch && ticket.cursor_launch.agent_id && ticket.cursor_launch.run_id);
+}
+function repositoryFromTargetUrl(url) {
+  let parsed;
+  try { parsed = new URL(url); } catch { throw new TicketError("TICKET_SYNC_CONTRADICTION"); }
+  const parts = parsed.pathname.replace(/\.git$/u, "").split("/").filter(Boolean);
+  if (parsed.hostname !== "github.com" || parts.length !== 2) throw new TicketError("TICKET_SYNC_CONTRADICTION");
+  return `${parts[0]}/${parts[1]}`;
+}
+function cursorObservation(value, ticket) {
+  if (!ticket.cursor_launch) throw new TicketError("TICKET_SYNC_RECEIPT_REQUIRED");
+  const observation = boundedJson(value);
+  if (observation.source !== "trusted_cursor_observer" || observation.ticket_id !== ticket.id || observation.agent_id !== ticket.cursor_launch.agent_id || observation.run_id !== ticket.cursor_launch.run_id || !CURSOR_LIFECYCLES.has(observation.lifecycle)) throw new TicketError("TICKET_SYNC_CONTRADICTION");
+  let pr = null;
+  if (observation.pr != null) {
+    if (!observation.pr || !OWNER_REPO.test(observation.pr.repository ?? "") || !Number.isSafeInteger(observation.pr.number) || observation.pr.number < 1) throw new TicketError("TICKET_SYNC_CONTRADICTION");
+    if (observation.pr.repository !== repositoryFromTargetUrl(ticket.cursor_launch.target_repository_url)) throw new TicketError("TICKET_SYNC_CONTRADICTION");
+    const branch = observation.pr.branch == null ? undefined : text(observation.pr.branch, 300, "TICKET_SYNC_CONTRADICTION");
+    pr = Object.freeze({ repository: observation.pr.repository, number: observation.pr.number, ...(branch === undefined ? {} : { branch }) });
+  }
+  return Object.freeze({ source: "trusted_cursor_observer", ticket_id: ticket.id, agent_id: ticket.cursor_launch.agent_id, run_id: ticket.cursor_launch.run_id, lifecycle: observation.lifecycle, pr });
+}
+function githubPrObservation(value, ticket, claimed) {
+  if (value == null) {
+    if (claimed) throw new TicketError("TICKET_SYNC_CONTRADICTION");
+    return null;
+  }
+  const observation = boundedJson(value);
+  if (observation.source !== "trusted_github_observer" || observation.ticket_id !== ticket.id || !OWNER_REPO.test(observation.repository ?? "") || !Number.isSafeInteger(observation.pr) || observation.pr < 1 || !GITHUB_PR_STATES.has(observation.state)) throw new TicketError("TICKET_SYNC_CONTRADICTION");
+  if (!claimed || observation.repository !== claimed.repository || observation.pr !== claimed.number) throw new TicketError("TICKET_SYNC_CONTRADICTION");
+  if (claimed.branch && claimed.branch !== observation.branch) throw new TicketError("TICKET_SYNC_CONTRADICTION");
+  const headSha = observation.head_sha;
+  if (!SHA40.test(headSha ?? "")) throw new TicketError("TICKET_SYNC_CONTRADICTION");
+  const mergeCommit = observation.merge_commit_sha ?? null;
+  if (observation.state === "merged") {
+    if (!SHA40.test(mergeCommit ?? "") || mergeCommit === headSha) throw new TicketError("TICKET_SYNC_CONTRADICTION");
+  } else if (mergeCommit != null) throw new TicketError("TICKET_SYNC_CONTRADICTION");
+  const branch = text(observation.branch, 300, "TICKET_SYNC_CONTRADICTION");
+  return Object.freeze({ source: "trusted_github_observer", ticket_id: ticket.id, repository: observation.repository, pr: observation.pr, state: observation.state, head_sha: headSha, merge_commit_sha: mergeCommit, branch });
+}
+function prEvidence(githubObs, extra = {}) {
+  const basis = { type: githubObs.state === "merged" ? "github_merge_observation" : "github_pr_observation", repository: githubObs.repository, pr: githubObs.pr, branch: githubObs.branch, head_sha: githubObs.head_sha, ticket_id: githubObs.ticket_id, ...extra };
+  if (githubObs.state === "merged") return { ...basis, merge_commit_sha: githubObs.merge_commit_sha };
+  return { ...basis, state: githubObs.state };
+}
+function lastSyncEvidence(ticket) {
+  let evidence = null;
+  for (const item of ticket.activity) {
+    if (item.kind === "cursor_sync") evidence = item.evidence ?? null;
+  }
+  return evidence;
+}
+function sameSyncOutcome(ticket, mapped) {
+  return ticket.state === mapped.state && ticket.pr === mapped.pr && ticket.branch === mapped.branch && ticket.blocker === mapped.blocker && stable(lastSyncEvidence(ticket)) === stable(mapped.evidence);
+}
+function mapSyncedFields(ticket, cursorObs, githubObs) {
+  const prLabel = githubObs ? `${githubObs.repository}#${githubObs.pr}` : ticket.pr;
+  const branch = githubObs?.branch ?? ticket.branch;
+  if (githubObs?.state === "merged") {
+    return { state: "Done", pr: prLabel, branch, blocker: null, evidence: prEvidence(githubObs) };
+  }
+  if (cursorObs.lifecycle === "failed") {
+    return { state: "Blocked", pr: prLabel, branch, blocker: "Cursor run failed", evidence: githubObs ? prEvidence(githubObs, { lifecycle: "failed" }) : { type: "cursor_run_observation", lifecycle: "failed", agent_id: cursorObs.agent_id, run_id: cursorObs.run_id, ticket_id: cursorObs.ticket_id } };
+  }
+  if (githubObs?.state === "open" || githubObs?.state === "draft") {
+    return { state: "In Review", pr: prLabel, branch, blocker: null, evidence: prEvidence(githubObs) };
+  }
+  if (githubObs?.state === "closed") {
+    return { state: "Blocked", pr: prLabel, branch, blocker: "Pull request closed without merge", evidence: prEvidence(githubObs) };
+  }
+  if (cursorObs.lifecycle === "completed") {
+    return { state: "Blocked", pr: ticket.pr, branch: ticket.branch, blocker: "Cursor completed without a usable pull request", evidence: { type: "cursor_run_observation", lifecycle: "completed", agent_id: cursorObs.agent_id, run_id: cursorObs.run_id, ticket_id: cursorObs.ticket_id } };
+  }
+  return { state: "In Progress", pr: ticket.pr, branch: ticket.branch, blocker: null, evidence: { type: "cursor_run_observation", lifecycle: "running", agent_id: cursorObs.agent_id, run_id: cursorObs.run_id, ticket_id: cursorObs.ticket_id } };
+}
+function isReaderTransient(error) {
+  return error instanceof TicketError && error.code === "TICKET_READER_TRANSIENT";
+}
+export async function synchronizeEligibleTickets({ start, allocationRoot, projectId, observeCursorRun, observeGithubPullRequest }) {
+  const before = await readTickets({ start });
+  const results = [];
+  for (const ticket of before.tickets) {
+    if (!isTicketSyncEligible(ticket)) {
+      results.push(Object.freeze({ id: ticket.id, status: "skipped", code: ticket.cursor_launch ? "TICKET_SYNC_TERMINAL" : "TICKET_SYNC_RECEIPT_REQUIRED" }));
+      continue;
+    }
+    if (typeof observeCursorRun !== "function") {
+      results.push(Object.freeze({ id: ticket.id, status: "unchanged", code: "TICKET_CURSOR_READER_REQUIRED" }));
+      continue;
+    }
+    try {
+      const rawCursor = await observeCursorRun(Object.freeze({ ticket_id: ticket.id, agent_id: ticket.cursor_launch.agent_id, run_id: ticket.cursor_launch.run_id }));
+      const cursorObs = cursorObservation(rawCursor, ticket);
+      let rawGithub = null;
+      if (cursorObs.pr) {
+        if (typeof observeGithubPullRequest !== "function") {
+          results.push(Object.freeze({ id: ticket.id, status: "unchanged", code: "TICKET_GITHUB_READER_REQUIRED" }));
+          continue;
+        }
+        rawGithub = await observeGithubPullRequest(Object.freeze({ repository: cursorObs.pr.repository, pr: cursorObs.pr.number, ticket_id: ticket.id }));
+      }
+      const operation = { type: "sync-cursor-status", id: ticket.id, cursor_observation: rawCursor, github_observation: rawGithub };
+      const preview = await previewTicketChange({ start, allocationRoot, projectId, operation });
+      if (preview.before_sha256 === sha(preview.after)) {
+        results.push(Object.freeze({ id: ticket.id, status: "unchanged", change_sha256: preview.change_sha256 }));
+        continue;
+      }
+      await applyTicketChange({ start, allocationRoot, projectId, operation, expectedChange: preview.change_sha256 });
+      results.push(Object.freeze({ id: ticket.id, status: "applied", change_sha256: preview.change_sha256 }));
+    } catch (error) {
+      if (isReaderTransient(error)) {
+        results.push(Object.freeze({ id: ticket.id, status: "unchanged", code: "TICKET_READER_TRANSIENT" }));
+        continue;
+      }
+      if (error instanceof TicketError && (error.code === "TICKET_SYNC_CONTRADICTION" || error.code === "TICKET_SYNC_RECEIPT_REQUIRED")) {
+        results.push(Object.freeze({ id: ticket.id, status: "unchanged", code: error.code }));
+        continue;
+      }
+      throw error;
+    }
+  }
+  return Object.freeze({ format: "dubsar.ticket-sync/1", results: Object.freeze(results) });
+}
 async function storePath(start) {
   const root = path.resolve(start);
   const memory = path.join(root, ".dubsar");
@@ -281,6 +409,21 @@ function applyOperation(store, operation, allocation = null, corroboration = nul
     const code = text(operation.code, 80, "TICKET_CURSOR_FAILURE_INVALID"); const summary = text(operation.summary, 500, "TICKET_CURSOR_FAILURE_INVALID");
     const from = ticket.state; ticket.state = "Blocked"; ticket.blocker = summary; ticket.duplicate_of = null;
     ticket.activity.push(activity(ticket.activity, "cursor_launch_failed", `${from} → Blocked · ${summary}`, { code }));
+  } else if (operation.type === "sync-cursor-status") {
+    const ticket = next.tickets.find((item) => item.id === operation.id); if (!ticket) throw new TicketError("TICKET_NOT_FOUND");
+    if (!isTicketSyncEligible(ticket)) throw new TicketError(ticket.cursor_launch ? "TICKET_SYNC_TERMINAL" : "TICKET_SYNC_RECEIPT_REQUIRED");
+    if (ticket.activity.length >= MAX_ACTIVITY) throw new TicketError("TICKET_ACTIVITY_LIMIT");
+    const cursorObs = cursorObservation(operation.cursor_observation, ticket);
+    const githubObs = githubPrObservation(operation.github_observation, ticket, cursorObs.pr);
+    const mapped = mapSyncedFields(ticket, cursorObs, githubObs);
+    if (sameSyncOutcome(ticket, mapped)) return validateTicketStore(next);
+    const from = ticket.state;
+    ticket.state = mapped.state;
+    ticket.pr = mapped.pr;
+    ticket.branch = mapped.branch;
+    ticket.blocker = mapped.blocker;
+    ticket.duplicate_of = null;
+    ticket.activity.push(activity(ticket.activity, "cursor_sync", `${from} → ${mapped.state}`, mapped.evidence));
   } else throw new TicketError("TICKET_OPERATION_INVALID");
   return validateTicketStore(next);
 }
@@ -327,6 +470,9 @@ export async function applyTicketChange({ start, allocationRoot, projectId, oper
     }
     const preview = await previewTicketChange({ start, allocationRoot: safeAllocationRoot, projectId, operation, observeGithubMerge });
     if (preview.change_sha256 !== expectedChange) throw new TicketError("TICKET_CHANGE_STALE");
+    if (preview.before_sha256 === sha(preview.after)) {
+      return Object.freeze({ format: "dubsar.ticket-receipt/1", change_sha256: expectedChange, store_sha256: preview.before_sha256, tickets: preview.after.tickets.length });
+    }
     const target = await storePath(start); await openDirectory(path.dirname(target));
     const projectTemporary = `${target}.${randomBytes(12).toString("hex")}.tmp`;
     const allocationTarget = path.join(safeAllocationRoot, TICKET_ALLOCATIONS_NAME);
