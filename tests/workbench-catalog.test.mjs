@@ -442,6 +442,7 @@ test("les formulaires guidés produisent create, activity, transition, Duplicate
   assert.deepEqual(buildGuidedTicketOperation("transition", { id: "DUB-001", to: "Duplicate", duplicate_of: "DUB-002" }), { type: "transition", id: "DUB-001", to: "Duplicate", duplicate_of: "DUB-002" });
   assert.deepEqual(buildGuidedTicketOperation("transition", { id: "DUB-001", to: "Backlog", reopen_confirmed: true }, { state: "Done" }), { type: "transition", id: "DUB-001", to: "Backlog", reopen_confirmed: true });
   assert.match(CATALOG_INTERACTIVE_SCRIPT, /ticket-create-form/u); assert.match(CATALOG_INTERACTIVE_SCRIPT, /ticket-activity-form/u); assert.match(CATALOG_INTERACTIVE_SCRIPT, /ticket-transition-form/u);
+  assert.equal(CATALOG_INTERACTIVE_SCRIPT.match(/referrerPolicy: "same-origin"/gu)?.length, 3);
 });
 
 test("catalog renderer rejects forged paths and credentials at its public boundary", async (t) => {

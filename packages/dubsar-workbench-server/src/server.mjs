@@ -757,7 +757,7 @@ async function startServer(html, overrides, behavior = {}) {
         "text/html; charset=utf-8",
         body,
         contentSecurityPolicy,
-        liveRefresh ? "same-origin" : COMMON_HEADERS["Referrer-Policy"],
+        liveRefresh || ticketActions ? "same-origin" : COMMON_HEADERS["Referrer-Policy"],
       );
     } catch {
       if (!response.headersSent) {

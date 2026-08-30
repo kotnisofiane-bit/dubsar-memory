@@ -855,14 +855,14 @@ export const INTERACTIVE_SCRIPT = String.raw`
   document.getElementById("ticket-preview").addEventListener("click", async () => {
     const operation = JSON.parse(document.getElementById("ticket-action-json").value);
     const projectId = operation.project_id; delete operation.project_id;
-    const response = await fetch(location.pathname + "tickets/preview/", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project_id: projectId, operation }) });
+    const response = await fetch(location.pathname + "tickets/preview/", { method: "POST", headers: { "Content-Type": "application/json" }, referrer: location.href, referrerPolicy: "same-origin", body: JSON.stringify({ project_id: projectId, operation }) });
     pendingChange = response.ok ? await response.json() : null;
     document.getElementById("ticket-preview-output").textContent = pendingChange ? JSON.stringify({ consequence: pendingChange.after, change_sha256: pendingChange.change_sha256 }, null, 2) : "Aperçu refusé";
     document.getElementById("ticket-confirm").disabled = pendingChange === null;
   });
   document.getElementById("ticket-confirm").addEventListener("click", async () => {
     if (pendingChange === null || !window.confirm("Confirmer exactement " + pendingChange.change_sha256 + " ?")) return;
-    const response = await fetch(location.pathname + "tickets/apply/", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project_id: pendingChange.project_id, operation: pendingChange.operation, expected_change_sha256: pendingChange.change_sha256 }) });
+    const response = await fetch(location.pathname + "tickets/apply/", { method: "POST", headers: { "Content-Type": "application/json" }, referrer: location.href, referrerPolicy: "same-origin", body: JSON.stringify({ project_id: pendingChange.project_id, operation: pendingChange.operation, expected_change_sha256: pendingChange.change_sha256 }) });
     document.getElementById("ticket-preview-output").textContent = response.ok ? JSON.stringify(await response.json(), null, 2) : "Confirmation refusée";
     pendingChange = null; document.getElementById("ticket-confirm").disabled = true;
   });
