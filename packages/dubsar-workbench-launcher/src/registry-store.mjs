@@ -102,6 +102,7 @@ export const TICKET_CHANGE_FORMAT = "dubsar.ticket-change/1";
 export const TICKET_ALLOCATIONS_FORMAT = "dubsar.ticket-allocations/1";
 export const TICKET_ALLOCATIONS_NAME = "ticket-allocations.json";
 export const TICKET_ALLOCATIONS_LOCK_NAME = "ticket-allocations.lock";
+export const TICKET_ALLOCATIONS_LOCK_FORMAT = "dubsar.ticket-allocation-lock/1";
 export const TICKET_STATES = Object.freeze([
   "Backlog", "To Do", "In Progress", "In Review", "Blocked", "Paused",
   "Done", "Cancelled", "Duplicate",
@@ -111,6 +112,7 @@ const MAX_TICKETS = 999;
 const MAX_ACTIVITY = 200;
 const SHA = /^[0-9a-f]{64}$/u;
 const ID = /^DUB-(\d{3})$/u;
+const LOCK_LEASE_MS = 30_000;
 const terminal = new Set(TERMINAL_TICKET_STATES);
 const states = new Set(TICKET_STATES);
 const transitions = new Map([
@@ -124,6 +126,19 @@ const transitions = new Map([
 
 export class TicketError extends Error {
   constructor(code) { super(code); this.name = "TicketError"; this.code = code; }
+}
+function validateAllocationLock(value) {
+  if (!value || Object.keys(value).length !== 4 || value.format !== TICKET_ALLOCATIONS_LOCK_FORMAT || !Number.isSafeInteger(value.acquired_at_ms) || value.acquired_at_ms < 0 || !Number.isSafeInteger(value.expires_at_ms) || value.expires_at_ms <= value.acquired_at_ms || value.expires_at_ms - value.acquired_at_ms !== LOCK_LEASE_MS || typeof value.owner_nonce !== "string" || !/^[0-9a-f]{32}$/u.test(value.owner_nonce)) throw new TicketError("TICKET_ALLOCATION_LOCK_INVALID");
+  return Object.freeze({ format: value.format, acquired_at_ms: value.acquired_at_ms, expires_at_ms: value.expires_at_ms, owner_nonce: value.owner_nonce });
+}
+async function captureAllocationLock(root) {
+  try {
+    const captured = await captureRegularFile(root, TICKET_ALLOCATIONS_LOCK_NAME, 1024);
+    return validateAllocationLock(JSON.parse(captured.content.toString("utf8")));
+  } catch (error) {
+    if (error instanceof TicketError) throw error;
+    throw new TicketError("TICKET_ALLOCATION_LOCK_INVALID");
+  }
 }
 function stable(value) {
   if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
@@ -241,13 +256,37 @@ export async function previewTicketChange({ start, allocationRoot, projectId, op
   const change = { format: TICKET_CHANGE_FORMAT, before_sha256: sha(before), allocations_before_sha256: sha(allocations), project_id: projectId, operation, corroboration, after, allocations_after: allocationsAfter };
   return Object.freeze({ ...change, change_sha256: sha(change) });
 }
-export async function applyTicketChange({ start, allocationRoot, projectId, operation, expectedChange, observeGithubMerge }) {
+export async function applyTicketChange({ start, allocationRoot, projectId, operation, expectedChange, observeGithubMerge, lockNow = Date.now }) {
   if (!SHA.test(expectedChange ?? "")) throw new TicketError("TICKET_EXPECTED_CHANGE_INVALID");
   const safeAllocationRoot = await openDirectory(allocationRoot);
   const lock = path.join(safeAllocationRoot, TICKET_ALLOCATIONS_LOCK_NAME);
+  if (typeof lockNow !== "function") throw new TicketError("TICKET_ALLOCATION_LOCK_BOUNDARY_REQUIRED");
+  const acquiredAt = lockNow();
+  if (!Number.isSafeInteger(acquiredAt) || acquiredAt < 0) throw new TicketError("TICKET_ALLOCATION_LOCK_IDENTITY_AMBIGUOUS");
+  const owner = validateAllocationLock({ format: TICKET_ALLOCATIONS_LOCK_FORMAT, acquired_at_ms: acquiredAt, expires_at_ms: acquiredAt + LOCK_LEASE_MS, owner_nonce: randomBytes(16).toString("hex") });
+  const lockBytes = `${stable(owner)}\n`;
   let lockOwned = false;
   try {
-    try { await stagePrivateFile(lock, `${expectedChange}\n`); lockOwned = true; } catch (error) { if (error?.code === "EEXIST") throw new TicketError("TICKET_ALLOCATION_BUSY"); throw error; }
+    try {
+      await stagePrivateFile(lock, lockBytes); lockOwned = true;
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+      const existing = await captureAllocationLock(safeAllocationRoot);
+      const observedAt = lockNow();
+      if (!Number.isSafeInteger(observedAt) || observedAt < 0) throw new TicketError("TICKET_ALLOCATION_LOCK_IDENTITY_AMBIGUOUS");
+      if (observedAt <= existing.expires_at_ms) throw new TicketError("TICKET_ALLOCATION_BUSY");
+      const recovery = path.join(safeAllocationRoot, "ticket-allocations.recovery.lock");
+      let recoveryOwned = false;
+      try {
+        try { await stagePrivateFile(recovery, lockBytes); recoveryOwned = true; } catch (claimError) { if (claimError?.code === "EEXIST") throw new TicketError("TICKET_ALLOCATION_BUSY"); throw claimError; }
+        const confirmed = await captureAllocationLock(safeAllocationRoot);
+        if (stable(confirmed) !== stable(existing)) throw new TicketError("TICKET_ALLOCATION_BUSY");
+        const abandoned = `${recovery}.${randomBytes(16).toString("hex")}.abandoned`;
+        try { await rename(lock, abandoned); } catch (recoveryError) { if (recoveryError?.code === "ENOENT") throw new TicketError("TICKET_ALLOCATION_BUSY"); throw new TicketError("TICKET_ALLOCATION_LOCK_INVALID"); }
+        await unlink(abandoned).catch(() => {});
+        try { await stagePrivateFile(lock, lockBytes); lockOwned = true; } catch (claimError) { if (claimError?.code === "EEXIST") throw new TicketError("TICKET_ALLOCATION_BUSY"); throw claimError; }
+      } finally { if (recoveryOwned) await unlink(recovery).catch(() => {}); }
+    }
     const preview = await previewTicketChange({ start, allocationRoot: safeAllocationRoot, projectId, operation, observeGithubMerge });
     if (preview.change_sha256 !== expectedChange) throw new TicketError("TICKET_CHANGE_STALE");
     const target = await storePath(start); await openDirectory(path.dirname(target));

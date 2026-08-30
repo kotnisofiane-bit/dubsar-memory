@@ -33,3 +33,7 @@ Le registre est local. Le serveur Workbench reste exclusivement sur IPv4 loopbac
 Le lancement public sans `--start`, utilisé par le raccourci standard, agrège les tickets de tous les projets du registre sûr et route chaque écriture par son `project_id`. Les créations globales sont sérialisées par un verrou local exclusif; une confirmation concurrente devenue obsolète est refusée sans doublon ni allocation partielle. Après `apply`, le reçu transporte la nouvelle projection agrégée pour rafraîchir My Work.
 
 La frontière GitHub demeure volontairement **non raccordée** : sans observer de confiance injecté, `Done` échoue fermé. Le raccordement réel est réservé au macro-lot MCP Cursor suivant.
+
+## Récupération du verrou d'allocation
+
+Le verrou global est un document borné `dubsar.ticket-allocation-lock/1` contenant une identité aléatoire et une lease locale exacte de 30 secondes. Une lease non expirée est considérée active et n'est jamais supprimée ni volée. Après expiration, un récupérateur doit d'abord acquérir atomiquement `ticket-allocations.recovery.lock`, relire et comparer exactement le verrou observé, puis déplacer l'ancien verrou avant de publier le sien. Un second récupérateur échoue donc occupé. Un verrou malformé, surdimensionné, symbolique, hardlinké ou dont le temps ne peut être interprété échoue fermé. La récupération ne lit ni n'expose son contenu dans les diagnostics.

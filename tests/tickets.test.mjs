@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { request as httpRequest } from "node:http";
 import { spawnSync } from "node:child_process";
 import { applyTicketChange, previewTicketChange, readTickets, readTicketAllocations } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
@@ -12,7 +12,7 @@ import { startTicketInteractiveWorkbenchServer } from "../packages/dubsar-workbe
 
 const create = (title = "Premier") => ({ type: "create", title, objective: "Livrer localement", criteria: ["Testé"], work_id: "work-1", project: "DUBSAR", agent: "Codex", branch: "work", pr: "#23", blocker: null, references: ["KOT-116"] });
 async function environment() { const allocationRoot = await mkdtemp(path.join(tmpdir(), "dubsar-global-")); const project = async () => { const root = await mkdtemp(path.join(tmpdir(), "dubsar-project-")); await mkdir(path.join(root, ".dubsar")); return root; }; return { allocationRoot, first: await project(), second: await project() }; }
-const request = (env, start, projectId, operation, extra = {}) => ({ start, allocationRoot: env.allocationRoot, projectId, operation, ...extra });
+const request = (env, start, projectId, operation, extra = {}) => ({ start, allocationRoot: env.allocationRoot, projectId, operation, lockOwner: { owner_port: 54321, owner_nonce: randomBytes(16).toString("hex") }, isLockOwnerActive: async (owner) => owner.owner_port === 54321, ...extra });
 async function perform(env, start, projectId, operation, extra = {}) { const input = request(env, start, projectId, operation, extra); const preview = await previewTicketChange(input); await applyTicketChange({ ...input, expectedChange: preview.change_sha256 }); return preview; }
 
 test("allocation globale multi-projets sans collision persiste après redémarrage", async () => {
@@ -79,4 +79,32 @@ test("le binaire installé expose réellement tickets list/create", async () => 
   const preview = spawnSync(process.execPath, base, { encoding: "utf8" }); assert.equal(preview.status, 0, preview.stderr); const change = JSON.parse(preview.stdout).change_sha256;
   const apply = spawnSync(process.execPath, [...base, "--apply", "--expected-change", change], { encoding: "utf8" }); assert.equal(apply.status, 0, apply.stderr);
   const list = spawnSync(process.execPath, [bin, "tickets", "list", "--start", env.first, "--allocation-root", env.allocationRoot, "--project-id", "project-a", "--json"], { encoding: "utf8" }); assert.equal(list.status, 0, list.stderr); assert.equal(JSON.parse(list.stdout).tickets[0].title, "CLI publique");
+});
+test("verrou versionné actif reste intact et retourne busy", async () => {
+  const env = await environment(); const input = request(env, env.first, "project-a", create()); const preview = await previewTicketChange(input); const lock = path.join(env.allocationRoot, "ticket-allocations.lock"); const now = Date.now(); const record = { format: "dubsar.ticket-allocation-lock/1", acquired_at_ms: now, expires_at_ms: now + 30_000, owner_nonce: "b".repeat(32) }; await writeFile(lock, JSON.stringify(record));
+  await assert.rejects(applyTicketChange({ ...input, expectedChange: preview.change_sha256, lockNow: () => now + 1 }), { code: "TICKET_ALLOCATION_BUSY" });
+  assert.deepEqual(JSON.parse(await readFile(lock, "utf8")), record);
+});
+test("verrou abandonné est récupéré sans suppression manuelle et survit au redémarrage simulé", async () => {
+  const env = await environment(); const input = request(env, env.first, "project-a", create()); const preview = await previewTicketChange(input); await writeFile(path.join(env.allocationRoot, "ticket-allocations.lock"), JSON.stringify({ format: "dubsar.ticket-allocation-lock/1", acquired_at_ms: 1, expires_at_ms: 30_001, owner_nonce: "c".repeat(32) }));
+  await applyTicketChange({ ...input, expectedChange: preview.change_sha256, lockNow: () => 60_000 });
+  assert.equal((await readTickets({ start: env.first })).tickets[0].id, "DUB-001"); assert.equal((await readTicketAllocations(env)).next_number, 2);
+});
+test("deux récupérateurs concurrents d'un verrou abandonné gardent une seule allocation", async () => {
+  const env = await environment(); const one = request(env, env.first, "project-a", create("A")); const two = request(env, env.second, "project-b", create("B")); const previews = await Promise.all([previewTicketChange(one), previewTicketChange(two)]); await writeFile(path.join(env.allocationRoot, "ticket-allocations.lock"), JSON.stringify({ format: "dubsar.ticket-allocation-lock/1", acquired_at_ms: 1, expires_at_ms: 30_001, owner_nonce: "d".repeat(32) }));
+  const results = await Promise.allSettled([applyTicketChange({ ...one, expectedChange: previews[0].change_sha256, lockNow: () => 60_000 }), applyTicketChange({ ...two, expectedChange: previews[1].change_sha256, lockNow: () => 60_000 })]); assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+  assert.equal((await readTicketAllocations(env)).allocations.length, 1); assert.equal((await Promise.all([readTickets({ start: env.first }), readTickets({ start: env.second })])).flatMap((store) => store.tickets).length, 1);
+});
+test("locks malformé, surdimensionné, symbolique et hardlinké échouent fermés", async (t) => {
+  const variants = [
+    async (lock) => writeFile(lock, "not-json"),
+    async (lock) => writeFile(lock, "x".repeat(2048)),
+    async (lock, root) => { const source = path.join(root, "source"); await writeFile(source, "{}"); await symlink(source, lock); },
+    async (lock, root) => { const source = path.join(root, "source"); await writeFile(source, "{}"); await link(source, lock); },
+  ];
+  for (const prepare of variants) {
+    const env = await environment(); const input = request(env, env.first, "project-a", create()); const preview = await previewTicketChange(input); const lock = path.join(env.allocationRoot, "ticket-allocations.lock"); await prepare(lock, env.allocationRoot);
+    await assert.rejects(applyTicketChange({ ...input, expectedChange: preview.change_sha256 }), { code: "TICKET_ALLOCATION_LOCK_INVALID" });
+    assert.equal((await readTicketAllocations(env)).allocations.length, 0);
+  }
 });
