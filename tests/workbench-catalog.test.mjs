@@ -17,6 +17,7 @@ import {
 } from "../packages/dubsar-operator-core/src/index.mjs";
 import { isProjectId } from "../packages/dubsar-operator-core/src/project-identifiers.mjs";
 import {
+  buildGuidedTicketOperation,
   renderWorkbenchCatalogInteractiveReport,
   renderWorkbenchContinuityInteractiveReport,
 } from "../packages/dubsar-workbench-report/src/index.mjs";
@@ -383,7 +384,8 @@ test("catalog renderer produces one autonomous path-free HTML document", async (
   assert.match(report.html, /^<!doctype html>/u);
   assert.match(report.html, /dubsar\.workbench-catalog-interactive-data\/1/u);
   assert.match(report.html, /Resume with Codex/u);
-  assert.match(report.html, /id="nav-resume-tab" role="tab" data-view="dashboard" aria-controls="dashboard-view" aria-selected="true" tabindex="0" data-i18n="nav_resume">Resume</u);
+  assert.match(report.html, /id="nav-work-tab" role="tab" data-view="my-work" aria-controls="my-work-view" aria-selected="true" tabindex="0">My Work</u);
+  assert.match(report.html, /id="nav-resume-tab" role="tab" data-view="dashboard" aria-controls="dashboard-view" aria-selected="false" tabindex="-1" data-i18n="nav_resume">Resume</u);
   assert.match(report.html, /Copy capsule JSON/u);
   assert.match(report.html, /<select class="project-picker" id="project-select">/u);
   assert.match(report.html, /Snapshot read when opened — reopen DUBSAR to refresh/u);
@@ -432,6 +434,14 @@ test("catalog renderer produces one autonomous path-free HTML document", async (
   for (const project of item.projects) {
     assert.equal(report.html.includes(project.root), false);
   }
+});
+
+test("les formulaires guidés produisent create, activity, transition, Duplicate et réouverture sans JSON brut", () => {
+  assert.deepEqual(buildGuidedTicketOperation("create", { title: "Titre", objective: "But", criteria: "Un\nDeux", project: "Projet" }), { type: "create", title: "Titre", objective: "But", criteria: ["Un", "Deux"], project: "Projet" });
+  assert.deepEqual(buildGuidedTicketOperation("activity", { id: "DUB-001", activity_kind: "note", summary: "Résumé" }), { type: "activity", id: "DUB-001", kind: "note", summary: "Résumé" });
+  assert.deepEqual(buildGuidedTicketOperation("transition", { id: "DUB-001", to: "Duplicate", duplicate_of: "DUB-002" }), { type: "transition", id: "DUB-001", to: "Duplicate", duplicate_of: "DUB-002" });
+  assert.deepEqual(buildGuidedTicketOperation("transition", { id: "DUB-001", to: "Backlog", reopen_confirmed: true }, { state: "Done" }), { type: "transition", id: "DUB-001", to: "Backlog", reopen_confirmed: true });
+  assert.match(CATALOG_INTERACTIVE_SCRIPT, /ticket-create-form/u); assert.match(CATALOG_INTERACTIVE_SCRIPT, /ticket-activity-form/u); assert.match(CATALOG_INTERACTIVE_SCRIPT, /ticket-transition-form/u);
 });
 
 test("catalog renderer rejects forged paths and credentials at its public boundary", async (t) => {

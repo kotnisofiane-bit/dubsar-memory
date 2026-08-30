@@ -101,6 +101,7 @@ export const TICKETS_FORMAT = "dubsar.tickets/1";
 export const TICKET_CHANGE_FORMAT = "dubsar.ticket-change/1";
 export const TICKET_ALLOCATIONS_FORMAT = "dubsar.ticket-allocations/1";
 export const TICKET_ALLOCATIONS_NAME = "ticket-allocations.json";
+export const TICKET_ALLOCATIONS_LOCK_NAME = "ticket-allocations.lock";
 export const TICKET_STATES = Object.freeze([
   "Backlog", "To Do", "In Progress", "In Review", "Blocked", "Paused",
   "Done", "Cancelled", "Duplicate",
@@ -134,7 +135,12 @@ function text(value, max, code = "TICKET_FIELD_INVALID") {
   if (typeof value !== "string" || value.trim() !== value || value.length < 1 || value.length > max || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(value)) throw new TicketError(code);
   return value;
 }
-function storePath(start) { return path.join(path.resolve(start), ".dubsar", "tickets.json"); }
+async function storePath(start) {
+  const root = path.resolve(start);
+  const memory = path.join(root, ".dubsar");
+  if (await entryInfo(memory) !== null) return path.join(memory, "tickets.json");
+  return path.join(root, ".dubsar-project", "tickets.json");
+}
 function emptyStore() { return { format: TICKETS_FORMAT, tickets: [] }; }
 function emptyAllocations() { return { format: TICKET_ALLOCATIONS_FORMAT, next_number: 1, allocations: [] }; }
 function validateActivity(items) {
@@ -179,7 +185,7 @@ export async function readTicketAllocations({ allocationRoot }) {
   catch (error) { if (error instanceof TicketError) throw error; throw new TicketError("TICKET_ALLOCATIONS_INVALID"); }
 }
 export async function readTickets({ start }) {
-  const target = storePath(start);
+  const target = await storePath(start);
   if (await entryInfo(target) === null) return validateTicketStore(emptyStore());
   try { return validateTicketStore(JSON.parse((await captureRegularFile(path.dirname(target), path.basename(target), 1024 * 1024)).content.toString("utf8"))); }
   catch (error) { if (error?.code === "ENOENT") return validateTicketStore(emptyStore()); if (error instanceof TicketError) throw error; throw new TicketError("TICKET_STORE_INVALID"); }
@@ -237,15 +243,31 @@ export async function previewTicketChange({ start, allocationRoot, projectId, op
 }
 export async function applyTicketChange({ start, allocationRoot, projectId, operation, expectedChange, observeGithubMerge }) {
   if (!SHA.test(expectedChange ?? "")) throw new TicketError("TICKET_EXPECTED_CHANGE_INVALID");
-  const preview = await previewTicketChange({ start, allocationRoot, projectId, operation, observeGithubMerge });
-  if (preview.change_sha256 !== expectedChange) throw new TicketError("TICKET_CHANGE_STALE");
-  if (operation.type === "create") {
-    const allocationTarget = path.join(await openDirectory(allocationRoot), TICKET_ALLOCATIONS_NAME);
+  const safeAllocationRoot = await openDirectory(allocationRoot);
+  const lock = path.join(safeAllocationRoot, TICKET_ALLOCATIONS_LOCK_NAME);
+  let lockOwned = false;
+  try {
+    try { await stagePrivateFile(lock, `${expectedChange}\n`); lockOwned = true; } catch (error) { if (error?.code === "EEXIST") throw new TicketError("TICKET_ALLOCATION_BUSY"); throw error; }
+    const preview = await previewTicketChange({ start, allocationRoot: safeAllocationRoot, projectId, operation, observeGithubMerge });
+    if (preview.change_sha256 !== expectedChange) throw new TicketError("TICKET_CHANGE_STALE");
+    const target = await storePath(start); await openDirectory(path.dirname(target));
+    const projectTemporary = `${target}.${randomBytes(12).toString("hex")}.tmp`;
+    const allocationTarget = path.join(safeAllocationRoot, TICKET_ALLOCATIONS_NAME);
     const allocationTemporary = `${allocationTarget}.${randomBytes(12).toString("hex")}.tmp`;
-    try { await stagePrivateFile(allocationTemporary, `${stable(preview.allocations_after)}\n`); await rename(allocationTemporary, allocationTarget); } finally { await unlink(allocationTemporary).catch(() => {}); }
-  }
-  const target = storePath(start); await openDirectory(path.dirname(target));
-  const temporary = `${target}.${randomBytes(12).toString("hex")}.tmp`; try { await stagePrivateFile(temporary, `${stable(preview.after)}\n`); await rename(temporary, target); }
-  finally { await unlink(temporary).catch(() => {}); }
-  return Object.freeze({ format: "dubsar.ticket-receipt/1", change_sha256: expectedChange, store_sha256: sha(preview.after), tickets: preview.after.tickets.length });
+    const previousProject = await entryInfo(target) === null ? null : (await captureRegularFile(path.dirname(target), path.basename(target), 1024 * 1024)).content;
+    let projectPublished = false;
+    try {
+      await stagePrivateFile(projectTemporary, `${stable(preview.after)}\n`);
+      if (operation.type === "create") await stagePrivateFile(allocationTemporary, `${stable(preview.allocations_after)}\n`);
+      await rename(projectTemporary, target); projectPublished = true;
+      if (operation.type === "create") await rename(allocationTemporary, allocationTarget);
+    } catch (error) {
+      if (projectPublished) {
+        if (previousProject === null) await unlink(target).catch(() => {});
+        else { const restore = `${target}.${randomBytes(12).toString("hex")}.restore`; await stagePrivateFile(restore, previousProject); await rename(restore, target); }
+      }
+      throw error;
+    } finally { await unlink(projectTemporary).catch(() => {}); await unlink(allocationTemporary).catch(() => {}); }
+    return Object.freeze({ format: "dubsar.ticket-receipt/1", change_sha256: expectedChange, store_sha256: sha(preview.after), tickets: preview.after.tickets.length });
+  } finally { if (lockOwned) await unlink(lock).catch(() => {}); }
 }

@@ -152,11 +152,12 @@ async function generateReport(start, includeReviews, memoryRoot, ticketActions =
   return { html, manifest: result.manifest };
 }
 
-function renderCatalogSnapshot(catalog, live = false) {
+function renderCatalogSnapshot(catalog, live = false, tickets = []) {
   let result;
   try {
     result = renderWorkbenchContinuityInteractiveReport(catalog, {
       live,
+      tickets,
       maxBytes: MAX_HTML_BYTES,
     });
   } catch (error) {
@@ -189,7 +190,10 @@ async function generateCatalogReport(registry, includeReviews) {
   } catch {
     throw new WorkbenchLauncherError("CATALOG_GENERATION_FAILED");
   }
-  return renderCatalogSnapshot(catalog);
+  const tickets = (await Promise.all(registry.projects.map(async (project) =>
+    (await readTickets({ start: project.root })).tickets.map((ticket) => ({ ...ticket, project_id: project.project_id }))
+  ))).flat();
+  return renderCatalogSnapshot(catalog, false, tickets);
 }
 
 async function publishReport(outputRoot, report) {
@@ -304,11 +308,11 @@ async function serveReportOnce(chrome, report, runtime, isolated = true) {
   }
 }
 
-async function serveTicketReport(chrome, report, handler, runtime) {
+async function serveTicketReport(chrome, report, handler, runtime, isolated = false) {
   let session;
   try {
     session = await runtime.startTicketServer(liveInteractiveServerPayload(report), handler);
-    await openChrome(chrome, session.url, runtime.spawnProcess, false);
+    await openChrome(chrome, session.url, runtime.spawnProcess, isolated);
     await session.closed;
   } catch (error) {
     if (error instanceof WorkbenchLauncherError) throw error;
@@ -472,14 +476,12 @@ async function executeCatalogLaunch(options, runtime) {
   const reportPath = await publishReport(safeOutputRoot, report);
   const transport = validatedTransport(options.transport);
   if (transport === "loopback") {
-    const liveReport = renderCatalogSnapshot(report.catalog, true);
-    await serveReportLive(
-      chrome,
-      liveReport,
-      registry,
-      options.includeReviews,
-      runtime,
-    );
+    const tickets = (await Promise.all(registry.projects.map(async (project) =>
+      (await readTickets({ start: project.root })).tickets.map((ticket) => ({ ...ticket, project_id: project.project_id }))
+    ))).flat();
+    const liveReport = renderCatalogSnapshot(report.catalog, true, tickets);
+    const handler = createTicketDashboardHandler({ allocationRoot: safeOutputRoot, projects: registry.projects, observeGithubMerge: runtime.observeGithubMerge });
+    await serveTicketReport(chrome, liveReport, handler, runtime, true);
   } else {
     await openChrome(chrome, reportPath, runtime.spawnProcess);
   }
@@ -606,7 +608,7 @@ export async function launchWorkbenchForTest({
     selectFolder,
     startLiveServer,
     startOneShotServer,
-    startTicketServer: startTicketServer ?? ((payload) => startOneShotServer(payload)),
+    startTicketServer: startTicketServer ?? ((payload, handler) => startLiveServer(payload, handler)),
     observeGithubMerge,
   };
   return start === undefined
@@ -670,6 +672,10 @@ export function createTicketDashboardHandler({ allocationRoot, projects, observe
     const request = { start: allowlist.get(input.project_id), allocationRoot, projectId: input.project_id, operation: input.operation, observeGithubMerge };
     if (action === "preview") return previewTicketChange(request);
     if (typeof input.expected_change_sha256 !== "string") throw new TicketError("TICKET_EXPECTED_CHANGE_INVALID");
-    return applyTicketChange({ ...request, expectedChange: input.expected_change_sha256 });
+    const receipt = await applyTicketChange({ ...request, expectedChange: input.expected_change_sha256 });
+    const tickets = (await Promise.all(projects.map(async (project) =>
+      (await readTickets({ start: project.root })).tickets.map((ticket) => ({ ...ticket, project_id: project.project_id }))
+    ))).flat();
+    return Object.freeze({ format: "dubsar.ticket-dashboard-apply/1", receipt, tickets: Object.freeze(tickets) });
   };
 }

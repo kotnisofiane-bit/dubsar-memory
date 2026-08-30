@@ -29,3 +29,7 @@ Chaque entrée possède un index enregistré strictement croissant et un digest 
 ## Sécurité et limites
 
 Le registre est local. Le serveur Workbench reste exclusivement sur IPv4 loopback, sans CORS large, chemin libre ni accès sortant. Son canal d'action accepte uniquement deux routes de capability same-origin (`tickets/preview/` et `tickets/apply/`), des corps JSON bornés et le projet d'une allowlist construite par le launcher. My Work fournit groupes d'état, recherche, filtres projet/état, fiche détaillée, aperçu et confirmation. Le français est la langue initiale et l'anglais est sélectionnable. Les vues Resume, Memory et Graph demeurent disponibles dans la section Advanced.
+
+Le lancement public sans `--start`, utilisé par le raccourci standard, agrège les tickets de tous les projets du registre sûr et route chaque écriture par son `project_id`. Les créations globales sont sérialisées par un verrou local exclusif; une confirmation concurrente devenue obsolète est refusée sans doublon ni allocation partielle. Après `apply`, le reçu transporte la nouvelle projection agrégée pour rafraîchir My Work.
+
+La frontière GitHub demeure volontairement **non raccordée** : sans observer de confiance injecté, `Done` échoue fermé. Le raccordement réel est réservé au macro-lot MCP Cursor suivant.

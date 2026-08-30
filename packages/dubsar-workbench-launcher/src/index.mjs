@@ -8,4 +8,7 @@ export {
   WorkbenchLauncherError,
   launchWorkbench,
   manageWorkbenchProjects,
+  runTicketCli,
+  createTicketDashboardHandler,
 } from "./launcher.mjs";
+export { readTickets, readTicketAllocations, previewTicketChange, applyTicketChange } from "./registry-store.mjs";

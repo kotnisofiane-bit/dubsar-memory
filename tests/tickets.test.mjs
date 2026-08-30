@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { request as httpRequest } from "node:http";
+import { spawnSync } from "node:child_process";
 import { applyTicketChange, previewTicketChange, readTickets, readTicketAllocations } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
 import { createTicketDashboardHandler, runTicketCli } from "../packages/dubsar-workbench-launcher/src/launcher.mjs";
 import { startTicketInteractiveWorkbenchServer } from "../packages/dubsar-workbench-server/src/server.mjs";
@@ -45,7 +46,7 @@ test("CLI et Dashboard ont la même conséquence et le même reçu", async () =>
   const args = ["tickets", "create", "--start", env.first, "--allocation-root", env.allocationRoot, "--project-id", "project-a", "--proposal", proposal, "--json"];
   const cli = await runTicketCli(args, io); const dashboard = createTicketDashboardHandler({ allocationRoot: env.allocationRoot, projects: [{ project_id: "project-a", root: env.first }] });
   const web = await dashboard("preview", { project_id: "project-a", operation: create() }); assert.equal(web.change_sha256, cli.value.change_sha256);
-  const receipt = await dashboard("apply", { project_id: "project-a", operation: create(), expected_change_sha256: web.change_sha256 }); assert.equal(receipt.change_sha256, web.change_sha256);
+  const receipt = await dashboard("apply", { project_id: "project-a", operation: create(), expected_change_sha256: web.change_sha256 }); assert.equal(receipt.receipt.change_sha256, web.change_sha256);
   await assert.rejects(dashboard("preview", { project_id: "unknown", operation: create(), start: "/free/path" }), { code: "TICKET_DASHBOARD_REQUEST_INVALID" });
 });
 test("canal loopback accepte uniquement les deux actions JSON sur la capability URL", async () => {
@@ -54,4 +55,28 @@ test("canal loopback accepte uniquement les deux actions JSON sur la capability 
   const send = (suffix, body) => new Promise((resolve, reject) => { const target = new URL(session.url); const bytes = Buffer.from(JSON.stringify(body)); const req = httpRequest({ hostname: target.hostname, port: target.port, path: `${target.pathname}${suffix}`, method: "POST", headers: { Host: target.host, Origin: target.origin, Referer: session.url, "Content-Type": "application/json", "Content-Length": bytes.length } }, (res) => { const chunks = []; res.on("data", (chunk) => chunks.push(chunk)); res.on("end", () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString() })); }); req.on("error", reject); req.end(bytes); });
   try { assert.equal((await send("tickets/preview/", { project_id: "a", operation: { type: "create" } })).status, 200); assert.equal((await send("tickets/command/", { command: "rm" })).status, 404); }
   finally { await session.close("test"); }
+});
+test("deux apply concurrents sont sérialisés sans doublon ni état partiel", async () => {
+  const env = await environment(); const one = request(env, env.first, "project-a", create("A")); const two = request(env, env.second, "project-b", create("B"));
+  const [firstPreview, secondPreview] = await Promise.all([previewTicketChange(one), previewTicketChange(two)]);
+  const results = await Promise.allSettled([applyTicketChange({ ...one, expectedChange: firstPreview.change_sha256 }), applyTicketChange({ ...two, expectedChange: secondPreview.change_sha256 })]);
+  assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+  const stores = await Promise.all([readTickets({ start: env.first }), readTickets({ start: env.second })]);
+  assert.equal(stores.flatMap((store) => store.tickets).filter((ticket) => ticket.id === "DUB-001").length, 1);
+  assert.equal((await readTicketAllocations(env)).allocations.length, 1);
+});
+test("échec de publication projet ne consomme aucune allocation", async () => {
+  const env = await environment(); const input = request(env, env.first, "project-a", create()); const preview = await previewTicketChange(input);
+  await mkdir(path.join(env.first, ".dubsar", "tickets.json"));
+  await assert.rejects(applyTicketChange({ ...input, expectedChange: preview.change_sha256 }));
+  assert.equal((await readTicketAllocations(env)).allocations.length, 0);
+  assert.equal((await readTickets({ start: env.second })).tickets.length, 0);
+});
+test("le binaire installé expose réellement tickets list/create", async () => {
+  const env = await environment(); const proposal = path.join(env.allocationRoot, "public-proposal.json"); await writeFile(proposal, JSON.stringify(create("CLI publique")));
+  const bin = path.resolve("packages/dubsar-workbench-launcher/bin/dubsar-workbench-open.mjs");
+  const base = [bin, "tickets", "create", "--start", env.first, "--allocation-root", env.allocationRoot, "--project-id", "project-a", "--proposal", proposal, "--json"];
+  const preview = spawnSync(process.execPath, base, { encoding: "utf8" }); assert.equal(preview.status, 0, preview.stderr); const change = JSON.parse(preview.stdout).change_sha256;
+  const apply = spawnSync(process.execPath, [...base, "--apply", "--expected-change", change], { encoding: "utf8" }); assert.equal(apply.status, 0, apply.stderr);
+  const list = spawnSync(process.execPath, [bin, "tickets", "list", "--start", env.first, "--allocation-root", env.allocationRoot, "--project-id", "project-a", "--json"], { encoding: "utf8" }); assert.equal(list.status, 0, list.stderr); assert.equal(JSON.parse(list.stdout).tickets[0].title, "CLI publique");
 });
