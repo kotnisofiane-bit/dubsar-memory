@@ -111,9 +111,11 @@ export const TERMINAL_TICKET_STATES = Object.freeze(["Done", "Cancelled", "Dupli
 const MAX_TICKETS = 999;
 const MAX_ACTIVITY = 200;
 const SHA = /^[0-9a-f]{64}$/u;
+const CONTRACT_FINGERPRINT = /^sha256:[0-9a-f]{64}$/u;
+const GITHUB_REPOSITORY_URL = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?$/u;
 const ID = /^DUB-(\d{3})$/u;
 const LOCK_LEASE_MS = 30_000;
-const CURSOR_RECEIPT_FORMATS = new Set(["dubsar.cursor-launch-receipt/1", "dubsar.cursor-run-receipt/1"]);
+const CURSOR_RECEIPT_VERSIONS = new Set(["dubsar.cursor-launch-receipt/1", "dubsar.cursor-run-receipt/1"]);
 const terminal = new Set(TERMINAL_TICKET_STATES);
 const states = new Set(TICKET_STATES);
 const transitions = new Map([
@@ -159,15 +161,19 @@ function boundedJson(value, max = 16 * 1024) {
 }
 function cursorReceipt(value, ticketId) {
   const receipt = boundedJson(value);
-  if (!CURSOR_RECEIPT_FORMATS.has(receipt.format) || receipt.ticket_id !== ticketId) throw new TicketError("TICKET_CURSOR_RECEIPT_INVALID");
+  if (!CURSOR_RECEIPT_VERSIONS.has(receipt.receipt_version) || receipt.ticket_id !== ticketId) throw new TicketError("TICKET_CURSOR_RECEIPT_INVALID");
   const agentId = text(receipt.agent_id, 300, "TICKET_CURSOR_RECEIPT_INVALID");
   const runId = text(receipt.run_id, 300, "TICKET_CURSOR_RECEIPT_INVALID");
   const sourceUrl = text(receipt.source_url, 2000, "TICKET_CURSOR_RECEIPT_INVALID");
   try { const parsed = new URL(sourceUrl); if (parsed.protocol !== "https:") throw new Error(); } catch { throw new TicketError("TICKET_CURSOR_RECEIPT_INVALID"); }
-  const targetRepository = text(receipt.target_repository, 300, "TICKET_CURSOR_RECEIPT_INVALID");
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u.test(targetRepository) || !Array.isArray(receipt.repository_refs) || receipt.repository_refs.length > 20 || !SHA.test(receipt.contract_fingerprint ?? "")) throw new TicketError("TICKET_CURSOR_RECEIPT_INVALID");
+  const targetRepositoryUrl = text(receipt.target_repository_url, 2000, "TICKET_CURSOR_RECEIPT_INVALID");
+  const status = text(receipt.status, 80, "TICKET_CURSOR_RECEIPT_INVALID");
+  if (!GITHUB_REPOSITORY_URL.test(targetRepositoryUrl) || !Array.isArray(receipt.repository_refs) || receipt.repository_refs.length < 1 || receipt.repository_refs.length > 20 || !CONTRACT_FINGERPRINT.test(receipt.contract_fingerprint ?? "")) throw new TicketError("TICKET_CURSOR_RECEIPT_INVALID");
+  for (const reference of receipt.repository_refs) {
+    if (!reference || Object.keys(reference).sort().join(",") !== "repository_url,starting_sha" || !GITHUB_REPOSITORY_URL.test(reference.repository_url ?? "") || !/^[0-9a-f]{40}$/u.test(reference.starting_sha ?? "")) throw new TicketError("TICKET_CURSOR_RECEIPT_INVALID");
+  }
   boundedJson(receipt.bounds); boundedJson({ repository_refs: receipt.repository_refs });
-  return Object.freeze({ format: receipt.format, ticket_id: ticketId, agent_id: agentId, run_id: runId, source_url: sourceUrl, target_repository: targetRepository, repository_refs: structuredClone(receipt.repository_refs), contract_fingerprint: receipt.contract_fingerprint, bounds: structuredClone(receipt.bounds) });
+  return Object.freeze({ receipt_version: receipt.receipt_version, target_repository_url: targetRepositoryUrl, contract_fingerprint: receipt.contract_fingerprint, repository_refs: structuredClone(receipt.repository_refs), ticket_id: ticketId, agent_id: agentId, run_id: runId, source_url: sourceUrl, status, bounds: structuredClone(receipt.bounds) });
 }
 async function storePath(start) {
   const root = path.resolve(start);

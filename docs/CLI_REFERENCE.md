@@ -106,7 +106,9 @@ automatically.
 
 Ticket commands use `packages/dubsar-workbench-launcher/bin/dubsar-workbench-open.mjs`
 and additionally require `--allocation-root` and `--project-id`. Cursor receipt
-attachment is local persistence only; MCP invocation belongs to the bounded
+attachment preserves the Controller names (`receipt_version`,
+`target_repository_url`, and `sha256:<hex64>` `contract_fingerprint`) and is
+local persistence only; MCP invocation belongs to the bounded
 `launch-dubsar-work` Codex skill.
 
 ## Cursor Cloud repository bridges

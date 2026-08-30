@@ -18,9 +18,9 @@ La CLI du launcher accepte `tickets list|create|transition|activity|attach-curso
 
 ### Lancement Cursor borné
 
-`attach-cursor-launch` vise un ticket existant. Une seule publication atomique conserve le reçu versionné (`dubsar.cursor-launch-receipt/1` ou `dubsar.cursor-run-receipt/1`), `agent_id`, `run_id`, `source_url`, `target_repository`, `repository_refs`, `contract_fingerprint` et `bounds`, puis place le ticket `In Progress`. Le reçu doit porter le même `ticket_id`; les URL non HTTPS et empreintes non SHA-256 sont refusées. `fail-cursor-launch` ne crée aucun identifiant d'agent : il ajoute seulement une activité bornée avec un code, conserve le résumé comme blocage et place atomiquement le ticket `Blocked`.
+`attach-cursor-launch` vise un ticket existant. Une seule publication atomique conserve le reçu Controller exact : `receipt_version` (`dubsar.cursor-launch-receipt/1` ou `dubsar.cursor-run-receipt/1`), `target_repository_url`, `contract_fingerprint`, `repository_refs`, `ticket_id`, `agent_id`, `run_id`, `source_url`, `status` et `bounds`, puis place le ticket `In Progress`. Le dépôt cible est une URL GitHub HTTPS complète, chaque référence est exactement `{repository_url, starting_sha}`, et l'empreinte est exactement `sha256:` suivi de 64 caractères hexadécimaux minuscules. Le reçu doit porter le même `ticket_id`; l'ancien schéma local `format`/`target_repository`/hex64 est refusé. `fail-cursor-launch` ne crée aucun identifiant d'agent : il ajoute seulement une activité bornée avec un code, conserve le résumé comme blocage et place atomiquement le ticket `Blocked`.
 
-Ces opérations ne contactent aucun MCP. L'orchestrateur doit d'abord appliquer et relire la création du ticket, puis appeler une seule fois le Controller, comparer `ticket_id` et `contract_fingerprint`, et enfin prévisualiser/appliquer l'attachement. My Work ne fait qu'afficher le reçu local. Aucun secret n'appartient au registre.
+Ces opérations ne contactent aucun MCP. L'orchestrateur doit d'abord appliquer et relire la création du ticket, puis appeler une seule fois le Controller, comparer `ticket_id` et le `contract_fingerprint` obtenu par la canonicalisation exacte du Controller, préfixe `sha256:` inclus, et enfin prévisualiser/appliquer l'attachement. My Work ne fait qu'afficher le reçu local. Aucun secret n'appartient au registre.
 
 ## États et preuves
 
