@@ -811,8 +811,8 @@
     },
     {
       "path": "packages/dubsar-workbench-report/src/catalog-interactive-assets.mjs",
-      "bytes": 117942,
-      "sha256": "dcf571560da184e6a598550667e660acf0538720a26e8f834e535b72d6f1cf1a",
+      "bytes": 118054,
+      "sha256": "9c857bb9a9bb1fa16b3665eec32d134ebf7c80b95bcf9f99826d985ffd44b4e5",
       "role": "runtime"
     },
     {
@@ -829,8 +829,8 @@
     },
     {
       "path": "packages/dubsar-workbench-report/src/interactive-assets.mjs",
-      "bytes": 44166,
-      "sha256": "5346b7857bc7141a9d8d56bb4acbbe83c7b91ee586261e701893a401def9bf7e",
+      "bytes": 44278,
+      "sha256": "7c3c8f6eb939b3a09b8acf797dc3728268cabea958e9ff10cf634f992d65a892",
       "role": "runtime"
     },
     {
@@ -871,10 +871,10 @@
     },
     {
       "path": "packages/dubsar-workbench-server/src/server.mjs",
-      "bytes": 28655,
-      "sha256": "1f67dc32447ccaf88dd8ce4950ab389c750c30e552d6fdb7fc6a83113493133f",
+      "bytes": 28672,
+      "sha256": "4c78690f6700ec9048f9618d490093b10e1c3f109f03f338c52111f4be52bb9b",
       "role": "runtime"
     }
   ],
-  "content_root_sha256": "66a994bedee794954a3cfbd0664cb268a0b79f3b5e074511d77794d343b82434"
+  "content_root_sha256": "6cf03bd35ff40b3887753972745f42e9c407b0350e0ef13c9ff3639169f3fed9"
 }
