@@ -197,7 +197,8 @@ function cursorObservation(value, ticket) {
   if (observation.pr != null) {
     if (!observation.pr || !OWNER_REPO.test(observation.pr.repository ?? "") || !Number.isSafeInteger(observation.pr.number) || observation.pr.number < 1) throw new TicketError("TICKET_SYNC_CONTRADICTION");
     if (observation.pr.repository !== repositoryFromTargetUrl(ticket.cursor_launch.target_repository_url)) throw new TicketError("TICKET_SYNC_CONTRADICTION");
-    pr = Object.freeze({ repository: observation.pr.repository, number: observation.pr.number });
+    const branch = observation.pr.branch == null ? undefined : text(observation.pr.branch, 300, "TICKET_SYNC_CONTRADICTION");
+    pr = Object.freeze({ repository: observation.pr.repository, number: observation.pr.number, ...(branch === undefined ? {} : { branch }) });
   }
   return Object.freeze({ source: "trusted_cursor_observer", ticket_id: ticket.id, agent_id: ticket.cursor_launch.agent_id, run_id: ticket.cursor_launch.run_id, lifecycle: observation.lifecycle, pr });
 }
@@ -209,25 +210,35 @@ function githubPrObservation(value, ticket, claimed) {
   const observation = boundedJson(value);
   if (observation.source !== "trusted_github_observer" || observation.ticket_id !== ticket.id || !OWNER_REPO.test(observation.repository ?? "") || !Number.isSafeInteger(observation.pr) || observation.pr < 1 || !GITHUB_PR_STATES.has(observation.state)) throw new TicketError("TICKET_SYNC_CONTRADICTION");
   if (!claimed || observation.repository !== claimed.repository || observation.pr !== claimed.number) throw new TicketError("TICKET_SYNC_CONTRADICTION");
+  if (claimed.branch && observation.branch && claimed.branch !== observation.branch) throw new TicketError("TICKET_SYNC_CONTRADICTION");
+  const headSha = observation.head_sha;
+  if (!SHA40.test(headSha ?? "")) throw new TicketError("TICKET_SYNC_CONTRADICTION");
   const mergeCommit = observation.merge_commit_sha ?? null;
   if (observation.state === "merged") {
     if (!SHA40.test(mergeCommit ?? "")) throw new TicketError("TICKET_SYNC_CONTRADICTION");
   } else if (mergeCommit != null) throw new TicketError("TICKET_SYNC_CONTRADICTION");
   const branch = observation.branch == null ? null : text(observation.branch, 300, "TICKET_SYNC_CONTRADICTION");
-  return Object.freeze({ source: "trusted_github_observer", ticket_id: ticket.id, repository: observation.repository, pr: observation.pr, state: observation.state, merge_commit_sha: mergeCommit, branch });
+  return Object.freeze({ source: "trusted_github_observer", ticket_id: ticket.id, repository: observation.repository, pr: observation.pr, state: observation.state, head_sha: headSha, merge_commit_sha: mergeCommit, branch });
+}
+function prEvidence(githubObs, extra = {}) {
+  const basis = { type: githubObs.state === "merged" ? "github_merge_observation" : "github_pr_observation", repository: githubObs.repository, pr: githubObs.pr, head_sha: githubObs.head_sha, ticket_id: githubObs.ticket_id, ...extra };
+  if (githubObs.state === "merged") return { ...basis, merge_commit_sha: githubObs.merge_commit_sha };
+  return { ...basis, state: githubObs.state };
 }
 function mapSyncedFields(ticket, cursorObs, githubObs) {
+  const prLabel = githubObs ? `${githubObs.repository}#${githubObs.pr}` : ticket.pr;
+  const branch = githubObs?.branch ?? ticket.branch;
   if (githubObs?.state === "merged") {
-    return { state: "Done", pr: `${githubObs.repository}#${githubObs.pr}`, branch: githubObs.branch ?? ticket.branch, blocker: null, evidence: { type: "github_merge_observation", repository: githubObs.repository, pr: githubObs.pr, merge_commit_sha: githubObs.merge_commit_sha, ticket_id: githubObs.ticket_id } };
-  }
-  if (githubObs?.state === "open" || githubObs?.state === "draft") {
-    return { state: "In Review", pr: `${githubObs.repository}#${githubObs.pr}`, branch: githubObs.branch ?? ticket.branch, blocker: null, evidence: { type: "github_pr_observation", repository: githubObs.repository, pr: githubObs.pr, state: githubObs.state, ticket_id: githubObs.ticket_id } };
-  }
-  if (githubObs?.state === "closed") {
-    return { state: "Blocked", pr: `${githubObs.repository}#${githubObs.pr}`, branch: githubObs.branch ?? ticket.branch, blocker: "Pull request closed without merge", evidence: { type: "github_pr_observation", repository: githubObs.repository, pr: githubObs.pr, state: "closed", ticket_id: githubObs.ticket_id } };
+    return { state: "Done", pr: prLabel, branch, blocker: null, evidence: prEvidence(githubObs) };
   }
   if (cursorObs.lifecycle === "failed") {
-    return { state: "Blocked", pr: ticket.pr, branch: ticket.branch, blocker: "Cursor run failed", evidence: { type: "cursor_run_observation", lifecycle: "failed", agent_id: cursorObs.agent_id, run_id: cursorObs.run_id, ticket_id: cursorObs.ticket_id } };
+    return { state: "Blocked", pr: prLabel, branch, blocker: "Cursor run failed", evidence: githubObs ? prEvidence(githubObs, { lifecycle: "failed" }) : { type: "cursor_run_observation", lifecycle: "failed", agent_id: cursorObs.agent_id, run_id: cursorObs.run_id, ticket_id: cursorObs.ticket_id } };
+  }
+  if (githubObs?.state === "open" || githubObs?.state === "draft") {
+    return { state: "In Review", pr: prLabel, branch, blocker: null, evidence: prEvidence(githubObs) };
+  }
+  if (githubObs?.state === "closed") {
+    return { state: "Blocked", pr: prLabel, branch, blocker: "Pull request closed without merge", evidence: prEvidence(githubObs) };
   }
   if (cursorObs.lifecycle === "completed") {
     return { state: "Blocked", pr: ticket.pr, branch: ticket.branch, blocker: "Cursor completed without a usable pull request", evidence: { type: "cursor_run_observation", lifecycle: "completed", agent_id: cursorObs.agent_id, run_id: cursorObs.run_id, ticket_id: cursorObs.ticket_id } };

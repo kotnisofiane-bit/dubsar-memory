@@ -33,14 +33,16 @@ invalid receipts. Do not rewrite terminal tickets.
    directory, `PATH`, project content, or a path supplied by the project.
 2. Require the selected local project (`project_id` and root) and the
    launcher allocation root. List tickets through the same `<launcher-bin>`.
-3. For each eligible ticket, call the trusted Cursor reader exactly once with
+3. For each eligible ticket, call `get_cursor_agent_result` exactly once with
    that ticket's persisted `agent_id` and `run_id`. On a temporary reader
    failure, leave the ticket unchanged. Do not retry and do not switch
-   backend.
-4. If that one Cursor result names a pull request, independently observe that
-   exact repository and PR on GitHub once. A repository or PR contradiction
-   leaves the ticket unchanged. Do not search for another PR.
-5. Write a temporary `sync-cursor-status` proposal containing the exact
+   backend. Normalize that raw result into the proposal schema below. Do not
+   pass the raw MCP payload to the launcher.
+4. If that one Cursor result names exactly one pull request for the receipt
+   target repository, independently observe that exact repository and PR on
+   GitHub once. A repository, PR, branch, or SHA contradiction leaves the
+   ticket unchanged. Do not search for another PR or agent.
+5. Write a temporary `sync-cursor-status` proposal containing the normalized
    Cursor observation and, when present, the independent GitHub observation.
    Preview then apply through the public launcher CLI:
 
@@ -50,16 +52,103 @@ invalid receipts. Do not rewrite terminal tickets.
    ```
 
 6. Mapping after independent evidence only:
-   - running Cursor run → `In Progress`
-   - GitHub-verified open or draft PR → `In Review`
-   - explicit Cursor failure, closed-unmerged PR, or completion without a
-     usable independently verified PR → `Blocked`
-   - GitHub-verified merged PR → `Done` with the exact merge commit SHA
+   - running Cursor run without a usable PR → `In Progress`
+   - completed Cursor run plus GitHub-verified open or draft PR → `In Review`
+   - explicit Cursor `failed` lifecycle with a non-merged open or draft PR →
+     `Blocked` (never `In Review`)
+   - closed-unmerged PR → `Blocked`
+   - completed without a usable independently verified PR → `Blocked`
+   - GitHub-verified merged PR → `Done` with distinct `head_sha` and
+     `merge_commit_sha`
 7. If preview shows an unchanged store, do not apply. A second sync against
    the same evidence must not add activity or rewrite the ticket.
 8. Re-read the ticket, then open My Work with
    `node "<launcher-bin>" --start <root>`. Closing and reopening must keep
    the ticket, launch receipt, PR, branch, revisions, and synchronized state.
+
+## Normalization (Work → proposal schema)
+
+The launcher accepts only `trusted_cursor_observer` / `trusted_github_observer`
+objects. Work performs this exact mapping once. Fail closed (no proposal, no
+second read, ticket unchanged) on missing, ambiguous, multiple, or
+contradictory values.
+
+### `get_cursor_agent_result`
+
+Call with the persisted pair only. Require the returned identity to equal
+that `agent_id` and `run_id`.
+
+| Raw `status` (case-insensitive single token) | `lifecycle` |
+| --- | --- |
+| `CREATING`, `QUEUED`, `PENDING`, `RUNNING`, `IN_PROGRESS` | `running` |
+| `FAILED`, `ERROR`, `CANCELLED`, `CANCELED` | `failed` |
+| `FINISHED`, `COMPLETED`, `COMPLETE`, `DONE` | `completed` |
+
+Any other status, a list of statuses, or two conflicting status fields →
+fail closed.
+
+PR claim: collect HTTPS GitHub pull-request URLs that match the receipt
+`target_repository_url` (`owner/name`, optional `.git`). Zero matches →
+`pr: null`. Exactly one match → `pr: { repository, number }` and, when the
+result also names one branch for that same PR, `pr.branch`. Two or more
+matches, a URL for another repository, or a number that cannot be parsed →
+fail closed. Never invent a PR and never query another agent.
+
+Proposal:
+
+```json
+{
+  "source": "trusted_cursor_observer",
+  "ticket_id": "DUB-001",
+  "agent_id": "<persisted agent_id>",
+  "run_id": "<persisted run_id>",
+  "lifecycle": "running|failed|completed",
+  "pr": null
+}
+```
+
+When a single target-repo PR exists, `pr` is
+`{ "repository": "owner/name", "number": 12 }` plus optional `"branch"`.
+
+### Independent GitHub PR
+
+Observe only the claimed `repository` and PR number. Map one GitHub object:
+
+| GitHub fields | `state` |
+| --- | --- |
+| `draft: true` and `state: open` and not merged | `draft` |
+| `state: open`, not draft, not merged | `open` |
+| `merged: true` or non-null `merged_at` | `merged` |
+| `state: closed` and not merged | `closed` |
+
+`draft` plus merged, `open` plus `closed`, or mixed merge flags → fail closed.
+
+Always copy `head.ref` to `branch` and `head.sha` to `head_sha`. `head_sha`
+must be exactly 40 lowercase hex characters for open, draft, closed, and
+merged. `starting_sha` on `cursor_launch.repository_refs` is the
+`starting_revision` and must not be overwritten or reused as `head_sha`.
+`merge_commit_sha` is present only when `state` is `merged`; it is a
+distinct field from `head_sha` and must also be 40 lowercase hex.
+
+Proposal:
+
+```json
+{
+  "source": "trusted_github_observer",
+  "ticket_id": "DUB-001",
+  "repository": "owner/name",
+  "pr": 12,
+  "state": "open|draft|closed|merged",
+  "branch": "cursor/work",
+  "head_sha": "<40 lowercase hex>",
+  "merge_commit_sha": null
+}
+```
+
+For merged PRs set `merge_commit_sha` to the GitHub merge commit SHA (never
+copy `head_sha` into that field). Persist `branch`, `pr`, and `head_sha` in
+the ticket activity evidence. For `Done`, persist both `head_sha` and
+`merge_commit_sha`.
 
 ## Limits
 
