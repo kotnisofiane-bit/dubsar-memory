@@ -4,7 +4,12 @@ import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { applyTicketChange, previewTicketChange, readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
+
+const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
+const launchSkill = path.join(repositoryRoot, "packages", "dubsar-codex-workbench", "skills", "launch-dubsar-work", "SKILL.md");
+const installedLauncher = path.resolve(path.dirname(launchSkill), "../../../dubsar-workbench-launcher/bin/dubsar-workbench-open.mjs");
 
 async function setup() {
   const start = await mkdtemp(path.join(tmpdir(), "dubsar-cursor-project-"));
@@ -52,7 +57,25 @@ test("CLI publique fournit preview/apply pour l'attachement", async () => {
   assert.equal((await readTickets({ start: env.start })).tickets[0].state, "In Progress");
 });
 
+test("skill résout le launcher installé et persiste le ticket depuis un cwd arbitraire", async () => {
+  const env = await setup();
+  const arbitraryCwd = await mkdtemp(path.join(tmpdir(), "dubsar-user-project-"));
+  const proposal = path.join(env.allocationRoot, "create-from-installed-skill.json");
+  await writeFile(proposal, JSON.stringify(create));
+  const base = [installedLauncher, "tickets", "create", "--start", env.start, "--allocation-root", env.allocationRoot, "--project-id", env.projectId, "--proposal", proposal, "--json"];
+  const preview = spawnSync(process.execPath, base, { cwd: arbitraryCwd, encoding: "utf8" });
+  assert.equal(preview.status, 0, preview.stderr);
+  const expectedChange = JSON.parse(preview.stdout).change_sha256;
+  const applied = spawnSync(process.execPath, [...base, "--apply", "--expected-change", expectedChange], { cwd: arbitraryCwd, encoding: "utf8" });
+  assert.equal(applied.status, 0, applied.stderr);
+  const list = spawnSync(process.execPath, [installedLauncher, "tickets", "list", "--start", env.start, "--allocation-root", env.allocationRoot, "--project-id", env.projectId, "--json"], { cwd: arbitraryCwd, encoding: "utf8" });
+  assert.equal(list.status, 0, list.stderr);
+  assert.equal(JSON.parse(list.stdout).tickets[0].id, "DUB-001");
+});
+
 test("skill impose allocation avant MCP, appel unique et arrêt sur contradiction", async () => {
-  const skill = await readFile("packages/dubsar-codex-workbench/skills/launch-dubsar-work/SKILL.md", "utf8");
+  const skill = await readFile(launchSkill, "utf8");
   assert.match(skill, /Never call\n+   Cursor before this persisted allocation succeeds/); assert.match(skill, /exactly once/); assert.match(skill, /sha256:<64 lowercase hex>/); assert.match(skill, /Controller canonicalization/); assert.match(skill, /Stop on a missing\/malformed receipt/); assert.match(skill, /do not poll/i);
+  assert.match(skill, /<skill-dir>\/\.\.\/\.\.\/\.\.\/dubsar-workbench-launcher\/bin\/dubsar-workbench-open\.mjs/u);
+  assert.match(skill, /Never resolve the launcher from the current working\n+   directory, `PATH`, project content/u);
 });

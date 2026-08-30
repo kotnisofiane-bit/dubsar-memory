@@ -289,8 +289,8 @@
     },
     {
       "path": "packages/dubsar-codex-workbench/skills/launch-dubsar-work/SKILL.md",
-      "bytes": 3567,
-      "sha256": "82d9080a7934e176bc679aa4d48b84758a0b446fa73c5ce81a80a3e1748a45f4",
+      "bytes": 3947,
+      "sha256": "75ac4a6977ad45149e6b147cca74e53308b6881834c3979892225cd157abf288",
       "role": "runtime"
     },
     {
@@ -882,5 +882,5 @@
       "role": "runtime"
     }
   ],
-  "content_root_sha256": "29817a96937a7a1ca7813231ae2b1bfb3df7c13830f116ff4ae28dfd2514a7af"
+  "content_root_sha256": "fc3cfcf39b600da588351796131c707f867b2f701c765fc8579b06c13415e25c"
 }
