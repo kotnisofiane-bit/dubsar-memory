@@ -289,14 +289,14 @@
     },
     {
       "path": "packages/dubsar-codex-workbench/skills/launch-dubsar-work/SKILL.md",
-      "bytes": 4159,
-      "sha256": "8bd16aae092355e9762c8a106721688317a8d79d9398edb547e62600cde5cb57",
+      "bytes": 4161,
+      "sha256": "500f30eb66dbe4e98edeae3c0f9e8b36d096ab6a73aa5c054f3f1e675f7e86fe",
       "role": "runtime"
     },
     {
       "path": "packages/dubsar-codex-workbench/skills/resume-dubsar-workbench/SKILL.md",
-      "bytes": 2420,
-      "sha256": "77108bf4e80c1d3848e96f95785e0f1f5ada10e6feac5c84954a59faed7121cb",
+      "bytes": 2457,
+      "sha256": "4e022ad075de8dda54c75c0264aeb5df24c6052e63f05864f09443aad1228893",
       "role": "runtime"
     },
     {
@@ -313,8 +313,8 @@
     },
     {
       "path": "packages/dubsar-codex-workbench/skills/sync-dubsar-work/SKILL.md",
-      "bytes": 6771,
-      "sha256": "e07e8522f33d9d31b635e684c56cd031afc12dee5d56236185b311c64dfa9402",
+      "bytes": 7398,
+      "sha256": "99c79cb48654f115f6d0e3d2f9768cffd6d56309ab66c8445535f542e694f471",
       "role": "runtime"
     },
     {
@@ -805,8 +805,8 @@
     },
     {
       "path": "packages/dubsar-workbench-launcher/src/registry-store.mjs",
-      "bytes": 36091,
-      "sha256": "2482c8b884b9684aa0db3b3b0764a1aa4faa1a1e6798b5a3e2b947fb34fa3d64",
+      "bytes": 36432,
+      "sha256": "e6c8a3e793f556a04f19cf884b0335f21e3faf3ebc99db9d9d990c18f7e32d36",
       "role": "runtime"
     },
     {
@@ -888,5 +888,5 @@
       "role": "runtime"
     }
   ],
-  "content_root_sha256": "fc700f72a15c1b779b95c56d42f66676f882b5653c356e6455bc3449acc1eac7"
+  "content_root_sha256": "161ae0ce4eada982a8fd7cb88ab457499fe0954f23df0cfe512964c98089c4e1"
 }

@@ -60,9 +60,9 @@ repository (`owner/name`). My Work is a local view, not an MCP client.
    proposal. Preview and apply that CLI operation with the returned digest.
    Re-read the ticket and require `In Progress` plus the exact persisted
    receipt.
-9. Before presenting or opening My Work, run the `sync-dubsar-work` workflow
-   for this ticket using only the persisted `agent_id` and `run_id`. Do not
-   launch, retry, discover, or switch agents. Then open My Work with
+9. Before presenting My Work, run the `sync-dubsar-work` workflow for this
+   ticket using only the persisted `agent_id` and `run_id`. Do not launch,
+   retry, discover, or switch agents. Then open My Work exactly once with
    `node "<launcher-bin>" --start <root>`.
 
 ## Limits

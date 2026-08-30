@@ -51,20 +51,25 @@ invalid receipts. Do not rewrite terminal tickets.
    node "<launcher-bin>" tickets sync-cursor-status --start <root> --allocation-root <allocation-root> --project-id <project_id> --proposal <temporary-file> --apply --expected-change <change_sha256> --json
    ```
 
-6. Mapping after independent evidence only:
-   - running Cursor run without a usable PR → `In Progress`
-   - completed Cursor run plus GitHub-verified open or draft PR → `In Review`
-   - explicit Cursor `failed` lifecycle with a non-merged open or draft PR →
-     `Blocked` (never `In Review`)
-   - closed-unmerged PR → `Blocked`
-   - completed without a usable independently verified PR → `Blocked`
+6. Mapping after independent evidence only (canonical KOT-119 order):
    - GitHub-verified merged PR → `Done` with distinct `head_sha` and
      `merge_commit_sha`
+   - explicit Cursor `failed` lifecycle → `Blocked` (never `In Review`, even
+     with a non-merged open or draft PR)
+   - otherwise a GitHub-verified open or draft PR → `In Review`, including
+     when the Cursor lifecycle is still `running`
+   - closed-unmerged PR → `Blocked`
+   - completed without a usable independently verified PR → `Blocked`
+   - running without a usable PR → `In Progress`
 7. If preview shows an unchanged store, do not apply. A second sync against
-   the same evidence must not add activity or rewrite the ticket.
-8. Re-read the ticket, then open My Work with
-   `node "<launcher-bin>" --start <root>`. Closing and reopening must keep
-   the ticket, launch receipt, PR, branch, revisions, and synchronized state.
+   the same normalized evidence must not add activity or rewrite the ticket.
+   A change to `head_sha`, branch, PR state, or merge commit must persist a
+   new `cursor_sync` activity even when ticket `state`/`pr`/`branch`/`blocker`
+   stay the same.
+8. Re-read the ticket through `tickets list`. Do not open My Work from this
+   skill. `launch-dubsar-work` or `resume-dubsar-workbench` opens My Work
+   exactly once after this sync. Closing and reopening must keep the ticket,
+   launch receipt, PR, branch, revisions, and synchronized state.
 
 ## Normalization (Work → proposal schema)
 
@@ -123,12 +128,16 @@ Observe only the claimed `repository` and PR number. Map one GitHub object:
 
 `draft` plus merged, `open` plus `closed`, or mixed merge flags → fail closed.
 
-Always copy `head.ref` to `branch` and `head.sha` to `head_sha`. `head_sha`
-must be exactly 40 lowercase hex characters for open, draft, closed, and
-merged. `starting_sha` on `cursor_launch.repository_refs` is the
+Always copy `head.ref` to `branch` and `head.sha` to `head_sha`. `branch`
+must be a non-empty valid GitHub head ref for every PR observation; missing
+or blank `head.ref`, or a ref that contradicts the Cursor-announced
+`pr.branch`, is fail-closed with no ticket mutation. `head_sha` must be
+exactly 40 lowercase hex characters for open, draft, closed, and merged.
+`starting_sha` on `cursor_launch.repository_refs` is the
 `starting_revision` and must not be overwritten or reused as `head_sha`.
 `merge_commit_sha` is present only when `state` is `merged`; it is a
-distinct field from `head_sha` and must also be 40 lowercase hex.
+distinct field from `head_sha`, must also be 40 lowercase hex, and must not
+equal `head_sha`.
 
 Proposal:
 
@@ -146,9 +155,9 @@ Proposal:
 ```
 
 For merged PRs set `merge_commit_sha` to the GitHub merge commit SHA (never
-copy `head_sha` into that field). Persist `branch`, `pr`, and `head_sha` in
-the ticket activity evidence. For `Done`, persist both `head_sha` and
-`merge_commit_sha`.
+copy `head_sha` into that field; never use the same SHA for both). Persist
+`repository`, `pr`, `branch`, and `head_sha` in the ticket activity
+evidence. For `Done`, persist both `head_sha` and `merge_commit_sha`.
 
 ## Limits
 

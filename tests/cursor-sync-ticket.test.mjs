@@ -46,7 +46,8 @@ test("PR GitHub ouverte ou brouillon vérifiée mappe vers In Review", async () 
   assert.equal((await readTickets({ start: env.start })).tickets[0].pr, "owner/repo#12");
   assert.equal((await readTickets({ start: env.start })).tickets[0].branch, "cursor/work");
   assert.equal((await readTickets({ start: env.start })).tickets[0].activity.at(-1).evidence.head_sha, "d".repeat(40));
-  assert.equal((await readTickets({ start: env.start })).tickets[0].cursor_launch.repository_refs[0].starting_sha, "a".repeat(40));
+  assert.equal((await readTickets({ start: env.start })).tickets[0].activity.at(-1).evidence.branch, "cursor/work");
+  assert.equal((await readTickets({ start: env.start })).tickets[0].activity.at(-1).evidence.pr, 12);
 });
 
 test("PR fusionnée vérifiée indépendamment mappe vers Done avec SHA de fusion", async () => {
@@ -60,6 +61,7 @@ test("PR fusionnée vérifiée indépendamment mappe vers Done avec SHA de fusio
   assert.equal(ticket.branch, "cursor/work");
   assert.equal(ticket.activity.at(-1).evidence.merge_commit_sha, merge);
   assert.equal(ticket.activity.at(-1).evidence.head_sha, head);
+  assert.equal(ticket.activity.at(-1).evidence.branch, "cursor/work");
   assert.notEqual(ticket.activity.at(-1).evidence.head_sha, ticket.activity.at(-1).evidence.merge_commit_sha);
   assert.equal(ticket.cursor_launch.repository_refs[0].starting_sha, "a".repeat(40));
   assert.equal(ticket.activity.at(-1).evidence.type, "github_merge_observation");
@@ -129,6 +131,51 @@ test("head_sha GitHub manquant ou invalide est une contradiction sans mutation",
   await assert.rejects(previewTicketChange({ ...env, operation: { type: "sync-cursor-status", id: "DUB-001", cursor_observation: cursorObs({ lifecycle: "completed", pr: { repository: "owner/repo", number: 12 } }), github_observation: githubObs({ head_sha: "not-a-sha" }) } }), { code: "TICKET_SYNC_CONTRADICTION" });
   await assert.rejects(previewTicketChange({ ...env, operation: { type: "sync-cursor-status", id: "DUB-001", cursor_observation: cursorObs({ lifecycle: "completed", pr: { repository: "owner/repo", number: 12 } }), github_observation: githubObs({ state: "merged", merge_commit_sha: "c".repeat(40), head_sha: "E".repeat(40) }) } }), { code: "TICKET_SYNC_CONTRADICTION" });
   assert.deepEqual(await readFile(target), before);
+});
+
+test("un head_sha GitHub différent persiste une activité et survit à la relecture", async () => {
+  const env = await setup(); await launched(env);
+  const first = { type: "sync-cursor-status", id: "DUB-001", cursor_observation: cursorObs({ lifecycle: "completed", pr: { repository: "owner/repo", number: 12 } }), github_observation: githubObs({ state: "open", head_sha: "d".repeat(40) }) };
+  await apply(env, first);
+  const afterFirst = (await readTickets({ start: env.start })).tickets[0];
+  const activityLength = afterFirst.activity.length;
+  const nextHead = "e".repeat(40);
+  await apply(env, { ...first, github_observation: githubObs({ state: "open", head_sha: nextHead }) });
+  const updated = (await readTickets({ start: env.start })).tickets[0];
+  assert.equal(updated.state, "In Review");
+  assert.equal(updated.pr, "owner/repo#12");
+  assert.equal(updated.branch, "cursor/work");
+  assert.equal(updated.activity.length, activityLength + 1);
+  assert.equal(updated.activity.at(-1).kind, "cursor_sync");
+  assert.equal(updated.activity.at(-1).evidence.head_sha, nextHead);
+  assert.equal(updated.activity.at(-1).evidence.branch, "cursor/work");
+  const reread = (await readTickets({ start: env.start })).tickets[0];
+  assert.deepEqual(reread.activity.at(-1), updated.activity.at(-1));
+  assert.equal(reread.activity.at(-1).evidence.head_sha, nextHead);
+});
+
+test("branche GitHub manquante, vide ou contradictoire avec Cursor est une contradiction", async () => {
+  const env = await setup(); await launched(env);
+  const target = path.join(env.start, ".dubsar", "tickets.json");
+  const before = await readFile(target);
+  const { branch: _omit, ...withoutBranch } = githubObs({ state: "open" });
+  await assert.rejects(previewTicketChange({ ...env, operation: { type: "sync-cursor-status", id: "DUB-001", cursor_observation: cursorObs({ lifecycle: "completed", pr: { repository: "owner/repo", number: 12 } }), github_observation: withoutBranch } }), { code: "TICKET_SYNC_CONTRADICTION" });
+  await assert.rejects(previewTicketChange({ ...env, operation: { type: "sync-cursor-status", id: "DUB-001", cursor_observation: cursorObs({ lifecycle: "completed", pr: { repository: "owner/repo", number: 12 } }), github_observation: githubObs({ branch: "" }) } }), { code: "TICKET_SYNC_CONTRADICTION" });
+  await assert.rejects(previewTicketChange({ ...env, operation: { type: "sync-cursor-status", id: "DUB-001", cursor_observation: cursorObs({ lifecycle: "completed", pr: { repository: "owner/repo", number: 12, branch: "cursor/other" } }), github_observation: githubObs({ branch: "cursor/work" }) } }), { code: "TICKET_SYNC_CONTRADICTION" });
+  assert.deepEqual(await readFile(target), before);
+});
+
+test("merge_commit_sha égal au head_sha est une contradiction", async () => {
+  const env = await setup(); await launched(env);
+  const same = "c".repeat(40);
+  await assert.rejects(previewTicketChange({ ...env, operation: { type: "sync-cursor-status", id: "DUB-001", cursor_observation: cursorObs({ lifecycle: "completed", pr: { repository: "owner/repo", number: 12 } }), github_observation: githubObs({ state: "merged", head_sha: same, merge_commit_sha: same }) } }), { code: "TICKET_SYNC_CONTRADICTION" });
+  assert.equal((await readTickets({ start: env.start })).tickets[0].state, "In Progress");
+});
+
+test("PR open vérifiée mappe vers In Review même si Cursor est encore running", async () => {
+  const env = await setup(); await launched(env);
+  await apply(env, { type: "sync-cursor-status", id: "DUB-001", cursor_observation: cursorObs({ lifecycle: "running", pr: { repository: "owner/repo", number: 12 } }), github_observation: githubObs({ state: "open" }) });
+  assert.equal((await readTickets({ start: env.start })).tickets[0].state, "In Review");
 });
 
 test("run Cursor terminé sans PR utilisable mappe vers Blocked", async () => {
@@ -218,4 +265,9 @@ test("skills imposent synchro avant My Work, identité persistée et absence de 
   assert.match(sync, /starting_revision/);
   assert.match(sync, /merge_commit_sha/);
   assert.match(sync, /never `In Review`/);
+  assert.match(sync, /Do not open My Work/);
+  assert.match(sync, /Cursor lifecycle is still `running`/);
+  assert.doesNotMatch(sync, /Then open My Work with/u);
+  assert.match(launch, /exactly once/);
+  assert.match(resume, /exactly once/);
 });

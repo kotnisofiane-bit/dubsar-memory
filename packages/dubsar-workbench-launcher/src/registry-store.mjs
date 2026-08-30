@@ -210,20 +210,30 @@ function githubPrObservation(value, ticket, claimed) {
   const observation = boundedJson(value);
   if (observation.source !== "trusted_github_observer" || observation.ticket_id !== ticket.id || !OWNER_REPO.test(observation.repository ?? "") || !Number.isSafeInteger(observation.pr) || observation.pr < 1 || !GITHUB_PR_STATES.has(observation.state)) throw new TicketError("TICKET_SYNC_CONTRADICTION");
   if (!claimed || observation.repository !== claimed.repository || observation.pr !== claimed.number) throw new TicketError("TICKET_SYNC_CONTRADICTION");
-  if (claimed.branch && observation.branch && claimed.branch !== observation.branch) throw new TicketError("TICKET_SYNC_CONTRADICTION");
+  if (claimed.branch && claimed.branch !== observation.branch) throw new TicketError("TICKET_SYNC_CONTRADICTION");
   const headSha = observation.head_sha;
   if (!SHA40.test(headSha ?? "")) throw new TicketError("TICKET_SYNC_CONTRADICTION");
   const mergeCommit = observation.merge_commit_sha ?? null;
   if (observation.state === "merged") {
-    if (!SHA40.test(mergeCommit ?? "")) throw new TicketError("TICKET_SYNC_CONTRADICTION");
+    if (!SHA40.test(mergeCommit ?? "") || mergeCommit === headSha) throw new TicketError("TICKET_SYNC_CONTRADICTION");
   } else if (mergeCommit != null) throw new TicketError("TICKET_SYNC_CONTRADICTION");
-  const branch = observation.branch == null ? null : text(observation.branch, 300, "TICKET_SYNC_CONTRADICTION");
+  const branch = text(observation.branch, 300, "TICKET_SYNC_CONTRADICTION");
   return Object.freeze({ source: "trusted_github_observer", ticket_id: ticket.id, repository: observation.repository, pr: observation.pr, state: observation.state, head_sha: headSha, merge_commit_sha: mergeCommit, branch });
 }
 function prEvidence(githubObs, extra = {}) {
-  const basis = { type: githubObs.state === "merged" ? "github_merge_observation" : "github_pr_observation", repository: githubObs.repository, pr: githubObs.pr, head_sha: githubObs.head_sha, ticket_id: githubObs.ticket_id, ...extra };
+  const basis = { type: githubObs.state === "merged" ? "github_merge_observation" : "github_pr_observation", repository: githubObs.repository, pr: githubObs.pr, branch: githubObs.branch, head_sha: githubObs.head_sha, ticket_id: githubObs.ticket_id, ...extra };
   if (githubObs.state === "merged") return { ...basis, merge_commit_sha: githubObs.merge_commit_sha };
   return { ...basis, state: githubObs.state };
+}
+function lastSyncEvidence(ticket) {
+  let evidence = null;
+  for (const item of ticket.activity) {
+    if (item.kind === "cursor_sync") evidence = item.evidence ?? null;
+  }
+  return evidence;
+}
+function sameSyncOutcome(ticket, mapped) {
+  return ticket.state === mapped.state && ticket.pr === mapped.pr && ticket.branch === mapped.branch && ticket.blocker === mapped.blocker && stable(lastSyncEvidence(ticket)) === stable(mapped.evidence);
 }
 function mapSyncedFields(ticket, cursorObs, githubObs) {
   const prLabel = githubObs ? `${githubObs.repository}#${githubObs.pr}` : ticket.pr;
@@ -406,7 +416,7 @@ function applyOperation(store, operation, allocation = null, corroboration = nul
     const cursorObs = cursorObservation(operation.cursor_observation, ticket);
     const githubObs = githubPrObservation(operation.github_observation, ticket, cursorObs.pr);
     const mapped = mapSyncedFields(ticket, cursorObs, githubObs);
-    if (ticket.state === mapped.state && ticket.pr === mapped.pr && ticket.branch === mapped.branch && ticket.blocker === mapped.blocker) return validateTicketStore(next);
+    if (sameSyncOutcome(ticket, mapped)) return validateTicketStore(next);
     const from = ticket.state;
     ticket.state = mapped.state;
     ticket.pr = mapped.pr;
