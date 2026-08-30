@@ -5,6 +5,7 @@ import {
   WorkbenchLauncherError,
   launchWorkbench,
   manageWorkbenchProjects,
+  runTicketCli,
 } from "../src/index.mjs";
 
 function parseArguments(argv) {
@@ -113,12 +114,18 @@ async function manageInteractively() {
 }
 
 try {
-  const options = parseArguments(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (argv.at(0) === "tickets") {
+    const result = await runTicketCli(argv);
+    process.exitCode = result.exitCode;
+  } else {
+  const options = parseArguments(argv);
   if (options.manage) {
     await manageInteractively();
   } else {
     const result = await launchWorkbench(options);
     process.stdout.write(`${JSON.stringify(result)}\n`);
+  }
   }
 } catch (error) {
   const code = error instanceof WorkbenchLauncherError

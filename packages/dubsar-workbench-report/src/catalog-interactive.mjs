@@ -45,6 +45,13 @@ const MAX_REVIEW_RECEIPTS = 256;
 const REVIEW_STATUSES = new Set(["available", "degraded", "not_included", "unavailable"]);
 const SHA256 = /^[a-f0-9]{64}$/u;
 
+export function buildGuidedTicketOperation(kind, values, ticket = null) {
+  if (kind === "create") return { type: "create", title: values.title, objective: values.objective, criteria: values.criteria.split("\n").map((value) => value.trim()).filter(Boolean), project: values.project };
+  if (kind === "activity") return { type: "activity", id: values.id, kind: values.activity_kind, summary: values.summary };
+  if (kind === "transition") return { type: "transition", id: values.id, to: values.to, ...(values.to === "Duplicate" ? { duplicate_of: values.duplicate_of } : {}), ...(ticket && new Set(["Done", "Cancelled", "Duplicate"]).has(ticket.state) ? { reopen_confirmed: values.reopen_confirmed === true } : {}) };
+  throw new WorkbenchError("TICKET_FORM_INVALID");
+}
+
 function assertSafeCatalogDisplayText(value, maxChars = 2_000) {
   if (typeof value !== "string" || value.length > maxChars) {
     throw new WorkbenchError("CATALOG_REPORT_INPUT_INVALID");
@@ -985,7 +992,9 @@ function renderDocument(projects, memory, dataJson, dataSha256, live) {
     "  <aside class=\"rail\">",
     "    <div class=\"brand\">DUBSAR</div>",
     "    <nav class=\"nav-list\" role=\"tablist\" aria-label=\"Dashboard views\" data-i18n-aria-label=\"dashboard_views_aria\">",
-    "      <button type=\"button\" class=\"nav-button\" id=\"nav-resume-tab\" role=\"tab\" data-view=\"dashboard\" aria-controls=\"dashboard-view\" aria-selected=\"true\" tabindex=\"0\" data-i18n=\"nav_resume\">Resume</button>",
+    "      <button type=\"button\" class=\"nav-button\" id=\"nav-work-tab\" role=\"tab\" data-view=\"my-work\" aria-controls=\"my-work-view\" aria-selected=\"true\" tabindex=\"0\">My Work</button>",
+    "      <span class=\"section-label\">Advanced</span>",
+    "      <button type=\"button\" class=\"nav-button\" id=\"nav-resume-tab\" role=\"tab\" data-view=\"dashboard\" aria-controls=\"dashboard-view\" aria-selected=\"false\" tabindex=\"-1\" data-i18n=\"nav_resume\">Resume</button>",
     `      <button type="button" class="nav-button" id="nav-memory-tab" role="tab" data-view="memory" aria-controls="memory-view" aria-selected="false" tabindex="-1" data-i18n="nav_memory"${continuityMode ? "" : " hidden"}>Memory</button>`,
     "      <button type=\"button\" class=\"nav-button\" id=\"nav-graph-tab\" role=\"tab\" data-view=\"graph\" aria-controls=\"graph-view\" aria-selected=\"false\" tabindex=\"-1\" data-i18n=\"nav_graph\">Graph</button>",
     "    </nav>",
@@ -995,6 +1004,11 @@ function renderDocument(projects, memory, dataJson, dataSha256, live) {
     "    </div>",
     "  </aside>",
     "  <main class=\"workspace\">",
+    "    <section id=\"my-work-view\" role=\"tabpanel\" aria-labelledby=\"nav-work-tab\" tabindex=\"0\"><header class=\"project-header\"><span class=\"project-kicker\">Travail personnel local</span><h1>My Work</h1><p>Tickets de tous les projets enregistrés.</p></header><div id=\"catalog-ticket-groups\" aria-live=\"polite\"></div>",
+    "      <form id=\"ticket-create-form\" class=\"guided-ticket-form\"><h2>Créer un ticket</h2><label>Projet<select name=\"project_id\" required></select></label><label>Titre<input name=\"title\" required maxlength=\"160\"></label><label>Objectif<textarea name=\"objective\" required maxlength=\"1000\"></textarea></label><label>Critères, une ligne par critère<textarea name=\"criteria\"></textarea></label><button type=\"submit\">Prévisualiser la création</button></form>",
+    "      <form id=\"ticket-activity-form\" class=\"guided-ticket-form\"><h2>Ajouter une activité</h2><label>Ticket<select name=\"id\" required></select></label><label>Type<input name=\"kind\" required maxlength=\"40\"></label><label>Résumé<textarea name=\"summary\" required maxlength=\"500\"></textarea></label><button type=\"submit\">Prévisualiser l’activité</button></form>",
+    "      <form id=\"ticket-transition-form\" class=\"guided-ticket-form\"><h2>Changer l’état</h2><label>Ticket<select name=\"id\" required></select></label><label>Nouvel état<select name=\"to\" required></select></label><label id=\"duplicate-target-label\" hidden>Cible Duplicate<select name=\"duplicate_of\"></select></label><label id=\"reopen-confirm-label\" hidden><input type=\"checkbox\" name=\"reopen_confirmed\"> Je confirme explicitement la réouverture</label><button type=\"submit\">Prévisualiser la transition</button></form>",
+    "      <section class=\"ticket-confirmation\" aria-labelledby=\"ticket-preview-heading\"><h2 id=\"ticket-preview-heading\">Conséquence de l’action</h2><output id=\"catalog-ticket-preview\" aria-live=\"polite\">Aucun aperçu.</output><button type=\"button\" id=\"catalog-ticket-apply\" disabled>Confirmer exactement ce changement</button></section><details><summary>Advanced · JSON technique</summary><textarea id=\"catalog-ticket-json\" readonly></textarea></details></section>",
     `    <section class="portfolio-strip" aria-labelledby="portfolio-title"${projects.length === 1 ? " hidden" : ""}>`,
     "      <label class=\"portfolio-heading\" for=\"project-select\"><span class=\"project-kicker\" data-i18n=\"local_portfolio\">Local portfolio</span><strong id=\"portfolio-title\" data-i18n=\"choose_project\">Choose a project</strong></label>",
     "      <select class=\"project-picker\" id=\"project-select\">",
@@ -1011,7 +1025,7 @@ function renderDocument(projects, memory, dataJson, dataSha256, live) {
     "        <section class=\"memory-card precedent-card\"><div class=\"memory-card-heading\"><div><span class=\"section-label\" data-i18n=\"exact_precedents\">Exact precedents</span><p data-i18n=\"precedent_note\">Select a work package, then copy the exact local CLI query. No semantic ranking is used.</p></div></div><div class=\"precedent-controls\"><select id=\"precedent-lot-select\" aria-label=\"Work package for precedent search\" data-i18n-aria-label=\"precedent_select_aria\"></select><button type=\"button\" class=\"capsule-copy\" id=\"precedent-copy\" data-i18n=\"copy_query\">Copy query</button></div><textarea class=\"technical-output precedent-output\" id=\"precedent-output\" readonly></textarea><p class=\"resume-copy-status\" id=\"precedent-status\" aria-live=\"polite\"></p></section>",
     "      </div>",
     "    </section>",
-    "    <section id=\"dashboard-view\" role=\"tabpanel\" aria-labelledby=\"nav-resume-tab\" tabindex=\"0\">",
+    "    <section id=\"dashboard-view\" role=\"tabpanel\" aria-labelledby=\"nav-resume-tab\" tabindex=\"0\" hidden>",
     `      <header class="project-header${first.capture_status === "available" ? "" : " is-unavailable"}${firstIntegrityInvalid ? " is-recovery" : ""}" id="project-header">`,
     `        <div class="project-topline"><span class="project-kicker" data-i18n="project_resume">Project resume</span><span class="snapshot-note" id="live-status" aria-live="polite">${live ? "Automatic updates active" : "Snapshot read when opened — reopen DUBSAR to refresh"}</span></div>`,
     "        <div class=\"project-title-row\">",
@@ -1123,12 +1137,14 @@ export function renderWorkbenchCatalogInteractiveReport(catalog, options = {}) {
     throw new WorkbenchError("CATALOG_REPORT_INPUT_INVALID");
   }
   const memory = memoryProjection(undefined);
+  const tickets = Array.isArray(options.tickets) ? options.tickets : [];
   const data = Object.freeze({
     format: WORKBENCH_CATALOG_INTERACTIVE_DATA_FORMAT,
     authority: WORKBENCH_AUTHORITY,
     summary: Object.freeze(expectedSummary),
     projects,
     memory,
+    tickets,
   });
   for (const project of projects) assertProjectDisplayText(project);
   const dataJson = encodeJsonForHtml(data);
@@ -1219,6 +1235,7 @@ export function renderWorkbenchContinuityInteractiveReport(catalog, options = {}
     throw new WorkbenchError("CATALOG_REPORT_INPUT_INVALID");
   }
   const memory = memoryProjection(undefined);
+  const tickets = Array.isArray(options.tickets) ? options.tickets : [];
   const data = Object.freeze({
     format: catalogVersion === 3
       ? WORKBENCH_CONTINUITY_INTERACTIVE_DATA_FORMAT
@@ -1229,6 +1246,7 @@ export function renderWorkbenchContinuityInteractiveReport(catalog, options = {}
     summary: Object.freeze(expectedSummary),
     projects,
     memory,
+    tickets,
   });
   for (const project of projects) assertProjectDisplayText(project);
   const dataJson = encodeJsonForHtml(data);

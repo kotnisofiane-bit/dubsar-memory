@@ -63,6 +63,15 @@ button { color: inherit; }
 }
 
 .nav-list { display: grid; gap: 8px; }
+.nav-list > .section-label { padding: 20px 20px 2px; }
+.ticket-card button { width: 100%; padding: 18px; border: 1px solid var(--line); background: var(--panel); color: var(--text); text-align: left; cursor: pointer; }
+.ticket-filters { display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)); gap: 14px; margin: 24px 0; }
+.ticket-group > ul { margin: 0; padding: 0; list-style: none; }
+.ticket-group > h3 { border-bottom: 2px solid var(--cyan); padding-bottom: 8px; }
+.ticket-detail, .ticket-actions { margin-top: 24px; padding: 20px; border: 1px solid var(--line-strong); background: var(--panel-soft); }
+.ticket-actions textarea { display: block; width: 100%; min-height: 120px; margin: 12px 0; background: var(--panel); color: var(--text); }
+input, select { width: 100%; margin-top: 8px; padding: 10px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--text); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
 
 .nav-button {
   position: relative;
@@ -674,6 +683,13 @@ progress::-moz-progress-bar { background: var(--cyan); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; }
 }
+@media (max-width: 1100px) { .ticket-filters { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 760px), (min-resolution: 192dpi) {
+  .app-shell { grid-template-columns: 150px minmax(0, 1fr); }
+  .memory-panel { display: none; }
+  .workspace { padding: 24px 18px; }
+  .ticket-filters { grid-template-columns: 1fr; }
+}
 `;
 
 export const INTERACTIVE_SCRIPT = String.raw`
@@ -686,6 +702,7 @@ export const INTERACTIVE_SCRIPT = String.raw`
   const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
   const dataNode = document.getElementById("workbench-data");
   const dashboard = document.getElementById("dashboard-view");
+  const myWork = document.getElementById("my-work-view");
   const graphView = document.getElementById("graph-view");
   const canvas = document.getElementById("graph-canvas");
 
@@ -799,6 +816,56 @@ export const INTERACTIVE_SCRIPT = String.raw`
     document.documentElement.dataset.runtime = "invalid";
     return;
   }
+
+  const ticketById = new Map((data.tickets || []).map((ticket) => [ticket.id, ticket]));
+  const stateFilter = document.getElementById("ticket-state");
+  const projectFilter = document.getElementById("ticket-project");
+  const searchFilter = document.getElementById("ticket-search");
+  const language = document.getElementById("workbench-language");
+  const states = ["Backlog", "To Do", "In Progress", "In Review", "Blocked", "Paused", "Done", "Cancelled", "Duplicate"];
+  states.forEach((state) => stateFilter.add(new Option(state, state)));
+  [...new Set((data.tickets || []).map((ticket) => ticket.project).filter(Boolean))].sort().forEach((project) => projectFilter.add(new Option(project, project)));
+  function filterTickets() {
+    const query = searchFilter.value.trim().toLocaleLowerCase(language.value);
+    document.querySelectorAll(".ticket-card").forEach((card) => {
+      card.hidden = (stateFilter.value !== "" && card.dataset.ticketState !== stateFilter.value) || (projectFilter.value !== "" && card.dataset.ticketProject !== projectFilter.value) || (query !== "" && !card.dataset.ticketSearch.includes(query));
+    });
+    document.querySelectorAll(".ticket-group").forEach((group) => {
+      group.hidden = stateFilter.value !== "" && group.dataset.ticketGroup !== stateFilter.value;
+    });
+  }
+  [stateFilter, projectFilter, searchFilter].forEach((control) => control.addEventListener("input", filterTickets));
+  const translations = { fr: { heading: "Fiche ticket", preview: "Aperçu", confirm: "Confirmer l’empreinte" }, en: { heading: "Ticket details", preview: "Preview", confirm: "Confirm digest" } };
+  language.addEventListener("change", () => {
+    document.documentElement.lang = language.value;
+    document.getElementById("ticket-detail-heading").textContent = translations[language.value].heading;
+    document.getElementById("ticket-preview").textContent = translations[language.value].preview;
+    document.getElementById("ticket-confirm").textContent = translations[language.value].confirm;
+    filterTickets();
+  });
+  const transitionsByState = { Backlog: ["To Do", "Cancelled", "Duplicate"], "To Do": ["Backlog", "In Progress", "Blocked", "Paused", "Cancelled", "Duplicate"], "In Progress": ["To Do", "In Review", "Blocked", "Paused", "Cancelled", "Duplicate"], "In Review": ["In Progress", "Blocked", "Paused", "Cancelled", "Duplicate", "Done"], Blocked: ["To Do", "In Progress", "Paused", "Cancelled", "Duplicate"], Paused: ["To Do", "In Progress", "Blocked", "Cancelled", "Duplicate"], Done: ["Backlog"], Cancelled: ["Backlog"], Duplicate: ["Backlog"] };
+  function showTicket(ticket) {
+    const detail = document.getElementById("ticket-detail"); detail.replaceChildren();
+    const heading = document.createElement("h2"); heading.id = "ticket-detail-heading"; heading.textContent = ticket.id + " · " + ticket.title; detail.append(heading);
+    const fields = [["Objectif", ticket.objective], ["Critères", (ticket.criteria || []).join(" • ")], ["Activité (ordre enregistré)", (ticket.activity || []).map((item) => "#" + item.index + " " + item.summary).join(" • ")], ["Agent / exécution", ticket.agent || "—"], ["Branche", ticket.branch || "—"], ["PR", ticket.pr || "—"], ["Blocage", ticket.blocker || "—"], ["Références", (ticket.references || []).join(" • ") || "—"], ["Transitions disponibles", (transitionsByState[ticket.state] || []).join(" • ")]];
+    const list = document.createElement("dl"); fields.forEach(([label, value]) => { const term = document.createElement("dt"); term.textContent = label; const description = document.createElement("dd"); description.textContent = value; list.append(term, description); }); detail.append(list);
+  }
+  document.querySelectorAll("[data-ticket-id]").forEach((button) => button.addEventListener("click", () => showTicket(ticketById.get(button.dataset.ticketId))));
+  let pendingChange = null;
+  document.getElementById("ticket-preview").addEventListener("click", async () => {
+    const operation = JSON.parse(document.getElementById("ticket-action-json").value);
+    const projectId = operation.project_id; delete operation.project_id;
+    const response = await fetch(location.pathname + "tickets/preview/", { method: "POST", headers: { "Content-Type": "application/json" }, referrer: location.href, referrerPolicy: "same-origin", body: JSON.stringify({ project_id: projectId, operation }) });
+    pendingChange = response.ok ? await response.json() : null;
+    document.getElementById("ticket-preview-output").textContent = pendingChange ? JSON.stringify({ consequence: pendingChange.after, change_sha256: pendingChange.change_sha256 }, null, 2) : "Aperçu refusé";
+    document.getElementById("ticket-confirm").disabled = pendingChange === null;
+  });
+  document.getElementById("ticket-confirm").addEventListener("click", async () => {
+    if (pendingChange === null || !window.confirm("Confirmer exactement " + pendingChange.change_sha256 + " ?")) return;
+    const response = await fetch(location.pathname + "tickets/apply/", { method: "POST", headers: { "Content-Type": "application/json" }, referrer: location.href, referrerPolicy: "same-origin", body: JSON.stringify({ project_id: pendingChange.project_id, operation: pendingChange.operation, expected_change_sha256: pendingChange.change_sha256 }) });
+    document.getElementById("ticket-preview-output").textContent = response.ok ? JSON.stringify(await response.json(), null, 2) : "Confirmation refusée";
+    pendingChange = null; document.getElementById("ticket-confirm").disabled = true;
+  });
 
   const colors = {
     mission: "#58d5f7",
@@ -1237,9 +1304,11 @@ export const INTERACTIVE_SCRIPT = String.raw`
 
   function setView(next) {
     const graphActive = next === "graph";
-    dashboard.hidden = graphActive;
+    const workActive = next === "my-work";
+    dashboard.hidden = graphActive || workActive;
+    myWork.hidden = !workActive;
     graphView.hidden = !graphActive;
-    document.getElementById("memory-panel").hidden = graphActive;
+    document.getElementById("memory-panel").hidden = graphActive || workActive;
     document.getElementById("app-shell").classList.toggle("graph-mode", graphActive);
     document.querySelectorAll(".nav-button").forEach((button) => {
       button.setAttribute("aria-selected", String(button.dataset.view === next));

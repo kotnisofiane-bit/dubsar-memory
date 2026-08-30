@@ -1,0 +1,31 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdir, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { applyTicketChange, previewTicketChange, readTicketAllocations, readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
+import { createTicketDashboardHandler } from "../packages/dubsar-workbench-launcher/src/launcher.mjs";
+import { buildGuidedTicketOperation } from "../packages/dubsar-workbench-report/src/index.mjs";
+
+test("KOT-116 acceptance transversale agrège les divergences comportementales", async () => {
+  const findings = []; const verify = (condition, code) => { if (!condition) findings.push(code); };
+  const allocationRoot = await mkdtemp(path.join(tmpdir(), "kot-116-allocation-"));
+  const project = async () => { const root = await mkdtemp(path.join(tmpdir(), "kot-116-project-")); await mkdir(path.join(root, ".dubsar")); return root; };
+  const first = await project(); const second = await project(); const projects = [{ project_id: "project-a", root: first }, { project_id: "project-b", root: second }];
+  const operation = (title) => buildGuidedTicketOperation("create", { title, objective: "Objectif", criteria: "Critère", project: title });
+  const inputs = projects.map((item, index) => ({ start: item.root, allocationRoot, projectId: item.project_id, operation: operation(`Projet ${index + 1}`) }));
+  const previews = await Promise.all(inputs.map(previewTicketChange)); const concurrent = await Promise.allSettled(inputs.map((input, index) => applyTicketChange({ ...input, expectedChange: previews[index].change_sha256 })));
+  verify(concurrent.filter((result) => result.status === "fulfilled").length === 1, "CONCURRENCY_NOT_SERIALIZED");
+  const stored = (await Promise.all(projects.map((item) => readTickets({ start: item.root })))).flatMap((store) => store.tickets);
+  verify(stored.filter((ticket) => ticket.id === "DUB-001").length === 1, "DUPLICATE_GLOBAL_ID");
+  verify((await readTicketAllocations({ allocationRoot })).allocations.length === stored.length, "GLOBAL_PROJECT_DIVERGENCE");
+  const handler = createTicketDashboardHandler({ allocationRoot, projects }); const target = projects.find((item) => item.project_id !== stored[0].project_id); const guided = operation("Dashboard");
+  const preview = await handler("preview", { project_id: target.project_id, operation: guided }); verify((await readTickets({ start: target.root })).tickets.length === 0, "PREVIEW_MUTATED");
+  const applied = await handler("apply", { project_id: target.project_id, operation: guided, expected_change_sha256: preview.change_sha256 });
+  verify(applied.tickets.some((ticket) => ticket.title === "Dashboard"), "DASHBOARD_REFRESH_MISSING");
+  verify((await readTickets({ start: target.root })).tickets.some((ticket) => ticket.title === "Dashboard"), "PERSISTENCE_MISSING");
+  verify(buildGuidedTicketOperation("activity", { id: "DUB-001", activity_kind: "note", summary: "Texte" }).type === "activity", "ACTIVITY_FORM_INVALID");
+  verify(buildGuidedTicketOperation("transition", { id: "DUB-001", to: "Duplicate", duplicate_of: "DUB-002" }).duplicate_of === "DUB-002", "DUPLICATE_FORM_INVALID");
+  verify(buildGuidedTicketOperation("transition", { id: "DUB-001", to: "Backlog", reopen_confirmed: true }, { state: "Done" }).reopen_confirmed === true, "REOPEN_FORM_INVALID");
+  assert.deepEqual(findings, [], `KOT-116 divergences:\n${findings.join("\n")}`);
+});

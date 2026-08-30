@@ -24,6 +24,9 @@ import {
   loadLocalProjectRegistry,
   publishLocalProjectRegistry,
   removeLocalProject,
+  previewTicketChange,
+  applyTicketChange,
+  readTickets,
 } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
 import { createProjectRegistry } from "../packages/dubsar-operator-core/src/index.mjs";
 import { selectProjectFolderForTest } from "../packages/dubsar-workbench-launcher/src/folder-picker.mjs";
@@ -420,6 +423,22 @@ test("catalog loopback launch opens guest Chrome and waits for one delivery", as
     /^--app=http:\/\/127\.0\.0\.1:\d+\/w\/[A-Za-z0-9_-]{43}\/$/u,
   );
   assert.equal(calls[0].options.shell, false);
+});
+
+test("parcours public My Work agrège, écrit, rafraîchit et persiste après relance", async (t) => {
+  const item = await fixture(t); const second = path.join(item.root, "project-2"); await cp(item.project, second, { recursive: true });
+  const workbenchRoot = path.join(item.outputBase, "DUBSAR", "Workbench"); await mkdir(workbenchRoot, { recursive: true });
+  const projects = [{ project_id: "project-a", root: item.project }, { project_id: "project-b", root: second }]; await publishLocalProjectRegistry(workbenchRoot, createProjectRegistry(projects));
+  const seed = async (start, projectId, title) => { const operation = { type: "create", title, objective: "Objectif", criteria: [] }; const preview = await previewTicketChange({ start, allocationRoot: workbenchRoot, projectId, operation }); await applyTicketChange({ start, allocationRoot: workbenchRoot, projectId, operation, expectedChange: preview.change_sha256 }); };
+  await seed(item.project, "project-a", "Ticket A"); await seed(second, "project-b", "Ticket B");
+  const sessions = []; const startTicketServer = async (payload, handler) => { sessions.push({ payload, handler }); return { url: "http://127.0.0.1:43210/w/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/", closed: Promise.resolve({ reason: "test" }), close: async () => ({ reason: "test" }) }; };
+  const launch = () => launchWorkbenchForTest({ includeReviews: false, outputRoot: item.outputBase, chromePath: item.chrome, spawnProcess: spawnRecorder([]), transport: "loopback", startTicketServer });
+  await launch(); assert.match(sessions[0].payload.html.toString("utf8"), /Ticket A/u); assert.match(sessions[0].payload.html.toString("utf8"), /Ticket B/u);
+  const operation = { type: "create", title: "Créé au Dashboard", objective: "Persister", criteria: [] }; const preview = await sessions[0].handler("preview", { project_id: "project-a", operation });
+  assert.equal((await readTickets({ start: item.project })).tickets.length, 1);
+  const applied = await sessions[0].handler("apply", { project_id: "project-a", operation, expected_change_sha256: preview.change_sha256 }); assert.equal(applied.tickets.length, 3);
+  const created = applied.tickets.find((ticket) => ticket.title === "Créé au Dashboard"); const transition = { type: "transition", id: created.id, to: "To Do" }; const transitionPreview = await sessions[0].handler("preview", { project_id: "project-a", operation: transition }); await sessions[0].handler("apply", { project_id: "project-a", operation: transition, expected_change_sha256: transitionPreview.change_sha256 });
+  await launch(); assert.match(sessions[1].payload.html.toString("utf8"), /Créé au Dashboard/u); const persisted = (await readTickets({ start: item.project })).tickets.find((ticket) => ticket.id === created.id); assert.equal(persisted.state, "To Do");
 });
 
 test("catalog launch rejects personal memory", async (t) => {

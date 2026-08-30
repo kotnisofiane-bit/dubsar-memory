@@ -15,6 +15,7 @@ export {
   renderWorkbenchInteractiveReport,
 } from "./interactive.mjs";
 export {
+  buildGuidedTicketOperation,
   WORKBENCH_CATALOG_INTERACTIVE_DATA_FORMAT,
   WORKBENCH_CATALOG_INTERACTIVE_REPORT_FORMAT,
   renderWorkbenchCatalogInteractiveReport,

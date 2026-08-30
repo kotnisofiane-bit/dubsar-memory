@@ -6,6 +6,13 @@ export const CATALOG_INTERACTIVE_STYLE = String.raw`
 }
 
 .app-shell.catalog-mode { grid-template-columns: 182px minmax(0, 1fr); }
+.guided-ticket-form, .ticket-confirmation { margin: 20px 0; padding: 18px; border: 1px solid var(--line-strong); background: var(--panel-soft); }
+.guided-ticket-form label { display: block; margin: 12px 0; }
+.guided-ticket-form input, .guided-ticket-form select, .guided-ticket-form textarea { display: block; width: 100%; min-height: 42px; margin-top: 6px; background: var(--panel); color: var(--text); border: 1px solid var(--line-strong); }
+.guided-ticket-form button, .ticket-confirmation button { min-height: 44px; border: 1px solid var(--cyan); background: var(--panel); color: var(--text); }
+.guided-ticket-form :focus-visible, .ticket-confirmation :focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
+#catalog-ticket-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+#catalog-ticket-groups section { padding: 12px; border: 1px solid var(--line); }
 
 .portfolio-heading {
   display: flex;
@@ -697,6 +704,7 @@ export const CATALOG_INTERACTIVE_SCRIPT = String.raw`
   const byId = (id) => document.getElementById(id);
   const setText = (id, value) => { byId(id).textContent = value; };
   const dashboard = byId("dashboard-view");
+  const myWorkView = byId("my-work-view");
   const memoryView = byId("memory-view");
   const graphView = byId("graph-view");
   const capsuleOutput = byId("capsule-output");
@@ -1944,10 +1952,12 @@ export const CATALOG_INTERACTIVE_SCRIPT = String.raw`
   function setView(name) {
     const graphActive = name === "graph";
     const memoryActive = name === "memory";
-    dashboard.hidden = graphActive || memoryActive;
+    const workActive = name === "my-work";
+    dashboard.hidden = graphActive || memoryActive || workActive;
+    myWorkView.hidden = !workActive;
     memoryView.hidden = !memoryActive;
     graphView.hidden = !graphActive;
-    byId("app-shell").classList.toggle("graph-mode", graphActive || memoryActive);
+    byId("app-shell").classList.toggle("graph-mode", graphActive || memoryActive || workActive);
     document.querySelectorAll(".nav-button").forEach((button) => {
       const selected = button.dataset.view === name;
       button.setAttribute("aria-selected", String(selected));
@@ -2059,6 +2069,37 @@ export const CATALOG_INTERACTIVE_SCRIPT = String.raw`
       scheduleLivePoll(0);
     }
   });
+  const ticketStates = ["Backlog", "To Do", "In Progress", "In Review", "Blocked", "Paused", "Done", "Cancelled", "Duplicate"];
+  const terminalTicketStates = new Set(["Done", "Cancelled", "Duplicate"]);
+  const ticketTransitions = { Backlog: ["To Do", "Cancelled", "Duplicate"], "To Do": ["Backlog", "In Progress", "Blocked", "Paused", "Cancelled", "Duplicate"], "In Progress": ["To Do", "In Review", "Blocked", "Paused", "Cancelled", "Duplicate"], "In Review": ["In Progress", "Blocked", "Paused", "Cancelled", "Duplicate", "Done"], Blocked: ["To Do", "In Progress", "Paused", "Cancelled", "Duplicate"], Paused: ["To Do", "In Progress", "Blocked", "Cancelled", "Duplicate"], Done: ["Backlog"], Cancelled: ["Backlog"], Duplicate: ["Backlog"] };
+  let ticketPreview = null;
+  function ticketById(id) { return (data.tickets || []).find((ticket) => ticket.id === id); }
+  function fillSelect(select, entries, valueFor, labelFor) { select.replaceChildren(); entries.forEach((entry) => { const option = document.createElement("option"); option.value = valueFor(entry); option.textContent = labelFor(entry); select.append(option); }); }
+  function renderTickets() {
+    const groups = byId("catalog-ticket-groups"); groups.replaceChildren();
+    ticketStates.forEach((state) => { const section = document.createElement("section"); const heading = document.createElement("h2"); heading.textContent = state; section.append(heading); const list = document.createElement("ul"); const matches = (data.tickets || []).filter((ticket) => ticket.state === state); matches.forEach((ticket) => { const item = document.createElement("li"); item.textContent = ticket.id + " · " + ticket.title + " — " + ticket.project; list.append(item); }); if (matches.length === 0) { const empty = document.createElement("li"); empty.textContent = "Aucun ticket"; list.append(empty); } section.append(list); groups.append(section); });
+    document.querySelectorAll('.guided-ticket-form select[name="project_id"]').forEach((select) => fillSelect(select, data.projects, (project) => project.project_id, (project) => project.title));
+    document.querySelectorAll('.guided-ticket-form select[name="id"]').forEach((select) => fillSelect(select, data.tickets || [], (ticket) => ticket.id, (ticket) => ticket.id + " · " + ticket.title));
+    document.querySelectorAll('.guided-ticket-form select[name="duplicate_of"]').forEach((select) => fillSelect(select, data.tickets || [], (ticket) => ticket.id, (ticket) => ticket.id));
+    updateTransitionForm();
+  }
+  function updateTransitionForm() {
+    const form = byId("ticket-transition-form"); const ticket = ticketById(form.elements.id.value); const states = ticket ? ticketTransitions[ticket.state] : [];
+    fillSelect(form.elements.to, states, (state) => state, (state) => state);
+    byId("duplicate-target-label").hidden = form.elements.to.value !== "Duplicate";
+    byId("reopen-confirm-label").hidden = !ticket || !terminalTicketStates.has(ticket.state);
+  }
+  async function previewTicket(projectId, operation) {
+    const response = await fetch(location.pathname + "tickets/preview/", { method: "POST", headers: { "Content-Type": "application/json" }, referrer: location.href, referrerPolicy: "same-origin", body: JSON.stringify({ project_id: projectId, operation }) });
+    ticketPreview = response.ok ? await response.json() : null; byId("catalog-ticket-preview").textContent = ticketPreview ? "Conséquence prête. Empreinte " + ticketPreview.change_sha256 : "Aperçu refusé"; byId("catalog-ticket-json").value = ticketPreview ? JSON.stringify(ticketPreview, null, 2) : ""; byId("catalog-ticket-apply").disabled = ticketPreview === null;
+  }
+  byId("ticket-create-form").addEventListener("submit", (event) => { event.preventDefault(); const form = event.currentTarget; void previewTicket(form.elements.project_id.value, { type: "create", title: form.elements.title.value, objective: form.elements.objective.value, criteria: form.elements.criteria.value.split("\n").map((value) => value.trim()).filter(Boolean), project: form.elements.project_id.selectedOptions[0].textContent }); });
+  byId("ticket-activity-form").addEventListener("submit", (event) => { event.preventDefault(); const form = event.currentTarget; const ticket = ticketById(form.elements.id.value); if (ticket) void previewTicket(ticket.project_id, { type: "activity", id: ticket.id, kind: form.elements.kind.value, summary: form.elements.summary.value }); });
+  byId("ticket-transition-form").addEventListener("change", updateTransitionForm);
+  byId("ticket-transition-form").addEventListener("submit", (event) => { event.preventDefault(); const form = event.currentTarget; const ticket = ticketById(form.elements.id.value); if (!ticket) return; const operation = { type: "transition", id: ticket.id, to: form.elements.to.value, ...(form.elements.to.value === "Duplicate" ? { duplicate_of: form.elements.duplicate_of.value } : {}), ...(terminalTicketStates.has(ticket.state) ? { reopen_confirmed: form.elements.reopen_confirmed.checked } : {}) }; void previewTicket(ticket.project_id, operation); });
+  byId("catalog-ticket-apply").addEventListener("click", async () => { if (!ticketPreview || !window.confirm("Confirmer exactement " + ticketPreview.change_sha256 + " ?")) return; const response = await fetch(location.pathname + "tickets/apply/", { method: "POST", headers: { "Content-Type": "application/json" }, referrer: location.href, referrerPolicy: "same-origin", body: JSON.stringify({ project_id: ticketPreview.project_id, operation: ticketPreview.operation, expected_change_sha256: ticketPreview.change_sha256 }) }); const result = response.ok ? await response.json() : null; if (result?.tickets) { data.tickets = result.tickets; renderTickets(); } byId("catalog-ticket-preview").textContent = result ? "Modification appliquée." : "Application refusée"; ticketPreview = null; byId("catalog-ticket-apply").disabled = true; });
+  renderTickets();
+
   const viewTabs = [...document.querySelectorAll(".nav-button")].filter((button) => !button.hidden);
   viewTabs.forEach((button) => {
     button.addEventListener("click", () => setView(button.dataset.view));

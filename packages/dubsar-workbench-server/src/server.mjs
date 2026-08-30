@@ -28,6 +28,7 @@ const LOOPBACK_HOST = "127.0.0.1";
 const SESSION_TOKEN_CHARS = 43;
 const SHA256_HEX = /^[0-9a-f]{64}$/u;
 const PROJECT_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/u;
+const MAX_TICKET_ACTION_BYTES = 64 * 1024;
 const ERROR_BODY = Buffer.from("Not available.\n", "utf8");
 const CSP = [
   "base-uri 'none'",
@@ -392,6 +393,21 @@ function liveStateAdmission(request, expected) {
   return target;
 }
 
+function ticketActionAdmission(request, expected) {
+  if (request.method !== "POST" || request.socket.localAddress !== LOOPBACK_HOST || request.socket.remoteAddress !== LOOPBACK_HOST) return null;
+  const match = (request.url ?? "").match(new RegExp(`^/w/${expected.token}/tickets/(preview|apply)/$`, "u"));
+  if (match === null) return null;
+  const host = singletonHeader(request, "host", true);
+  const origin = singletonHeader(request, "origin", true);
+  const referer = singletonHeader(request, "referer", true);
+  const contentType = singletonHeader(request, "content-type", true);
+  const length = singletonHeader(request, "content-length", true);
+  const transfer = singletonHeader(request, "transfer-encoding");
+  const bytes = Number(length.value);
+  if (!host.ok || host.value !== expected.host || !origin.ok || origin.value !== expected.origin || !referer.ok || referer.value !== expected.url || !contentType.ok || contentType.value !== "application/json" || !length.ok || !Number.isSafeInteger(bytes) || bytes < 2 || bytes > MAX_TICKET_ACTION_BYTES || !transfer.ok || transfer.value !== null) return null;
+  return Object.freeze({ action: match.at(1), bytes });
+}
+
 function responseHeaders(
   contentType,
   bytes,
@@ -474,6 +490,7 @@ async function startServer(html, overrides, behavior = {}) {
   let body = validatedHtmlBuffer(html, limits.maxHtmlBytes);
   const oneShot = behavior.oneShot === true;
   const liveRefresh = typeof behavior.refreshProject === "function";
+  const ticketActions = typeof behavior.handleTicketAction === "function";
   const contentSecurityPolicy = behavior.contentSecurityPolicy ?? CSP;
   const token = randomBytes(32).toString("base64url");
   if (token.length !== SESSION_TOKEN_CHARS) {
@@ -685,6 +702,21 @@ async function startServer(html, overrides, behavior = {}) {
     }
   }
 
+  async function handleTicketActionRequest(target, request, response) {
+    scheduleIdle(); attachResponseDeadline(response);
+    const chunks = []; let bytes = 0;
+    try {
+      for await (const chunk of request) { bytes += chunk.length; if (bytes > target.bytes) throw new Error("size"); chunks.push(chunk); }
+      if (bytes !== target.bytes) throw new Error("size");
+      const input = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      const output = await behavior.handleTicketAction(target.action, input);
+      const body = Buffer.from(JSON.stringify(output), "utf8");
+      writeResponse(response, 200, "application/json; charset=utf-8", body, contentSecurityPolicy, "same-origin");
+    } catch {
+      if (!response.headersSent && !response.destroyed) writeResponse(response, 400, "text/plain; charset=utf-8", ERROR_BODY);
+    }
+  }
+
   function handleRequest(request, response) {
     try {
       markHeadersComplete(request.socket);
@@ -695,6 +727,8 @@ async function startServer(html, overrides, behavior = {}) {
         void handleLiveStateRequest(liveTarget, response);
         return;
       }
+      const ticketTarget = ticketActions && state === "ready" ? ticketActionAdmission(request, expected) : null;
+      if (ticketTarget !== null) { void handleTicketActionRequest(ticketTarget, request, response); return; }
       if (state !== "ready" || !requestAdmission(request, expected)) {
         writeResponse(
           response,
@@ -723,7 +757,7 @@ async function startServer(html, overrides, behavior = {}) {
         "text/html; charset=utf-8",
         body,
         contentSecurityPolicy,
-        liveRefresh ? "same-origin" : COMMON_HEADERS["Referrer-Policy"],
+        liveRefresh || ticketActions ? "same-origin" : COMMON_HEADERS["Referrer-Policy"],
       );
     } catch {
       if (!response.headersSent) {
@@ -895,6 +929,16 @@ export function startLiveInteractiveWorkbenchServer(payload, refreshProject) {
     contentSecurityPolicy: validated.csp,
     limitCeilings: LIVE_SESSION_LIMITS,
     refreshProject,
+  });
+}
+
+export function startTicketInteractiveWorkbenchServer(payload, handleTicketAction) {
+  if (typeof handleTicketAction !== "function") throw new WorkbenchServerError("SERVER_TICKET_HANDLER_INVALID");
+  const validated = validatedLiveInteractivePayload(payload, LIVE_SESSION_LIMITS.maxHtmlBytes);
+  return startServer(validated.html, LIVE_SESSION_LIMITS, {
+    contentSecurityPolicy: interactiveContentSecurityPolicy(payload.scriptSha256, payload.styleSha256, true),
+    limitCeilings: LIVE_SESSION_LIMITS,
+    handleTicketAction,
   });
 }
 
