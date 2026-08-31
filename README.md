@@ -44,6 +44,12 @@ Nothing is selected, executed, completed, merged, or deployed automatically.
 The skills are adapters, not the product core. The same CLI works without
 Codex, Claude Code, Cursor, a plugin marketplace, or a global `dubsar` command.
 
+A private local stdio MCP (`packages/dubsar-my-work-mcp`) exposes a closed My Work
+surface for ChatGPT Work: list/read tickets, prepare one DUB ticket plus a
+canonical Cursor Controller envelope, attach a verified receipt, and reuse
+KOT-119 sync. It has no network client and no secrets. See
+[My Work MCP](docs/MY_WORK_MCP.md).
+
 ## How it works
 
 ```text

@@ -1,0 +1,19 @@
+{
+  "format": "dubsar.private-capabilities/1",
+  "package": "dubsar-my-work-mcp",
+  "version": "0.1.0-dev",
+  "authority": "local_preparation_record",
+  "effects": {
+    "background_service": "none",
+    "filesystem_read": "explicit_selected_project_ticket_store",
+    "filesystem_write": "explicit_ticket_preview_apply",
+    "network": "none",
+    "process_execution": "none",
+    "remote_mutation": "none"
+  },
+  "integrations": {
+    "backend": "none",
+    "mcp": "local_stdio_closed_surface",
+    "personal_memory": "none"
+  }
+}
