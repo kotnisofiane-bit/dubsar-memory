@@ -1,26 +1,36 @@
 /**
  * Arguments passable to create_dubsar_work_cursor_agent (stateless DUB Controller).
  * Observed Controller revision: 9c5cd6536ebfa5c582a00a9d66cdff1560dd469c
+ * Fingerprint algorithm: src/dubsar-work.ts JSON.stringify of the ordered body.
  */
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { MyWorkMcpError, fingerprintOf, stableJson } from "./canonical.mjs";
+import { MyWorkMcpError } from "./canonical.mjs";
 
 export const CONTROLLER_TOOL = "create_dubsar_work_cursor_agent";
-export const CONTRACT_FORMAT = "dubsar.cursor-controller-contract/1";
 export const CORRECTION_BUDGET = 3;
+export const CONTROLLER_ARGUMENT_KEYS = Object.freeze([
+  "ticket_id",
+  "target_repository_url",
+  "pr_repository_url",
+  "repository_refs",
+  "allowed_paths",
+  "mission",
+  "acceptance_criteria",
+  "expected_evidence",
+  "required_capabilities",
+  "preferred_plugins",
+  "required_plugins",
+  "human_gates",
+  "correction_budget",
+]);
 export const REQUIRED_CAPABILITIES = Object.freeze([
   "Node.js 20 ou supérieur",
   "Implémentation MCP stdio locale",
   "Réutilisation des APIs tickets My Work existantes",
   "Tests node:test avec vrai sous-processus",
 ]);
-export const RECEIPT_BOUNDS = Object.freeze({
-  autoCreatePR: true,
-  max_runs: 1,
-  polling: false,
-  workOnCurrentBranch: false,
-});
 
 const HUMAN_GATES = Object.freeze(
   JSON.parse(
@@ -64,16 +74,6 @@ function requireCatalog(gates) {
   return gates;
 }
 
-export function stripFingerprint(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-  const { contract_fingerprint: _ignored, ...rest } = value;
-  return rest;
-}
-
-/**
- * Normalized Controller tool arguments without contract_fingerprint.
- * Fingerprint is sha256 of stableJson(this object).
- */
 export function buildUnsignedControllerArguments({
   ticketId,
   targetRepositoryUrl,
@@ -87,9 +87,8 @@ export function buildUnsignedControllerArguments({
   preferredPlugins,
   requiredPlugins,
   humanGates,
-  linearIssueId,
-  autoCreatePR,
-  workOnCurrentBranch,
+  name,
+  mode,
 }) {
   const target = targetRepositoryUrl;
   const pr = prRepositoryUrl ?? target;
@@ -99,49 +98,78 @@ export function buildUnsignedControllerArguments({
       : null;
   if (!missionText) throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
   const args = {
-    acceptance_criteria: nonEmptyStrings(acceptanceCriteria, "MY_WORK_MISSION_INCOMPLETE"),
-    allowed_paths: allowedPaths,
-    autoCreatePR: autoCreatePR ?? RECEIPT_BOUNDS.autoCreatePR,
-    bounds: {
-      autoCreatePR: autoCreatePR ?? RECEIPT_BOUNDS.autoCreatePR,
-      max_runs: RECEIPT_BOUNDS.max_runs,
-      polling: RECEIPT_BOUNDS.polling,
-      workOnCurrentBranch: workOnCurrentBranch ?? RECEIPT_BOUNDS.workOnCurrentBranch,
-    },
-    correction_budget: CORRECTION_BUDGET,
-    expected_evidence: nonEmptyStrings(expectedEvidence, "MY_WORK_MISSION_INCOMPLETE"),
-    format: CONTRACT_FORMAT,
-    human_gates: requireCatalog(nonEmptyStrings(humanGates ?? [...HUMAN_GATES], "MY_WORK_MISSION_INCOMPLETE")),
-    mission: missionText,
-    preferred_plugins: pluginList(preferredPlugins),
+    ticket_id: ticketId,
+    target_repository_url: target,
     pr_repository_url: pr,
-    repository_refs: repositoryRefs,
+    repository_refs: repositoryRefs.map((ref) => ({
+      repository_url: ref.repository_url,
+      starting_sha: ref.starting_sha,
+    })),
+    allowed_paths: [...allowedPaths],
+    mission: missionText,
+    acceptance_criteria: nonEmptyStrings(acceptanceCriteria, "MY_WORK_MISSION_INCOMPLETE"),
+    expected_evidence: nonEmptyStrings(expectedEvidence, "MY_WORK_MISSION_INCOMPLETE"),
     required_capabilities: nonEmptyStrings(
       requiredCapabilities ?? [...REQUIRED_CAPABILITIES],
       "MY_WORK_MISSION_INCOMPLETE",
     ),
+    preferred_plugins: pluginList(preferredPlugins),
     required_plugins: pluginList(requiredPlugins),
-    target_repository_url: target,
-    ticket_id: ticketId,
-    workOnCurrentBranch: workOnCurrentBranch ?? RECEIPT_BOUNDS.workOnCurrentBranch,
+    human_gates: requireCatalog(nonEmptyStrings(humanGates ?? [...HUMAN_GATES], "MY_WORK_MISSION_INCOMPLETE")),
+    correction_budget: CORRECTION_BUDGET,
   };
-  if (linearIssueId != null) args.linear_issue_id = linearIssueId;
-  if (Buffer.byteLength(stableJson(args), "utf8") > MAX_CONTRACT_BYTES) {
+  if (name != null) args.name = boundedItem(name, MAX_ITEM, "MY_WORK_MISSION_INCOMPLETE");
+  if (mode != null) args.mode = boundedItem(mode, MAX_ITEM, "MY_WORK_MISSION_INCOMPLETE");
+  if (Buffer.byteLength(JSON.stringify(args), "utf8") > MAX_CONTRACT_BYTES) {
     throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
   }
   return args;
 }
 
-export function signControllerArguments(unsigned) {
-  return { ...unsigned, contract_fingerprint: fingerprintOf(unsigned) };
+export function controllerFingerprintBody(args) {
+  return {
+    acceptance_criteria: args.acceptance_criteria,
+    allowed_paths: args.allowed_paths,
+    correction_budget: args.correction_budget,
+    expected_evidence: args.expected_evidence,
+    human_gates: args.human_gates,
+    mission: args.mission,
+    preferred_plugins: args.preferred_plugins,
+    pr_repository_url: args.pr_repository_url,
+    required_capabilities: args.required_capabilities,
+    required_plugins: args.required_plugins,
+    repository_refs: args.repository_refs,
+    target_repository_url: args.target_repository_url,
+    ticket_id: args.ticket_id,
+  };
 }
 
-export function controllerToolCall(signed) {
-  return { tool: CONTROLLER_TOOL, arguments: signed };
+export function controllerContractFingerprint(args) {
+  return `sha256:${createHash("sha256").update(JSON.stringify(controllerFingerprintBody(args)), "utf8").digest("hex")}`;
 }
 
-export function defaultMissionText(title, objective) {
-  return `${title}: ${objective}`;
+export function controllerReceiptBounds(args) {
+  return {
+    allowed_paths: args.allowed_paths,
+    auto_create_pr: true,
+    correction_budget: args.correction_budget,
+    human_gates: args.human_gates,
+    pr_repository_url: args.pr_repository_url,
+    stateless: true,
+    work_on_current_branch: false,
+  };
+}
+
+export function assemblePreparedMission(args) {
+  return {
+    arguments: args,
+    contract_fingerprint: controllerContractFingerprint(args),
+    receipt_bounds: controllerReceiptBounds(args),
+  };
+}
+
+export function controllerToolCall(args) {
+  return { tool: CONTROLLER_TOOL, arguments: args };
 }
 
 export function refsMatch(left, right) {
@@ -157,9 +185,8 @@ export function refsMatch(left, right) {
   return true;
 }
 
-export function boundsMatch(receiptBounds, contractBounds) {
-  const expected = contractBounds ?? RECEIPT_BOUNDS;
-  return stableJson(receiptBounds) === stableJson(expected);
+export function boundsMatch(receiptBounds, expected) {
+  return JSON.stringify(receiptBounds) === JSON.stringify(expected);
 }
 
 export function humanGatesCatalog() {

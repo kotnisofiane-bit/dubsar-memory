@@ -21,7 +21,7 @@ Framing is MCP 2024-11-05 stdio: newline-delimited JSON-RPC on stdin/stdout.
 | --- | --- |
 | `list_tickets` | no |
 | `get_ticket` | no |
-| `prepare_cursor_mission` | creates exactly one `DUB-###` and persists the Controller arguments |
+| `prepare_cursor_mission` | creates exactly one `DUB-###` and persists Controller arguments plus local metadata |
 | `attach_cursor_receipt` | attaches a Controller receipt, or no-op when identical |
 | `sync_cursor_status` | applies existing Cursor/GitHub mapping |
 
@@ -32,30 +32,29 @@ missing project fail before a ticket write.
 
 ## What Work sends to the Cursor MCP
 
-After the DUB ticket exists, Work calls the existing stateless Cursor DUB
-Controller tool `create_dubsar_work_cursor_agent` **once**, using
-`prepare_cursor_mission.arguments` as the tool arguments object with **no
-reconstruction**. The local server does not launch the agent.
-
-Example (shape and field names; values come from the prepared ticket):
+Work copies **only** `prepare_cursor_mission.arguments` into
+`create_dubsar_work_cursor_agent`. It must not add, drop, or rebuild fields.
+`contract_fingerprint` and `receipt_bounds` are **local metadata**: persist them
+on the ticket, then match the real Controller receipt against them. They are
+not tool arguments.
 
 ```json
 {
   "name": "create_dubsar_work_cursor_agent",
   "arguments": {
-    "acceptance_criteria": ["…"],
+    "ticket_id": "DUB-001",
+    "target_repository_url": "https://github.com/owner/repo",
+    "pr_repository_url": "https://github.com/owner/repo",
+    "repository_refs": [
+      { "repository_url": "https://github.com/owner/repo", "starting_sha": "<40 hex>" }
+    ],
     "allowed_paths": ["packages/dubsar-my-work-mcp/**"],
-    "autoCreatePR": true,
-    "bounds": {
-      "autoCreatePR": true,
-      "max_runs": 1,
-      "polling": false,
-      "workOnCurrentBranch": false
-    },
-    "contract_fingerprint": "sha256:<64 lowercase hex>",
-    "correction_budget": 3,
+    "mission": "…",
+    "acceptance_criteria": ["…"],
     "expected_evidence": ["…"],
-    "format": "dubsar.cursor-controller-contract/1",
+    "required_capabilities": ["…"],
+    "preferred_plugins": [],
+    "required_plugins": [],
     "human_gates": [
       "merge",
       "local_install",
@@ -66,41 +65,48 @@ Example (shape and field names; values come from the prepared ticket):
       "backend_switch",
       "scope_extension"
     ],
-    "linear_issue_id": "KOT-126",
-    "mission": "…",
-    "preferred_plugins": [],
-    "pr_repository_url": "https://github.com/owner/repo",
-    "repository_refs": [
-      { "repository_url": "https://github.com/owner/repo", "starting_sha": "<40 hex>" }
-    ],
-    "required_capabilities": ["…"],
-    "required_plugins": [],
-    "target_repository_url": "https://github.com/owner/repo",
-    "ticket_id": "DUB-001",
-    "workOnCurrentBranch": false
+    "correction_budget": 3
   }
 }
 ```
 
-`contract_fingerprint` is `sha256:` plus the SHA-256 of the canonical JSON of
-that object with the fingerprint field omitted. A frozen inter-repo vector lives
-at `packages/dubsar-my-work-mcp/vectors/controller-canonical-v1.json` (Controller
-revision `9c5cd6536ebfa5c582a00a9d66cdff1560dd469c`).
+Local metadata returned beside `arguments` (never passed to the Controller):
 
-`get_ticket` returns `prepared_contract` (full arguments) and
-`attached_receipt`. Both survive MCP process restart because they are stored on
-the ticket (`cursor_contract` activity and `cursor_launch`).
+```json
+{
+  "contract_fingerprint": "sha256:<64 lowercase hex>",
+  "receipt_bounds": {
+    "allowed_paths": ["packages/dubsar-my-work-mcp/**"],
+    "auto_create_pr": true,
+    "correction_budget": 3,
+    "human_gates": ["merge", "local_install", "deployment", "publication", "vm_cloud", "secrets", "backend_switch", "scope_extension"],
+    "pr_repository_url": "https://github.com/owner/repo",
+    "stateless": true,
+    "work_on_current_branch": false
+  }
+}
+```
 
-`attach_cursor_receipt` accepts Controller names unchanged. It attaches only
-when `ticket_id`, `target_repository_url`, `repository_refs` (URL + SHA),
-the complete `bounds` object, and `contract_fingerprint` match the prepared
-contract. A caller-supplied `expected_contract_fingerprint` must equal that
-same persisted value. Any divergence fails without writing. Repeats of the same
-receipt are idempotent. Caller `human_gates` must include the frozen catalog.
+The fingerprint is `sha256:` plus SHA-256 of `JSON.stringify` of an object
+built in this exact key order (Controller `src/dubsar-work.ts`):
+`acceptance_criteria`, `allowed_paths`, `correction_budget`,
+`expected_evidence`, `human_gates`, `mission`, `preferred_plugins`,
+`pr_repository_url`, `required_capabilities`, `required_plugins`,
+`repository_refs`, `target_repository_url`, `ticket_id`. No extra fields, no
+stable key sort. Frozen vector:
+`packages/dubsar-my-work-mcp/vectors/controller-canonical-v1.json`
+(`sha256:56ada5fb957c3c84449688dc79169e093ee4b7d6d05dc0cfc64be9c0db89f574`,
+Controller revision `9c5cd6536ebfa5c582a00a9d66cdff1560dd469c`).
 
-`sync_cursor_status` accepts Work-normalized `trusted_cursor_observer` and
-optional `trusted_github_observer` objects and persists state, PR, branch, head
-SHA, and merge SHA through the existing ticket engine.
+`get_ticket` returns `prepared_contract` with `arguments`,
+`contract_fingerprint`, and `receipt_bounds`, plus `attached_receipt`. These
+survive MCP restart (`cursor_contract` activity and `cursor_launch`).
+
+`attach_cursor_receipt` attaches only when `ticket_id`,
+`target_repository_url`, `repository_refs`, the complete Controller
+`receiptBounds` object, and `contract_fingerprint` match the persisted
+metadata. A caller-supplied `expected_contract_fingerprint` must equal that
+same value. Any divergence fails without writing.
 
 ## Tests
 

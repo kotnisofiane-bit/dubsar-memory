@@ -7,13 +7,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { encodeFrame, createFrameParser } from "../packages/dubsar-my-work-mcp/src/server.mjs";
 import { readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
+import { CONTROLLER_ARGUMENT_KEYS } from "../packages/dubsar-my-work-mcp/src/mission-args.mjs";
 
 const bin = fileURLToPath(new URL("../packages/dubsar-my-work-mcp/bin/dubsar-my-work-mcp.mjs", import.meta.url));
 const vectorPath = fileURLToPath(
   new URL("../packages/dubsar-my-work-mcp/vectors/controller-canonical-v1.json", import.meta.url),
 );
-const sha = "a".repeat(40);
-const repo = "https://github.com/owner/repo";
+const FROZEN_CONTROLLER_FINGERPRINT =
+  "sha256:56ada5fb957c3c84449688dc79169e093ee4b7d6d05dc0cfc64be9c0db89f574";
 
 function rpc(child) {
   let nextId = 1;
@@ -54,7 +55,7 @@ async function stopServer(child) {
   await new Promise((resolve) => child.once("exit", resolve));
 }
 
-test("E2E subprocess restarts after prepare and after attach, then rereads contract and receipt", async () => {
+test("E2E prepare, restart, attach realistic receipt, restart, read and sync", async () => {
   const start = await mkdtemp(path.join(tmpdir(), "dubsar-mcp-e2e-project-"));
   const allocationRoot = await mkdtemp(path.join(tmpdir(), "dubsar-mcp-e2e-global-"));
   await mkdir(path.join(start, ".dubsar"));
@@ -80,19 +81,28 @@ test("E2E subprocess restarts after prepare and after attach, then rereads contr
       name: "prepare_cursor_mission",
       arguments: {
         ...context,
-        title: "E2E",
-        objective: "Parcours stdio",
-        criteria: ["Sous-processus"],
-        target_repository_url: repo,
-        starting_sha: sha,
-        allowed_paths: ["packages/dubsar-my-work-mcp/**"],
+        title: "KOT-126",
+        objective: "MCP local My Work",
+        criteria: ["Ticket persisté"],
+        target_repository_url: vector.unsigned_arguments.target_repository_url,
+        starting_sha: vector.unsigned_arguments.repository_refs[0].starting_sha,
+        allowed_paths: vector.unsigned_arguments.allowed_paths,
+        mission: vector.unsigned_arguments.mission,
+        acceptance_criteria: vector.unsigned_arguments.acceptance_criteria,
+        expected_evidence: vector.unsigned_arguments.expected_evidence,
+        required_capabilities: vector.unsigned_arguments.required_capabilities,
+        preferred_plugins: vector.unsigned_arguments.preferred_plugins,
+        required_plugins: vector.unsigned_arguments.required_plugins,
+        human_gates: vector.unsigned_arguments.human_gates,
+        correction_budget: 3,
       },
     });
     mission = prepared.result.structuredContent;
     assert.equal(mission.ticket_id, "DUB-001");
     assert.equal(mission.tool, "create_dubsar_work_cursor_agent");
-    assert.equal(mission.arguments.correction_budget, 3);
-    assert.equal(mission.arguments.ticket_id, "DUB-001");
+    assert.deepEqual(Object.keys(mission.arguments).sort(), [...CONTROLLER_ARGUMENT_KEYS].sort());
+    assert.equal(mission.contract_fingerprint, FROZEN_CONTROLLER_FINGERPRINT);
+    assert.equal(JSON.stringify(mission.receipt_bounds), JSON.stringify(vector.receipt_bounds));
   } finally {
     await stopServer(first.child);
   }
@@ -110,24 +120,12 @@ test("E2E subprocess restarts after prepare and after attach, then rereads contr
     });
     const body = reread.result.structuredContent;
     assert.equal(body.ticket.state, "Backlog");
-    assert.equal(body.prepared_contract.contract_fingerprint, mission.arguments.contract_fingerprint);
-    assert.equal(body.prepared_contract.pr_repository_url, repo);
+    assert.equal(body.prepared_contract.contract_fingerprint, FROZEN_CONTROLLER_FINGERPRINT);
+    assert.equal(body.prepared_contract.arguments.pr_repository_url, vector.unsigned_arguments.pr_repository_url);
     assert.equal(body.attached_receipt, null);
-    const receipt = {
-      receipt_version: "dubsar.cursor-launch-receipt/1",
-      target_repository_url: mission.arguments.target_repository_url,
-      contract_fingerprint: mission.arguments.contract_fingerprint,
-      repository_refs: mission.arguments.repository_refs,
-      ticket_id: "DUB-001",
-      agent_id: "agent-1",
-      run_id: "run-1",
-      source_url: "https://cursor.example/runs/1",
-      status: "launched",
-      bounds: mission.arguments.bounds,
-    };
     const attached = await afterPrepare.call("tools/call", {
       name: "attach_cursor_receipt",
-      arguments: { ...context, ticket_id: "DUB-001", receipt },
+      arguments: { ...context, ticket_id: "DUB-001", receipt: vector.realistic_receipt },
     });
     assert.equal(attached.result.structuredContent.state, "In Progress");
   } finally {
@@ -147,8 +145,8 @@ test("E2E subprocess restarts after prepare and after attach, then rereads contr
     });
     const body = reread.result.structuredContent;
     assert.equal(body.ticket.state, "In Progress");
-    assert.equal(body.prepared_contract.contract_fingerprint, mission.arguments.contract_fingerprint);
-    assert.equal(body.attached_receipt.run_id, "run-1");
+    assert.equal(body.prepared_contract.contract_fingerprint, mission.contract_fingerprint);
+    assert.equal(body.attached_receipt.run_id, vector.realistic_receipt.run_id);
     const synced = await afterAttach.call("tools/call", {
       name: "sync_cursor_status",
       arguments: {
@@ -157,8 +155,8 @@ test("E2E subprocess restarts after prepare and after attach, then rereads contr
         cursor_observation: {
           source: "trusted_cursor_observer",
           ticket_id: "DUB-001",
-          agent_id: "agent-1",
-          run_id: "run-1",
+          agent_id: vector.realistic_receipt.agent_id,
+          run_id: vector.realistic_receipt.run_id,
           lifecycle: "running",
           pr: null,
         },
@@ -167,9 +165,8 @@ test("E2E subprocess restarts after prepare and after attach, then rereads contr
     });
     assert.equal(synced.result.structuredContent.ticket.state, "In Progress");
     const persisted = (await readTickets({ start })).tickets[0];
-    assert.equal(persisted.cursor_launch.run_id, "run-1");
-    assert.equal(persisted.references[0], mission.arguments.contract_fingerprint);
-    assert.equal(vector.controller_tool, "create_dubsar_work_cursor_agent");
+    assert.equal(persisted.cursor_launch.run_id, vector.realistic_receipt.run_id);
+    assert.equal(persisted.references[0], FROZEN_CONTROLLER_FINGERPRINT);
   } finally {
     await stopServer(afterAttach.child);
   }

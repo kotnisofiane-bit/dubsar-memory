@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 import { parse } from "acorn";
 import { executeTool } from "../packages/dubsar-my-work-mcp/src/tools.mjs";
 import { handleMessage, encodeFrame, createFrameParser } from "../packages/dubsar-my-work-mcp/src/server.mjs";
-import { buildControllerEnvelope, fingerprintOf, stableJson } from "../packages/dubsar-my-work-mcp/src/canonical.mjs";
-import { CONTROLLER_TOOL, stripFingerprint } from "../packages/dubsar-my-work-mcp/src/mission-args.mjs";
+import { buildControllerEnvelope } from "../packages/dubsar-my-work-mcp/src/canonical.mjs";
+import { CONTROLLER_ARGUMENT_KEYS, CONTROLLER_TOOL, controllerContractFingerprint } from "../packages/dubsar-my-work-mcp/src/mission-args.mjs";
 import { readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -16,7 +16,7 @@ const mcpRoot = path.join(repositoryRoot, "packages", "dubsar-my-work-mcp");
 const sha = "a".repeat(40);
 const repo = "https://github.com/owner/repo";
 const FROZEN_CONTROLLER_FINGERPRINT =
-  "sha256:5d5f41f76154df9ff312e27ddfe9d7dd586a8cdabe23743ee7994a6d5c3d8737";
+  "sha256:56ada5fb957c3c84449688dc79169e093ee4b7d6d05dc0cfc64be9c0db89f574";
 
 async function env() {
   const start = await mkdtemp(path.join(tmpdir(), "dubsar-mcp-project-"));
@@ -37,18 +37,18 @@ function mission(extra = {}) {
   };
 }
 
-function receiptFor(envelope, extra = {}) {
+function receiptFor(prepared, extra = {}) {
   return {
     receipt_version: "dubsar.cursor-launch-receipt/1",
-    target_repository_url: envelope.target_repository_url,
-    contract_fingerprint: envelope.contract_fingerprint,
-    repository_refs: envelope.repository_refs,
-    ticket_id: envelope.ticket_id,
+    target_repository_url: prepared.arguments.target_repository_url,
+    contract_fingerprint: prepared.contract_fingerprint,
+    repository_refs: prepared.arguments.repository_refs,
+    ticket_id: prepared.arguments.ticket_id,
     agent_id: "agent-1",
     run_id: "run-1",
     source_url: "https://cursor.example/runs/1",
     status: "launched",
-    bounds: envelope.bounds,
+    bounds: prepared.receipt_bounds,
     ...extra,
   };
 }
@@ -79,24 +79,29 @@ test("complete mission creates one ticket and passable Controller arguments", as
   const prepared = await executeTool("prepare_cursor_mission", { ...context, ...mission() });
   assert.equal(prepared.ticket_id, "DUB-001");
   assert.equal(prepared.tool, CONTROLLER_TOOL);
+  assert.deepEqual(Object.keys(prepared.arguments).sort(), [...CONTROLLER_ARGUMENT_KEYS].sort());
+  assert.equal("format" in prepared.arguments, false);
+  assert.equal("bounds" in prepared.arguments, false);
+  assert.equal("contract_fingerprint" in prepared.arguments, false);
+  assert.equal("linear_issue_id" in prepared.arguments, false);
+  assert.equal("autoCreatePR" in prepared.arguments, false);
+  assert.equal("workOnCurrentBranch" in prepared.arguments, false);
   assert.equal(prepared.arguments.correction_budget, 3);
   assert.equal(prepared.arguments.pr_repository_url, repo);
-  assert.equal(prepared.arguments.format, "dubsar.cursor-controller-contract/1");
-  assert.equal(prepared.arguments.bounds.polling, false);
-  assert.equal(prepared.arguments.bounds.workOnCurrentBranch, false);
-  assert.equal(prepared.arguments.bounds.autoCreatePR, true);
-  assert.deepEqual(prepared.arguments, prepared.envelope);
+  assert.equal(prepared.receipt_bounds.stateless, true);
+  assert.equal(prepared.receipt_bounds.auto_create_pr, true);
+  assert.equal(prepared.receipt_bounds.work_on_current_branch, false);
   assert.equal(
-    prepared.arguments.contract_fingerprint,
-    fingerprintOf(stripFingerprint(prepared.arguments)),
+    prepared.contract_fingerprint,
+    controllerContractFingerprint(prepared.arguments),
   );
   const store = await readTickets({ start: context.start });
   assert.equal(store.tickets.length, 1);
   assert.equal(store.tickets[0].state, "Backlog");
-  assert.equal(store.tickets[0].references[0], prepared.arguments.contract_fingerprint);
+  assert.equal(store.tickets[0].references[0], prepared.contract_fingerprint);
   const loaded = await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" });
-  assert.equal(loaded.prepared_contract.contract_fingerprint, prepared.arguments.contract_fingerprint);
-  assert.equal(loaded.prepared_contract.mission, prepared.arguments.mission);
+  assert.equal(loaded.prepared_contract.contract_fingerprint, prepared.contract_fingerprint);
+  assert.equal(loaded.prepared_contract.arguments.mission, prepared.arguments.mission);
 });
 
 test("incomplete mission, bad SHA, unsafe path, repo contradiction, and missing project fail before write", async () => {
@@ -118,7 +123,7 @@ test("incomplete mission, bad SHA, unsafe path, repo contradiction, and missing 
 test("receipt attaches once, sets In Progress, and is idempotent", async () => {
   const context = await env();
   const prepared = await executeTool("prepare_cursor_mission", { ...context, ...mission() });
-  const receipt = receiptFor(prepared.envelope);
+  const receipt = receiptFor(prepared);
   const first = await executeTool("attach_cursor_receipt", { ...context, ticket_id: "DUB-001", receipt });
   assert.equal(first.state, "In Progress");
   assert.equal(first.idempotent, false);
@@ -129,14 +134,14 @@ test("receipt attaches once, sets In Progress, and is idempotent", async () => {
   await assert.rejects(executeTool("attach_cursor_receipt", {
     ...context,
     ticket_id: "DUB-001",
-    receipt: receiptFor(prepared.envelope, { contract_fingerprint: `sha256:${"c".repeat(64)}` }),
+    receipt: receiptFor(prepared, { contract_fingerprint: `sha256:${"c".repeat(64)}` }),
   }), { code: "MY_WORK_FINGERPRINT_MISMATCH" });
 });
 
 test("sync reuses KOT-119 mapping and persists PR, branch, and SHAs", async () => {
   const context = await env();
   const prepared = await executeTool("prepare_cursor_mission", { ...context, ...mission() });
-  await executeTool("attach_cursor_receipt", { ...context, ticket_id: "DUB-001", receipt: receiptFor(prepared.envelope) });
+  await executeTool("attach_cursor_receipt", { ...context, ticket_id: "DUB-001", receipt: receiptFor(prepared) });
   const merge = "c".repeat(40);
   const head = "d".repeat(40);
   const synced = await executeTool("sync_cursor_status", {
@@ -227,14 +232,17 @@ test("frozen Controller vector fingerprint is a literal, not a locally recompute
   const vectorPath = path.join(mcpRoot, "vectors", "controller-canonical-v1.json");
   const vector = JSON.parse(await readFile(vectorPath, "utf8"));
   assert.equal(vector.expected_contract_fingerprint, FROZEN_CONTROLLER_FINGERPRINT);
+  assert.notEqual(
+    vector.expected_contract_fingerprint,
+    "sha256:5d5f41f76154df9ff312e27ddfe9d7dd586a8cdabe23743ee7994a6d5c3d8737",
+  );
   assert.equal(vector.controller_tool, CONTROLLER_TOOL);
   assert.equal(vector.controller_revision, "9c5cd6536ebfa5c582a00a9d66cdff1560dd469c");
-  const envelope = buildControllerEnvelope({
+  const prepared = buildControllerEnvelope({
     ticketId: vector.unsigned_arguments.ticket_id,
     targetRepositoryUrl: vector.unsigned_arguments.target_repository_url,
     startingSha: vector.unsigned_arguments.repository_refs[0].starting_sha,
     allowedPaths: vector.unsigned_arguments.allowed_paths,
-    linearIssue: vector.unsigned_arguments.linear_issue_id,
     mission: vector.unsigned_arguments.mission,
     acceptanceCriteria: vector.unsigned_arguments.acceptance_criteria,
     expectedEvidence: vector.unsigned_arguments.expected_evidence,
@@ -243,17 +251,13 @@ test("frozen Controller vector fingerprint is a literal, not a locally recompute
     requiredPlugins: vector.unsigned_arguments.required_plugins,
     humanGates: vector.unsigned_arguments.human_gates,
   });
-  assert.equal(envelope.contract_fingerprint, FROZEN_CONTROLLER_FINGERPRINT);
-  assert.equal(stableJson(stripFingerprint(envelope)), stableJson(vector.unsigned_arguments));
-  const shortLegacyBody = {
-    allowed_paths: vector.unsigned_arguments.allowed_paths,
-    bounds: vector.unsigned_arguments.bounds,
-    format: vector.unsigned_arguments.format,
-    repository_refs: vector.unsigned_arguments.repository_refs,
-    target_repository_url: vector.unsigned_arguments.target_repository_url,
-    ticket_id: vector.unsigned_arguments.ticket_id,
-  };
-  assert.notEqual(fingerprintOf(shortLegacyBody), FROZEN_CONTROLLER_FINGERPRINT);
+  assert.deepEqual(Object.keys(prepared.arguments).sort(), [...CONTROLLER_ARGUMENT_KEYS].sort());
+  assert.equal(prepared.contract_fingerprint, FROZEN_CONTROLLER_FINGERPRINT);
+  assert.equal(JSON.stringify(prepared.receipt_bounds), JSON.stringify(vector.receipt_bounds));
+  assert.equal(
+    JSON.stringify(prepared.arguments.acceptance_criteria),
+    JSON.stringify(vector.unsigned_arguments.acceptance_criteria),
+  );
 });
 
 test("frozen realistic Controller receipt attaches; divergences do not mutate", async () => {
@@ -269,7 +273,7 @@ test("frozen realistic Controller receipt attaches; divergences do not mutate", 
     target_repository_url: vector.unsigned_arguments.target_repository_url,
     starting_sha: vector.unsigned_arguments.repository_refs[0].starting_sha,
     allowed_paths: vector.unsigned_arguments.allowed_paths,
-    linear_issue_id: vector.unsigned_arguments.linear_issue_id,
+    linear_issue_id: "KOT-126",
     mission: vector.unsigned_arguments.mission,
     acceptance_criteria: vector.unsigned_arguments.acceptance_criteria,
     expected_evidence: vector.unsigned_arguments.expected_evidence,
@@ -279,7 +283,9 @@ test("frozen realistic Controller receipt attaches; divergences do not mutate", 
     human_gates: vector.unsigned_arguments.human_gates,
     correction_budget: 3,
   });
-  assert.equal(prepared.arguments.contract_fingerprint, FROZEN_CONTROLLER_FINGERPRINT);
+  assert.equal(prepared.contract_fingerprint, FROZEN_CONTROLLER_FINGERPRINT);
+  assert.deepEqual(Object.keys(prepared.arguments).sort(), [...CONTROLLER_ARGUMENT_KEYS].sort());
+  assert.equal(JSON.stringify(prepared.receipt_bounds), JSON.stringify(vector.receipt_bounds));
   const ticketsFile = path.join(context.start, ".dubsar", "tickets.json");
   const first = await executeTool("attach_cursor_receipt", {
     ...context,
@@ -327,7 +333,7 @@ test("frozen realistic Controller receipt attaches; divergences do not mutate", 
     executeTool("attach_cursor_receipt", {
       ...context,
       ticket_id: "DUB-001",
-      receipt: { ...vector.realistic_receipt, bounds: { ...vector.realistic_receipt.bounds, max_runs: 9 } },
+      receipt: { ...vector.realistic_receipt, bounds: { ...vector.realistic_receipt.bounds, auto_create_pr: false } },
     }),
     { code: "MY_WORK_RECEIPT_MISMATCH" },
   );
@@ -346,7 +352,7 @@ test("frozen realistic Controller receipt attaches; divergences do not mutate", 
       ticket_id: "DUB-001",
       receipt: {
         ...vector.realistic_receipt,
-        bounds: { max_runs: 1, polling: false },
+        bounds: { autoCreatePR: true, max_runs: 1, polling: false, workOnCurrentBranch: false },
       },
     }),
     { code: "MY_WORK_RECEIPT_MISMATCH" },

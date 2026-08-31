@@ -1,8 +1,5 @@
 import { createHash } from "node:crypto";
-import {
-  buildUnsignedControllerArguments,
-  signControllerArguments,
-} from "./mission-args.mjs";
+import { assemblePreparedMission, buildUnsignedControllerArguments } from "./mission-args.mjs";
 
 export const CONTROLLER_CONTRACT_FORMAT = "dubsar.cursor-controller-contract/1";
 export const GITHUB_REPOSITORY_URL =
@@ -133,8 +130,7 @@ export function buildControllerEnvelope({
     throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
   }
   const paths = Object.freeze(allowedPaths.map(assertAllowedPath));
-  const linearIssueId =
-    linearIssue == null ? undefined : requiredText(linearIssue, 32, "MY_WORK_MISSION_INCOMPLETE");
+  if (linearIssue != null) requiredText(linearIssue, 32, "MY_WORK_MISSION_INCOMPLETE");
   const missionText =
     mission ??
     (typeof title === "string" && typeof objective === "string" ? `${title}: ${objective}` : `Ticket ${ticketId}`);
@@ -153,7 +149,6 @@ export function buildControllerEnvelope({
     preferredPlugins,
     requiredPlugins,
     humanGates,
-    linearIssueId,
   });
-  return Object.freeze(signControllerArguments(unsigned));
+  return Object.freeze(assemblePreparedMission(unsigned));
 }

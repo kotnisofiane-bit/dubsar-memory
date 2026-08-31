@@ -268,8 +268,9 @@ export async function executeTool(name, args = {}) {
           format: "dubsar.my-work-cursor-mission/1",
           ticket_id: existing.id,
           persisted: false,
-          envelope: contract,
-          ...controllerToolCall(contract),
+          contract_fingerprint: contract.contract_fingerprint,
+          receipt_bounds: contract.receipt_bounds,
+          ...controllerToolCall(contract.arguments),
         };
       }
       const allocations = await readTicketAllocations({ allocationRoot: env.allocationRoot });
@@ -299,7 +300,7 @@ export async function executeTool(name, args = {}) {
         objective: args.objective,
         criteria: args.criteria,
         work_id: args.work_id ?? null,
-        references: [envelope.contract_fingerprint, envelope.target_repository_url],
+        references: [envelope.contract_fingerprint, envelope.arguments.target_repository_url],
       };
       await mutate(env, operation);
       await mutate(env, {
@@ -311,9 +312,11 @@ export async function executeTool(name, args = {}) {
       });
       return {
         format: "dubsar.my-work-cursor-mission/1",
-        ticket_id: envelope.ticket_id,
-        envelope,
-        ...controllerToolCall(envelope),
+        ticket_id: envelope.ticket_id ?? envelope.arguments.ticket_id,
+        persisted: true,
+        contract_fingerprint: envelope.contract_fingerprint,
+        receipt_bounds: envelope.receipt_bounds,
+        ...controllerToolCall(envelope.arguments),
       };
     }
     if (name === "attach_cursor_receipt") {
@@ -323,6 +326,9 @@ export async function executeTool(name, args = {}) {
       const receipt = args.receipt;
       if (!receipt || typeof receipt !== "object") throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
       const contract = preparedContractFrom(ticket);
+      if (!contract) throw new MyWorkMcpError("MY_WORK_FINGERPRINT_MISMATCH");
+      const preparedArgs = contract.arguments ?? contract;
+      const expectedBounds = contract.receipt_bounds;
       const expected = expectedFingerprint(ticket, args.expected_contract_fingerprint, contract);
       if (receipt.ticket_id !== ticket.id) {
         throw new MyWorkMcpError("MY_WORK_TICKET_MISMATCH");
@@ -330,16 +336,13 @@ export async function executeTool(name, args = {}) {
       if (receipt.contract_fingerprint !== expected) {
         throw new MyWorkMcpError("MY_WORK_FINGERPRINT_MISMATCH");
       }
-      if (
-        contract &&
-        String(receipt.target_repository_url ?? "") !== String(contract.target_repository_url ?? "")
-      ) {
+      if (String(receipt.target_repository_url ?? "") !== String(preparedArgs.target_repository_url ?? "")) {
         throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
       }
-      if (contract && !refsMatch(receipt.repository_refs, contract.repository_refs)) {
+      if (!refsMatch(receipt.repository_refs, preparedArgs.repository_refs)) {
         throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
       }
-      if (contract && !boundsMatch(receipt.bounds, contract.bounds)) {
+      if (!boundsMatch(receipt.bounds, expectedBounds)) {
         throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
       }
       if (ticket.cursor_launch) {

@@ -2,26 +2,35 @@
   "controller_repository": "https://github.com/kotnisofiane-bit/kotnisofiane-bit-dubsar-cursor-reader-mcp",
   "controller_revision": "9c5cd6536ebfa5c582a00a9d66cdff1560dd469c",
   "controller_tool": "create_dubsar_work_cursor_agent",
-  "expected_contract_fingerprint": "sha256:5d5f41f76154df9ff312e27ddfe9d7dd586a8cdabe23743ee7994a6d5c3d8737",
+  "expected_contract_fingerprint": "sha256:56ada5fb957c3c84449688dc79169e093ee4b7d6d05dc0cfc64be9c0db89f574",
   "unsigned_arguments": {
+    "ticket_id": "DUB-001",
+    "target_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
+    "pr_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
+    "repository_refs": [
+      {
+        "repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
+        "starting_sha": "799bd4d72f4ee290adc8c4f481a1fb25c072169f"
+      }
+    ],
+    "allowed_paths": ["packages/dubsar-my-work-mcp/**"],
+    "mission": "Préparer create_dubsar_work_cursor_agent sans reconstruction Work.",
     "acceptance_criteria": [
       "Le ticket DUB-001 reste le seul identifiant d allocation.",
       "Les changements respectent allowed_paths et le SHA de départ déclaré."
     ],
-    "allowed_paths": ["packages/dubsar-my-work-mcp/**"],
-    "autoCreatePR": true,
-    "bounds": {
-      "autoCreatePR": true,
-      "max_runs": 1,
-      "polling": false,
-      "workOnCurrentBranch": false
-    },
-    "correction_budget": 3,
     "expected_evidence": [
       "diff GitHub borné aux allowed_paths",
       "sortie des tests ciblés du lot"
     ],
-    "format": "dubsar.cursor-controller-contract/1",
+    "required_capabilities": [
+      "Node.js 20 ou supérieur",
+      "Implémentation MCP stdio locale",
+      "Réutilisation des APIs tickets My Work existantes",
+      "Tests node:test avec vrai sous-processus"
+    ],
+    "preferred_plugins": [],
+    "required_plugins": [],
     "human_gates": [
       "merge",
       "local_install",
@@ -32,31 +41,30 @@
       "backend_switch",
       "scope_extension"
     ],
-    "linear_issue_id": "KOT-126",
-    "mission": "Préparer create_dubsar_work_cursor_agent sans reconstruction Work.",
-    "preferred_plugins": [],
+    "correction_budget": 3
+  },
+  "receipt_bounds": {
+    "allowed_paths": ["packages/dubsar-my-work-mcp/**"],
+    "auto_create_pr": true,
+    "correction_budget": 3,
+    "human_gates": [
+      "merge",
+      "local_install",
+      "deployment",
+      "publication",
+      "vm_cloud",
+      "secrets",
+      "backend_switch",
+      "scope_extension"
+    ],
     "pr_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
-    "repository_refs": [
-      {
-        "repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
-        "starting_sha": "799bd4d72f4ee290adc8c4f481a1fb25c072169f"
-      }
-    ],
-    "required_capabilities": [
-      "Node.js 20 ou supérieur",
-      "Implémentation MCP stdio locale",
-      "Réutilisation des APIs tickets My Work existantes",
-      "Tests node:test avec vrai sous-processus"
-    ],
-    "required_plugins": [],
-    "target_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
-    "ticket_id": "DUB-001",
-    "workOnCurrentBranch": false
+    "stateless": true,
+    "work_on_current_branch": false
   },
   "realistic_receipt": {
     "receipt_version": "dubsar.cursor-launch-receipt/1",
     "target_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
-    "contract_fingerprint": "sha256:5d5f41f76154df9ff312e27ddfe9d7dd586a8cdabe23743ee7994a6d5c3d8737",
+    "contract_fingerprint": "sha256:56ada5fb957c3c84449688dc79169e093ee4b7d6d05dc0cfc64be9c0db89f574",
     "repository_refs": [
       {
         "repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
@@ -69,10 +77,22 @@
     "source_url": "https://cursor.com/agents/bc-kot-126-controller-sample",
     "status": "CREATING",
     "bounds": {
-      "autoCreatePR": true,
-      "max_runs": 1,
-      "polling": false,
-      "workOnCurrentBranch": false
+      "allowed_paths": ["packages/dubsar-my-work-mcp/**"],
+      "auto_create_pr": true,
+      "correction_budget": 3,
+      "human_gates": [
+        "merge",
+        "local_install",
+        "deployment",
+        "publication",
+        "vm_cloud",
+        "secrets",
+        "backend_switch",
+        "scope_extension"
+      ],
+      "pr_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
+      "stateless": true,
+      "work_on_current_branch": false
     }
   }
 }
