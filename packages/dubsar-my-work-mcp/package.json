@@ -1,0 +1,14 @@
+{
+  "name": "@dubsar/my-work-mcp",
+  "version": "0.1.0-dev",
+  "private": true,
+  "type": "module",
+  "description": "Local stdio MCP for DUBSAR My Work tickets, Cursor envelopes, receipts, and sync.",
+  "bin": {
+    "dubsar-my-work-mcp": "./bin/dubsar-my-work-mcp.mjs"
+  },
+  "exports": "./src/index.mjs",
+  "engines": {
+    "node": ">=20"
+  }
+}

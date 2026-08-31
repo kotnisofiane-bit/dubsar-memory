@@ -1,0 +1,10 @@
+[
+  "merge",
+  "local_install",
+  "deployment",
+  "publication",
+  "vm_cloud",
+  "secrets",
+  "backend_switch",
+  "scope_extension"
+]
