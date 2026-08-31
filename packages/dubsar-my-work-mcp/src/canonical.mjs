@@ -91,6 +91,9 @@ export function normalizeRepositoryRefs({ targetRepositoryUrl, startingSha, repo
       const repositoryUrl = normalizeRepositoryUrl(reference.repository_url);
       if (!SHA40.test(reference.starting_sha ?? "")) throw new MyWorkMcpError("MY_WORK_SHA_INVALID");
       if (repositoryUrl !== target) throw new MyWorkMcpError("MY_WORK_REPOSITORY_CONTRADICTION");
+      if (startingSha != null && startingSha !== "" && reference.starting_sha !== startingSha) {
+        throw new MyWorkMcpError("MY_WORK_SHA_INVALID");
+      }
       return Object.freeze({ repository_url: repositoryUrl, starting_sha: reference.starting_sha });
     });
   } else {

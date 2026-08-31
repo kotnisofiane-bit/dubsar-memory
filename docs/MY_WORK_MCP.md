@@ -12,7 +12,8 @@ writes reuse `previewTicketChange` / `applyTicketChange` from
 node packages/dubsar-my-work-mcp/bin/dubsar-my-work-mcp.mjs
 ```
 
-Framing is MCP JSON-RPC with `Content-Length` headers on stdin/stdout.
+Framing is MCP 2024-11-05 stdio: newline-delimited JSON-RPC on stdin/stdout.
+`Content-Length` frames are still accepted for compatibility.
 
 ## Closed tool surface
 
@@ -92,8 +93,10 @@ the ticket (`cursor_contract` activity and `cursor_launch`).
 
 `attach_cursor_receipt` accepts Controller names unchanged. It attaches only
 when `ticket_id`, `target_repository_url`, `repository_refs` (URL + SHA),
-`bounds`, and `contract_fingerprint` match the prepared contract. Any divergence
-fails without writing. Repeats of the same receipt are idempotent.
+the complete `bounds` object, and `contract_fingerprint` match the prepared
+contract. A caller-supplied `expected_contract_fingerprint` must equal that
+same persisted value. Any divergence fails without writing. Repeats of the same
+receipt are idempotent. Caller `human_gates` must include the frozen catalog.
 
 `sync_cursor_status` accepts Work-normalized `trusted_cursor_observer` and
 optional `trusted_github_observer` objects and persists state, PR, branch, head

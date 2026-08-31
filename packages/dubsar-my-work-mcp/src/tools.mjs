@@ -148,11 +148,20 @@ async function mutate(env, operation) {
   return applyTicketChange({ ...env, operation, expectedChange: preview.change_sha256 });
 }
 
-function expectedFingerprint(ticket, supplied) {
+function expectedFingerprint(ticket, supplied, contract) {
   const fromTicket = (ticket.references ?? []).find((item) => CONTRACT_FINGERPRINT.test(item));
-  const expected = supplied ?? fromTicket;
-  if (!CONTRACT_FINGERPRINT.test(expected ?? "")) throw new MyWorkMcpError("MY_WORK_FINGERPRINT_MISMATCH");
-  return expected;
+  const fromContract = contract?.contract_fingerprint;
+  if (
+    !CONTRACT_FINGERPRINT.test(fromTicket ?? "") ||
+    !CONTRACT_FINGERPRINT.test(fromContract ?? "") ||
+    fromTicket !== fromContract
+  ) {
+    throw new MyWorkMcpError("MY_WORK_FINGERPRINT_MISMATCH");
+  }
+  if (supplied != null && supplied !== fromTicket) {
+    throw new MyWorkMcpError("MY_WORK_FINGERPRINT_MISMATCH");
+  }
+  return fromTicket;
 }
 
 function preparedContractFrom(ticket) {
@@ -177,6 +186,8 @@ function publicTicket(ticket) {
     references: ticket.references,
     cursor_launch: ticket.cursor_launch,
     prepared_contract: preparedContractFrom(ticket),
+    work_id: ticket.work_id ?? null,
+    duplicate_of: ticket.duplicate_of ?? null,
     agent: ticket.agent,
     branch: ticket.branch,
     pr: ticket.pr,
@@ -219,8 +230,7 @@ export async function executeTool(name, args = {}) {
         throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
       }
       const linearIssue = args.linear_issue_id ?? args.linear_issue;
-      buildControllerEnvelope({
-        ticketId: "DUB-001",
+      const envelopeInput = {
         targetRepositoryUrl: args.target_repository_url,
         startingSha: args.starting_sha,
         repositoryRefs: args.repository_refs,
@@ -237,7 +247,31 @@ export async function executeTool(name, args = {}) {
         title: args.title,
         objective: args.objective,
         criteria: args.criteria,
-      });
+      };
+      buildControllerEnvelope({ ticketId: "DUB-001", ...envelopeInput });
+      const existingStore = await readTickets({ start: env.start });
+      for (const existing of existingStore.tickets) {
+        const candidate = buildControllerEnvelope({ ticketId: existing.id, ...envelopeInput });
+        if (!(existing.references ?? []).includes(candidate.contract_fingerprint)) continue;
+        let contract = preparedContractFrom(existing);
+        if (!contract) {
+          await mutate(env, {
+            type: "activity",
+            id: existing.id,
+            kind: "cursor_contract",
+            summary: `${CONTROLLER_TOOL} arguments persisted`,
+            evidence: { ...candidate },
+          });
+          contract = candidate;
+        }
+        return {
+          format: "dubsar.my-work-cursor-mission/1",
+          ticket_id: existing.id,
+          persisted: false,
+          envelope: contract,
+          ...controllerToolCall(contract),
+        };
+      }
       const allocations = await readTicketAllocations({ allocationRoot: env.allocationRoot });
       const ticketId = `DUB-${String(allocations.next_number).padStart(3, "0")}`;
       const envelope = buildControllerEnvelope({
@@ -289,10 +323,7 @@ export async function executeTool(name, args = {}) {
       const receipt = args.receipt;
       if (!receipt || typeof receipt !== "object") throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
       const contract = preparedContractFrom(ticket);
-      const expected = expectedFingerprint(
-        ticket,
-        args.expected_contract_fingerprint ?? contract?.contract_fingerprint,
-      );
+      const expected = expectedFingerprint(ticket, args.expected_contract_fingerprint, contract);
       if (receipt.ticket_id !== ticket.id) {
         throw new MyWorkMcpError("MY_WORK_TICKET_MISMATCH");
       }

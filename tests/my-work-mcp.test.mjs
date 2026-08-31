@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "acorn";
 import { executeTool } from "../packages/dubsar-my-work-mcp/src/tools.mjs";
-import { handleMessage } from "../packages/dubsar-my-work-mcp/src/server.mjs";
+import { handleMessage, encodeFrame, createFrameParser } from "../packages/dubsar-my-work-mcp/src/server.mjs";
 import { buildControllerEnvelope, fingerprintOf, stableJson } from "../packages/dubsar-my-work-mcp/src/canonical.mjs";
 import { CONTROLLER_TOOL, stripFingerprint } from "../packages/dubsar-my-work-mcp/src/mission-args.mjs";
 import { readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
@@ -106,7 +106,9 @@ test("incomplete mission, bad SHA, unsafe path, repo contradiction, and missing 
   await assert.rejects(executeTool("prepare_cursor_mission", { ...context, ...mission({ starting_sha: "not-a-sha" }) }), { code: "MY_WORK_SHA_INVALID" });
   await assert.rejects(executeTool("prepare_cursor_mission", { ...context, ...mission({ allowed_paths: ["../secret"] }) }), { code: "MY_WORK_PATH_UNSAFE" });
   await assert.rejects(executeTool("prepare_cursor_mission", { ...context, ...mission({ allowed_paths: ["/etc/passwd"] }) }), { code: "MY_WORK_PATH_UNSAFE" });
-  await assert.rejects(executeTool("prepare_cursor_mission", { ...context, ...mission({ repository_refs: [{ repository_url: "https://github.com/other/repo", starting_sha: sha }] }) }), { code: "MY_WORK_REPOSITORY_CONTRADICTION" });
+  await assert.rejects(executeTool("prepare_cursor_mission", { ...context, ...mission({ repository_refs: [{ repository_url: repo, starting_sha: "b".repeat(40) }] }) }), { code: "MY_WORK_SHA_INVALID" });
+  await assert.rejects(executeTool("prepare_cursor_mission", { ...context, ...mission({ human_gates: ["merge"] }) }), { code: "MY_WORK_MISSION_INCOMPLETE" });
+  await assert.rejects(executeTool("prepare_cursor_mission", { ...context, ...mission({ mission: "x".repeat(4001) }) }), { code: "MY_WORK_MISSION_INCOMPLETE" });
   await assert.rejects(executeTool("prepare_cursor_mission", { ...context, ...mission({ correction_budget: 4 }) }), { code: "MY_WORK_MISSION_INCOMPLETE" });
   await assert.rejects(executeTool("prepare_cursor_mission", { ...mission() }), { code: "MY_WORK_PROJECT_REQUIRED" });
   await assert.equal(await readFile(target).then(() => "exists", () => "missing"), "missing");
@@ -200,6 +202,25 @@ test("MCP initialize and tools/list expose the closed surface", async () => {
     "attach_cursor_receipt",
     "sync_cursor_status",
   ]);
+});
+
+test("stdio framing is newline-delimited JSON-RPC", async () => {
+  const messages = [];
+  const parse = createFrameParser((message) => messages.push(message));
+  parse(Buffer.from('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n', "utf8"));
+  assert.equal(messages[0].method, "initialize");
+  const frame = encodeFrame({ jsonrpc: "2.0", id: 2, result: {} });
+  assert.equal(frame.includes(0x0a), true);
+  assert.equal(frame.toString("utf8").startsWith("Content-Length"), false);
+});
+
+test("prepare is idempotent for the same persisted fingerprint", async () => {
+  const context = await env();
+  const first = await executeTool("prepare_cursor_mission", { ...context, ...mission() });
+  const second = await executeTool("prepare_cursor_mission", { ...context, ...mission() });
+  assert.equal(second.ticket_id, first.ticket_id);
+  assert.equal(second.persisted, false);
+  assert.equal((await readTickets({ start: context.start })).tickets.length, 1);
 });
 
 test("frozen Controller vector fingerprint is a literal, not a locally recomputed oracle", async () => {
@@ -314,9 +335,21 @@ test("frozen realistic Controller receipt attaches; divergences do not mutate", 
     executeTool("attach_cursor_receipt", {
       ...context,
       ticket_id: "DUB-001",
+      expected_contract_fingerprint: `sha256:${"c".repeat(64)}`,
       receipt: { ...vector.realistic_receipt, contract_fingerprint: `sha256:${"c".repeat(64)}` },
     }),
     { code: "MY_WORK_FINGERPRINT_MISMATCH" },
+  );
+  await assert.rejects(
+    executeTool("attach_cursor_receipt", {
+      ...context,
+      ticket_id: "DUB-001",
+      receipt: {
+        ...vector.realistic_receipt,
+        bounds: { max_runs: 1, polling: false },
+      },
+    }),
+    { code: "MY_WORK_RECEIPT_MISMATCH" },
   );
   assert.equal((await stat(ticketsFile)).mtimeMs, before.mtimeMs);
 });

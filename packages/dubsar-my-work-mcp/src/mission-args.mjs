@@ -4,7 +4,7 @@
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { MyWorkMcpError, fingerprintOf } from "./canonical.mjs";
+import { MyWorkMcpError, fingerprintOf, stableJson } from "./canonical.mjs";
 
 export const CONTROLLER_TOOL = "create_dubsar_work_cursor_agent";
 export const CONTRACT_FORMAT = "dubsar.cursor-controller-contract/1";
@@ -31,27 +31,37 @@ const HUMAN_GATES = Object.freeze(
   ),
 );
 
-function nonEmptyStrings(value, code) {
+const MAX_MISSION = 4000;
+const MAX_ITEM = 300;
+const MAX_PLUGIN = 80;
+const MAX_CONTRACT_BYTES = 12 * 1024;
+
+function boundedItem(item, max, code) {
+  if (typeof item !== "string" || item.trim() !== item || item.length < 1 || item.length > max) {
+    throw new MyWorkMcpError(code);
+  }
+  return item;
+}
+
+function nonEmptyStrings(value, code, max = MAX_ITEM) {
   if (!Array.isArray(value) || value.length < 1 || value.length > 20) {
     throw new MyWorkMcpError(code);
   }
-  return value.map((item) => {
-    if (typeof item !== "string" || item.trim() !== item || item.length < 1) {
-      throw new MyWorkMcpError(code);
-    }
-    return item;
-  });
+  return value.map((item) => boundedItem(item, max, code));
 }
 
 function pluginList(value) {
   if (value == null) return [];
   if (!Array.isArray(value) || value.length > 20) throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
-  return value.map((item) => {
-    if (typeof item !== "string" || item.trim() !== item || item.length < 1) {
-      throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
-    }
-    return item;
-  });
+  return value.map((item) => boundedItem(item, MAX_PLUGIN, "MY_WORK_MISSION_INCOMPLETE"));
+}
+
+function requireCatalog(gates) {
+  const provided = new Set(gates);
+  for (const required of HUMAN_GATES) {
+    if (!provided.has(required)) throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
+  }
+  return gates;
 }
 
 export function stripFingerprint(value) {
@@ -84,7 +94,7 @@ export function buildUnsignedControllerArguments({
   const target = targetRepositoryUrl;
   const pr = prRepositoryUrl ?? target;
   const missionText =
-    typeof mission === "string" && mission.trim() === mission && mission.length >= 1
+    typeof mission === "string" && mission.trim() === mission && mission.length >= 1 && mission.length <= MAX_MISSION
       ? mission
       : null;
   if (!missionText) throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
@@ -101,7 +111,7 @@ export function buildUnsignedControllerArguments({
     correction_budget: CORRECTION_BUDGET,
     expected_evidence: nonEmptyStrings(expectedEvidence, "MY_WORK_MISSION_INCOMPLETE"),
     format: CONTRACT_FORMAT,
-    human_gates: nonEmptyStrings(humanGates ?? [...HUMAN_GATES], "MY_WORK_MISSION_INCOMPLETE"),
+    human_gates: requireCatalog(nonEmptyStrings(humanGates ?? [...HUMAN_GATES], "MY_WORK_MISSION_INCOMPLETE")),
     mission: missionText,
     preferred_plugins: pluginList(preferredPlugins),
     pr_repository_url: pr,
@@ -116,6 +126,9 @@ export function buildUnsignedControllerArguments({
     workOnCurrentBranch: workOnCurrentBranch ?? RECEIPT_BOUNDS.workOnCurrentBranch,
   };
   if (linearIssueId != null) args.linear_issue_id = linearIssueId;
+  if (Buffer.byteLength(stableJson(args), "utf8") > MAX_CONTRACT_BYTES) {
+    throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
+  }
   return args;
 }
 
@@ -145,23 +158,8 @@ export function refsMatch(left, right) {
 }
 
 export function boundsMatch(receiptBounds, contractBounds) {
-  if (!receiptBounds || typeof receiptBounds !== "object") return false;
   const expected = contractBounds ?? RECEIPT_BOUNDS;
-  if (Number(receiptBounds.max_runs) !== Number(expected.max_runs)) return false;
-  if (Boolean(receiptBounds.polling) !== Boolean(expected.polling)) return false;
-  if (
-    receiptBounds.autoCreatePR !== undefined &&
-    Boolean(receiptBounds.autoCreatePR) !== Boolean(expected.autoCreatePR)
-  ) {
-    return false;
-  }
-  if (
-    receiptBounds.workOnCurrentBranch !== undefined &&
-    Boolean(receiptBounds.workOnCurrentBranch) !== Boolean(expected.workOnCurrentBranch)
-  ) {
-    return false;
-  }
-  return true;
+  return stableJson(receiptBounds) === stableJson(expected);
 }
 
 export function humanGatesCatalog() {

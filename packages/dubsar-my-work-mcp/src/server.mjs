@@ -61,29 +61,48 @@ export async function handleMessage(message) {
 }
 
 export function encodeFrame(payload) {
+  return Buffer.from(`${JSON.stringify(payload)}\n`, "utf8");
+}
+
+export function encodeContentLengthFrame(payload) {
   const body = Buffer.from(JSON.stringify(payload), "utf8");
   return Buffer.concat([Buffer.from(`Content-Length: ${body.length}\r\n\r\n`, "utf8"), body]);
+}
+
+function parseJsonMessage(text, onMessage) {
+  const trimmed = text.replace(/^\uFEFF/, "").trim();
+  if (trimmed === "") return;
+  onMessage(JSON.parse(trimmed));
 }
 
 export function createFrameParser(onMessage) {
   let buffer = Buffer.alloc(0);
   return (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
-    while (true) {
-      const headerEnd = buffer.indexOf("\r\n\r\n");
-      if (headerEnd === -1) return;
-      const header = buffer.subarray(0, headerEnd).toString("utf8");
-      const match = header.match(/^Content-Length:\s*(\d+)$/imu);
-      if (!match) {
-        buffer = buffer.subarray(headerEnd + 4);
+    while (buffer.length > 0) {
+      const asciiStart = buffer.subarray(0, Math.min(buffer.length, 64)).toString("latin1");
+      if (/^content-length\s*:/i.test(asciiStart) || asciiStart.startsWith("Content-Length")) {
+        const headerEnd = buffer.indexOf("\r\n\r\n");
+        if (headerEnd === -1) return;
+        const header = buffer.subarray(0, headerEnd).toString("utf8");
+        const match = header.match(/^Content-Length:\s*(\d+)$/imu);
+        if (!match) {
+          buffer = buffer.subarray(headerEnd + 4);
+          continue;
+        }
+        const length = Number(match[1]);
+        const start = headerEnd + 4;
+        if (buffer.length < start + length) return;
+        const body = buffer.subarray(start, start + length).toString("utf8");
+        buffer = buffer.subarray(start + length);
+        parseJsonMessage(body, onMessage);
         continue;
       }
-      const length = Number(match[1]);
-      const start = headerEnd + 4;
-      if (buffer.length < start + length) return;
-      const body = buffer.subarray(start, start + length).toString("utf8");
-      buffer = buffer.subarray(start + length);
-      onMessage(JSON.parse(body));
+      const newline = buffer.indexOf(0x0a);
+      if (newline === -1) return;
+      const line = buffer.subarray(0, newline).toString("utf8").replace(/\r$/, "");
+      buffer = buffer.subarray(newline + 1);
+      parseJsonMessage(line, onMessage);
     }
   };
 }
