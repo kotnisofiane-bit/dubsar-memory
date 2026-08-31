@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+import {
+  buildUnsignedControllerArguments,
+  signControllerArguments,
+} from "./mission-args.mjs";
 
 export const CONTROLLER_CONTRACT_FORMAT = "dubsar.cursor-controller-contract/1";
 export const GITHUB_REPOSITORY_URL =
@@ -77,15 +81,7 @@ export function normalizeRepositoryUrl(value) {
   return url.replace(/\.git$/u, "");
 }
 
-export function buildControllerEnvelope({
-  ticketId,
-  targetRepositoryUrl,
-  startingSha,
-  repositoryRefs,
-  allowedPaths,
-  linearIssue,
-}) {
-  if (!TICKET_ID.test(ticketId ?? "")) throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
+export function normalizeRepositoryRefs({ targetRepositoryUrl, startingSha, repositoryRefs }) {
   const target = normalizeRepositoryUrl(targetRepositoryUrl);
   let refs;
   if (Array.isArray(repositoryRefs) && repositoryRefs.length > 0) {
@@ -101,29 +97,60 @@ export function buildControllerEnvelope({
     if (!SHA40.test(startingSha ?? "")) throw new MyWorkMcpError("MY_WORK_SHA_INVALID");
     refs = [Object.freeze({ repository_url: target, starting_sha: startingSha })];
   }
+  return { target, refs };
+}
+
+export function buildControllerEnvelope({
+  ticketId,
+  targetRepositoryUrl,
+  startingSha,
+  repositoryRefs,
+  allowedPaths,
+  linearIssue,
+  prRepositoryUrl,
+  mission,
+  acceptanceCriteria,
+  expectedEvidence,
+  requiredCapabilities,
+  preferredPlugins,
+  requiredPlugins,
+  humanGates,
+  title,
+  objective,
+  criteria,
+}) {
+  if (!TICKET_ID.test(ticketId ?? "")) throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
+  const { target, refs } = normalizeRepositoryRefs({
+    targetRepositoryUrl,
+    startingSha,
+    repositoryRefs,
+  });
+  const pr = prRepositoryUrl == null ? target : normalizeRepositoryUrl(prRepositoryUrl);
   if (!Array.isArray(allowedPaths) || allowedPaths.length < 1 || allowedPaths.length > 20) {
     throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
   }
   const paths = Object.freeze(allowedPaths.map(assertAllowedPath));
-  const body = {
-    allowed_paths: paths,
-    bounds: Object.freeze({
-      autoCreatePR: true,
-      max_runs: 1,
-      polling: false,
-      workOnCurrentBranch: false,
-    }),
-    format: CONTROLLER_CONTRACT_FORMAT,
-    repository_refs: refs,
-    target_repository_url: target,
-    ticket_id: ticketId,
-  };
-  if (linearIssue != null) {
-    body.linear_issue = requiredText(linearIssue, 32, "MY_WORK_MISSION_INCOMPLETE");
-  }
-  const contract_fingerprint = fingerprintOf(body);
-  return Object.freeze({
-    ...body,
-    contract_fingerprint,
+  const linearIssueId =
+    linearIssue == null ? undefined : requiredText(linearIssue, 32, "MY_WORK_MISSION_INCOMPLETE");
+  const missionText =
+    mission ??
+    (typeof title === "string" && typeof objective === "string" ? `${title}: ${objective}` : `Ticket ${ticketId}`);
+  const acceptance = acceptanceCriteria ?? (Array.isArray(criteria) && criteria.length > 0 ? criteria : [`Ticket ${ticketId} persisté`]);
+  const evidence = expectedEvidence ?? ["diff GitHub borné aux allowed_paths", "sortie des tests ciblés du lot"];
+  const unsigned = buildUnsignedControllerArguments({
+    ticketId,
+    targetRepositoryUrl: target,
+    prRepositoryUrl: pr,
+    repositoryRefs: refs,
+    allowedPaths: paths,
+    mission: missionText,
+    acceptanceCriteria: acceptance,
+    expectedEvidence: evidence,
+    requiredCapabilities,
+    preferredPlugins,
+    requiredPlugins,
+    humanGates,
+    linearIssueId,
   });
+  return Object.freeze(signControllerArguments(unsigned));
 }

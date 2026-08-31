@@ -12,6 +12,12 @@ import {
   requireSelectedProject,
   stableJson,
 } from "./canonical.mjs";
+import {
+  boundsMatch,
+  CONTROLLER_TOOL,
+  controllerToolCall,
+  refsMatch,
+} from "./mission-args.mjs";
 
 export const TOOL_NAMES = Object.freeze([
   "list_tickets",
@@ -54,7 +60,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
   {
     name: "prepare_cursor_mission",
     description:
-      "Create exactly one DUB ticket and return the canonical Cursor Controller envelope.",
+      "Create exactly one DUB ticket and return create_dubsar_work_cursor_agent arguments.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -80,7 +86,17 @@ export const TOOL_DEFINITIONS = Object.freeze([
         repository_refs: { type: "array" },
         allowed_paths: { type: "array", items: { type: "string" } },
         linear_issue: { type: "string" },
+        linear_issue_id: { type: "string" },
         work_id: { type: "string" },
+        pr_repository_url: { type: "string" },
+        mission: { type: "string" },
+        acceptance_criteria: { type: "array", items: { type: "string" } },
+        expected_evidence: { type: "array", items: { type: "string" } },
+        required_capabilities: { type: "array", items: { type: "string" } },
+        preferred_plugins: { type: "array", items: { type: "string" } },
+        required_plugins: { type: "array", items: { type: "string" } },
+        human_gates: { type: "array", items: { type: "string" } },
+        correction_budget: { type: "integer" },
       },
     },
   },
@@ -139,6 +155,17 @@ function expectedFingerprint(ticket, supplied) {
   return expected;
 }
 
+function preparedContractFrom(ticket) {
+  const activities = Array.isArray(ticket?.activity) ? ticket.activity : [];
+  for (let i = activities.length - 1; i >= 0; i -= 1) {
+    const row = activities[i];
+    if (row?.kind === "cursor_contract" && row.evidence && typeof row.evidence === "object") {
+      return row.evidence;
+    }
+  }
+  return null;
+}
+
 function publicTicket(ticket) {
   return {
     id: ticket.id,
@@ -149,6 +176,7 @@ function publicTicket(ticket) {
     project_id: ticket.project_id,
     references: ticket.references,
     cursor_launch: ticket.cursor_launch,
+    prepared_contract: preparedContractFrom(ticket),
     agent: ticket.agent,
     branch: ticket.branch,
     pr: ticket.pr,
@@ -169,7 +197,13 @@ export async function executeTool(name, args = {}) {
       const store = await readTickets({ start: env.start });
       const ticket = store.tickets.find((item) => item.id === args.ticket_id);
       if (!ticket) throw new MyWorkMcpError("MY_WORK_TICKET_NOT_FOUND");
-      return { format: "dubsar.my-work-ticket/1", ticket: publicTicket(ticket) };
+      const prepared = preparedContractFrom(ticket);
+      return {
+        format: "dubsar.my-work-ticket/1",
+        ticket: publicTicket(ticket),
+        prepared_contract: prepared,
+        attached_receipt: ticket.cursor_launch,
+      };
     }
     if (name === "prepare_cursor_mission") {
       if (
@@ -181,13 +215,28 @@ export async function executeTool(name, args = {}) {
       ) {
         throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
       }
+      if (args.correction_budget != null && args.correction_budget !== 3) {
+        throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
+      }
+      const linearIssue = args.linear_issue_id ?? args.linear_issue;
       buildControllerEnvelope({
         ticketId: "DUB-001",
         targetRepositoryUrl: args.target_repository_url,
         startingSha: args.starting_sha,
         repositoryRefs: args.repository_refs,
         allowedPaths: args.allowed_paths,
-        linearIssue: args.linear_issue,
+        linearIssue,
+        prRepositoryUrl: args.pr_repository_url,
+        mission: args.mission,
+        acceptanceCriteria: args.acceptance_criteria,
+        expectedEvidence: args.expected_evidence,
+        requiredCapabilities: args.required_capabilities,
+        preferredPlugins: args.preferred_plugins,
+        requiredPlugins: args.required_plugins,
+        humanGates: args.human_gates,
+        title: args.title,
+        objective: args.objective,
+        criteria: args.criteria,
       });
       const allocations = await readTicketAllocations({ allocationRoot: env.allocationRoot });
       const ticketId = `DUB-${String(allocations.next_number).padStart(3, "0")}`;
@@ -197,7 +246,18 @@ export async function executeTool(name, args = {}) {
         startingSha: args.starting_sha,
         repositoryRefs: args.repository_refs,
         allowedPaths: args.allowed_paths,
-        linearIssue: args.linear_issue,
+        linearIssue,
+        prRepositoryUrl: args.pr_repository_url,
+        mission: args.mission,
+        acceptanceCriteria: args.acceptance_criteria,
+        expectedEvidence: args.expected_evidence,
+        requiredCapabilities: args.required_capabilities,
+        preferredPlugins: args.preferred_plugins,
+        requiredPlugins: args.required_plugins,
+        humanGates: args.human_gates,
+        title: args.title,
+        objective: args.objective,
+        criteria: args.criteria,
       });
       const operation = {
         type: "create",
@@ -208,10 +268,18 @@ export async function executeTool(name, args = {}) {
         references: [envelope.contract_fingerprint, envelope.target_repository_url],
       };
       await mutate(env, operation);
+      await mutate(env, {
+        type: "activity",
+        id: ticketId,
+        kind: "cursor_contract",
+        summary: `${CONTROLLER_TOOL} arguments persisted`,
+        evidence: { ...envelope },
+      });
       return {
         format: "dubsar.my-work-cursor-mission/1",
         ticket_id: envelope.ticket_id,
         envelope,
+        ...controllerToolCall(envelope),
       };
     }
     if (name === "attach_cursor_receipt") {
@@ -220,9 +288,28 @@ export async function executeTool(name, args = {}) {
       if (!ticket) throw new MyWorkMcpError("MY_WORK_TICKET_NOT_FOUND");
       const receipt = args.receipt;
       if (!receipt || typeof receipt !== "object") throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
-      const expected = expectedFingerprint(ticket, args.expected_contract_fingerprint);
-      if (receipt.ticket_id !== ticket.id || receipt.contract_fingerprint !== expected) {
+      const contract = preparedContractFrom(ticket);
+      const expected = expectedFingerprint(
+        ticket,
+        args.expected_contract_fingerprint ?? contract?.contract_fingerprint,
+      );
+      if (receipt.ticket_id !== ticket.id) {
+        throw new MyWorkMcpError("MY_WORK_TICKET_MISMATCH");
+      }
+      if (receipt.contract_fingerprint !== expected) {
         throw new MyWorkMcpError("MY_WORK_FINGERPRINT_MISMATCH");
+      }
+      if (
+        contract &&
+        String(receipt.target_repository_url ?? "") !== String(contract.target_repository_url ?? "")
+      ) {
+        throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
+      }
+      if (contract && !refsMatch(receipt.repository_refs, contract.repository_refs)) {
+        throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
+      }
+      if (contract && !boundsMatch(receipt.bounds, contract.bounds)) {
+        throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
       }
       if (ticket.cursor_launch) {
         if (stableJson(ticket.cursor_launch) !== stableJson(receipt)) {

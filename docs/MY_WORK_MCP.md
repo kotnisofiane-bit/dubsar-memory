@@ -20,32 +20,84 @@ Framing is MCP JSON-RPC with `Content-Length` headers on stdin/stdout.
 | --- | --- |
 | `list_tickets` | no |
 | `get_ticket` | no |
-| `prepare_cursor_mission` | creates exactly one `DUB-###` |
+| `prepare_cursor_mission` | creates exactly one `DUB-###` and persists the Controller arguments |
 | `attach_cursor_receipt` | attaches a Controller receipt, or no-op when identical |
 | `sync_cursor_status` | applies existing Cursor/GitHub mapping |
 
 Every tool requires an explicit selected project: `start`, `allocation_root`,
 and `project_id`. Incomplete missions, invalid 40-hex SHAs, unsafe relative
-paths, contradictory repository URLs, or a missing project fail before a ticket
-write.
+paths, contradictory repository URLs, `correction_budget` other than `3`, or a
+missing project fail before a ticket write.
 
-`prepare_cursor_mission` returns `dubsar.cursor-controller-contract/1` with
-`repository_refs` as `{repository_url, starting_sha}`, Controller bounds
-(`max_runs: 1`, `polling: false`, `workOnCurrentBranch: false`,
-`autoCreatePR: true`), and `contract_fingerprint` equal to `sha256:` plus the
-SHA-256 of the canonical JSON body (fingerprint field excluded). Work then
-calls the existing stateless Cursor DUB Controller once. The local server does
-not launch the agent.
+## What Work sends to the Cursor MCP
 
-`attach_cursor_receipt` accepts the Controller names unchanged. It attaches
-only when `ticket_id` and `contract_fingerprint` match the prepared ticket, sets
-`In Progress`, and repeats of the same receipt are idempotent.
+After the DUB ticket exists, Work calls the existing stateless Cursor DUB
+Controller tool `create_dubsar_work_cursor_agent` **once**, using
+`prepare_cursor_mission.arguments` as the tool arguments object with **no
+reconstruction**. The local server does not launch the agent.
+
+Example (shape and field names; values come from the prepared ticket):
+
+```json
+{
+  "name": "create_dubsar_work_cursor_agent",
+  "arguments": {
+    "acceptance_criteria": ["…"],
+    "allowed_paths": ["packages/dubsar-my-work-mcp/**"],
+    "autoCreatePR": true,
+    "bounds": {
+      "autoCreatePR": true,
+      "max_runs": 1,
+      "polling": false,
+      "workOnCurrentBranch": false
+    },
+    "contract_fingerprint": "sha256:<64 lowercase hex>",
+    "correction_budget": 3,
+    "expected_evidence": ["…"],
+    "format": "dubsar.cursor-controller-contract/1",
+    "human_gates": [
+      "merge",
+      "local_install",
+      "deployment",
+      "publication",
+      "vm_cloud",
+      "secrets",
+      "backend_switch",
+      "scope_extension"
+    ],
+    "linear_issue_id": "KOT-126",
+    "mission": "…",
+    "preferred_plugins": [],
+    "pr_repository_url": "https://github.com/owner/repo",
+    "repository_refs": [
+      { "repository_url": "https://github.com/owner/repo", "starting_sha": "<40 hex>" }
+    ],
+    "required_capabilities": ["…"],
+    "required_plugins": [],
+    "target_repository_url": "https://github.com/owner/repo",
+    "ticket_id": "DUB-001",
+    "workOnCurrentBranch": false
+  }
+}
+```
+
+`contract_fingerprint` is `sha256:` plus the SHA-256 of the canonical JSON of
+that object with the fingerprint field omitted. A frozen inter-repo vector lives
+at `packages/dubsar-my-work-mcp/vectors/controller-canonical-v1.json` (Controller
+revision `9c5cd6536ebfa5c582a00a9d66cdff1560dd469c`).
+
+`get_ticket` returns `prepared_contract` (full arguments) and
+`attached_receipt`. Both survive MCP process restart because they are stored on
+the ticket (`cursor_contract` activity and `cursor_launch`).
+
+`attach_cursor_receipt` accepts Controller names unchanged. It attaches only
+when `ticket_id`, `target_repository_url`, `repository_refs` (URL + SHA),
+`bounds`, and `contract_fingerprint` match the prepared contract. Any divergence
+fails without writing. Repeats of the same receipt are idempotent.
 
 `sync_cursor_status` accepts Work-normalized `trusted_cursor_observer` and
 optional `trusted_github_observer` objects and persists state, PR, branch, head
 SHA, and merge SHA through the existing ticket engine.
-
-Closing the process and starting another one reads the same stores.
 
 ## Tests
 

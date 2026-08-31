@@ -7,21 +7,16 @@ import { fileURLToPath } from "node:url";
 import { parse } from "acorn";
 import { executeTool } from "../packages/dubsar-my-work-mcp/src/tools.mjs";
 import { handleMessage } from "../packages/dubsar-my-work-mcp/src/server.mjs";
-import { buildControllerEnvelope, fingerprintOf } from "../packages/dubsar-my-work-mcp/src/canonical.mjs";
+import { buildControllerEnvelope, fingerprintOf, stableJson } from "../packages/dubsar-my-work-mcp/src/canonical.mjs";
+import { CONTROLLER_TOOL, stripFingerprint } from "../packages/dubsar-my-work-mcp/src/mission-args.mjs";
 import { readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const mcpRoot = path.join(repositoryRoot, "packages", "dubsar-my-work-mcp");
 const sha = "a".repeat(40);
 const repo = "https://github.com/owner/repo";
-const fingerprintBody = {
-  allowed_paths: ["packages/dubsar-my-work-mcp/**"],
-  bounds: { autoCreatePR: true, max_runs: 1, polling: false, workOnCurrentBranch: false },
-  format: "dubsar.cursor-controller-contract/1",
-  repository_refs: [{ repository_url: repo, starting_sha: sha }],
-  target_repository_url: repo,
-  ticket_id: "DUB-001",
-};
+const FROZEN_CONTROLLER_FINGERPRINT =
+  "sha256:5d5f41f76154df9ff312e27ddfe9d7dd586a8cdabe23743ee7994a6d5c3d8737";
 
 async function env() {
   const start = await mkdtemp(path.join(tmpdir(), "dubsar-mcp-project-"));
@@ -79,19 +74,29 @@ test("list and get are read-only", async () => {
   assert.equal((await stat(target)).mtimeMs, before.mtimeMs);
 });
 
-test("complete mission creates one ticket and a controller envelope", async () => {
+test("complete mission creates one ticket and passable Controller arguments", async () => {
   const context = await env();
   const prepared = await executeTool("prepare_cursor_mission", { ...context, ...mission() });
   assert.equal(prepared.ticket_id, "DUB-001");
-  assert.equal(prepared.envelope.format, "dubsar.cursor-controller-contract/1");
-  assert.equal(prepared.envelope.bounds.polling, false);
-  assert.equal(prepared.envelope.bounds.workOnCurrentBranch, false);
-  assert.equal(prepared.envelope.bounds.autoCreatePR, true);
-  assert.equal(prepared.envelope.contract_fingerprint, fingerprintOf(fingerprintBody));
+  assert.equal(prepared.tool, CONTROLLER_TOOL);
+  assert.equal(prepared.arguments.correction_budget, 3);
+  assert.equal(prepared.arguments.pr_repository_url, repo);
+  assert.equal(prepared.arguments.format, "dubsar.cursor-controller-contract/1");
+  assert.equal(prepared.arguments.bounds.polling, false);
+  assert.equal(prepared.arguments.bounds.workOnCurrentBranch, false);
+  assert.equal(prepared.arguments.bounds.autoCreatePR, true);
+  assert.deepEqual(prepared.arguments, prepared.envelope);
+  assert.equal(
+    prepared.arguments.contract_fingerprint,
+    fingerprintOf(stripFingerprint(prepared.arguments)),
+  );
   const store = await readTickets({ start: context.start });
   assert.equal(store.tickets.length, 1);
   assert.equal(store.tickets[0].state, "Backlog");
-  assert.equal(store.tickets[0].references[0], prepared.envelope.contract_fingerprint);
+  assert.equal(store.tickets[0].references[0], prepared.arguments.contract_fingerprint);
+  const loaded = await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" });
+  assert.equal(loaded.prepared_contract.contract_fingerprint, prepared.arguments.contract_fingerprint);
+  assert.equal(loaded.prepared_contract.mission, prepared.arguments.mission);
 });
 
 test("incomplete mission, bad SHA, unsafe path, repo contradiction, and missing project fail before write", async () => {
@@ -102,6 +107,7 @@ test("incomplete mission, bad SHA, unsafe path, repo contradiction, and missing 
   await assert.rejects(executeTool("prepare_cursor_mission", { ...context, ...mission({ allowed_paths: ["../secret"] }) }), { code: "MY_WORK_PATH_UNSAFE" });
   await assert.rejects(executeTool("prepare_cursor_mission", { ...context, ...mission({ allowed_paths: ["/etc/passwd"] }) }), { code: "MY_WORK_PATH_UNSAFE" });
   await assert.rejects(executeTool("prepare_cursor_mission", { ...context, ...mission({ repository_refs: [{ repository_url: "https://github.com/other/repo", starting_sha: sha }] }) }), { code: "MY_WORK_REPOSITORY_CONTRADICTION" });
+  await assert.rejects(executeTool("prepare_cursor_mission", { ...context, ...mission({ correction_budget: 4 }) }), { code: "MY_WORK_MISSION_INCOMPLETE" });
   await assert.rejects(executeTool("prepare_cursor_mission", { ...mission() }), { code: "MY_WORK_PROJECT_REQUIRED" });
   await assert.equal(await readFile(target).then(() => "exists", () => "missing"), "missing");
   assert.equal((await readTickets({ start: context.start })).tickets.length, 0);
@@ -196,14 +202,123 @@ test("MCP initialize and tools/list expose the closed surface", async () => {
   ]);
 });
 
-test("canonical envelope fingerprint excludes the fingerprint field", () => {
+test("frozen Controller vector fingerprint is a literal, not a locally recomputed oracle", async () => {
+  const vectorPath = path.join(mcpRoot, "vectors", "controller-canonical-v1.json");
+  const vector = JSON.parse(await readFile(vectorPath, "utf8"));
+  assert.equal(vector.expected_contract_fingerprint, FROZEN_CONTROLLER_FINGERPRINT);
+  assert.equal(vector.controller_tool, CONTROLLER_TOOL);
+  assert.equal(vector.controller_revision, "9c5cd6536ebfa5c582a00a9d66cdff1560dd469c");
   const envelope = buildControllerEnvelope({
-    ticketId: "DUB-001",
-    targetRepositoryUrl: repo,
-    startingSha: sha,
-    allowedPaths: ["packages/dubsar-my-work-mcp/**"],
+    ticketId: vector.unsigned_arguments.ticket_id,
+    targetRepositoryUrl: vector.unsigned_arguments.target_repository_url,
+    startingSha: vector.unsigned_arguments.repository_refs[0].starting_sha,
+    allowedPaths: vector.unsigned_arguments.allowed_paths,
+    linearIssue: vector.unsigned_arguments.linear_issue_id,
+    mission: vector.unsigned_arguments.mission,
+    acceptanceCriteria: vector.unsigned_arguments.acceptance_criteria,
+    expectedEvidence: vector.unsigned_arguments.expected_evidence,
+    requiredCapabilities: vector.unsigned_arguments.required_capabilities,
+    preferredPlugins: vector.unsigned_arguments.preferred_plugins,
+    requiredPlugins: vector.unsigned_arguments.required_plugins,
+    humanGates: vector.unsigned_arguments.human_gates,
   });
-  assert.equal(envelope.contract_fingerprint, fingerprintOf(fingerprintBody));
+  assert.equal(envelope.contract_fingerprint, FROZEN_CONTROLLER_FINGERPRINT);
+  assert.equal(stableJson(stripFingerprint(envelope)), stableJson(vector.unsigned_arguments));
+  const shortLegacyBody = {
+    allowed_paths: vector.unsigned_arguments.allowed_paths,
+    bounds: vector.unsigned_arguments.bounds,
+    format: vector.unsigned_arguments.format,
+    repository_refs: vector.unsigned_arguments.repository_refs,
+    target_repository_url: vector.unsigned_arguments.target_repository_url,
+    ticket_id: vector.unsigned_arguments.ticket_id,
+  };
+  assert.notEqual(fingerprintOf(shortLegacyBody), FROZEN_CONTROLLER_FINGERPRINT);
+});
+
+test("frozen realistic Controller receipt attaches; divergences do not mutate", async () => {
+  const vector = JSON.parse(
+    await readFile(path.join(mcpRoot, "vectors", "controller-canonical-v1.json"), "utf8"),
+  );
+  const context = await env();
+  const prepared = await executeTool("prepare_cursor_mission", {
+    ...context,
+    title: "KOT-126",
+    objective: "MCP local My Work",
+    criteria: ["Ticket persisté"],
+    target_repository_url: vector.unsigned_arguments.target_repository_url,
+    starting_sha: vector.unsigned_arguments.repository_refs[0].starting_sha,
+    allowed_paths: vector.unsigned_arguments.allowed_paths,
+    linear_issue_id: vector.unsigned_arguments.linear_issue_id,
+    mission: vector.unsigned_arguments.mission,
+    acceptance_criteria: vector.unsigned_arguments.acceptance_criteria,
+    expected_evidence: vector.unsigned_arguments.expected_evidence,
+    required_capabilities: vector.unsigned_arguments.required_capabilities,
+    preferred_plugins: vector.unsigned_arguments.preferred_plugins,
+    required_plugins: vector.unsigned_arguments.required_plugins,
+    human_gates: vector.unsigned_arguments.human_gates,
+    correction_budget: 3,
+  });
+  assert.equal(prepared.arguments.contract_fingerprint, FROZEN_CONTROLLER_FINGERPRINT);
+  const ticketsFile = path.join(context.start, ".dubsar", "tickets.json");
+  const first = await executeTool("attach_cursor_receipt", {
+    ...context,
+    ticket_id: "DUB-001",
+    receipt: vector.realistic_receipt,
+  });
+  assert.equal(first.state, "In Progress");
+  const before = await stat(ticketsFile);
+  await assert.rejects(
+    executeTool("attach_cursor_receipt", {
+      ...context,
+      ticket_id: "DUB-001",
+      receipt: { ...vector.realistic_receipt, ticket_id: "DUB-002" },
+    }),
+    { code: "MY_WORK_TICKET_MISMATCH" },
+  );
+  await assert.rejects(
+    executeTool("attach_cursor_receipt", {
+      ...context,
+      ticket_id: "DUB-001",
+      receipt: {
+        ...vector.realistic_receipt,
+        target_repository_url: "https://github.com/other/repo",
+      },
+    }),
+    { code: "MY_WORK_RECEIPT_MISMATCH" },
+  );
+  await assert.rejects(
+    executeTool("attach_cursor_receipt", {
+      ...context,
+      ticket_id: "DUB-001",
+      receipt: {
+        ...vector.realistic_receipt,
+        repository_refs: [
+          {
+            repository_url: vector.unsigned_arguments.target_repository_url,
+            starting_sha: "b".repeat(40),
+          },
+        ],
+      },
+    }),
+    { code: "MY_WORK_RECEIPT_MISMATCH" },
+  );
+  await assert.rejects(
+    executeTool("attach_cursor_receipt", {
+      ...context,
+      ticket_id: "DUB-001",
+      receipt: { ...vector.realistic_receipt, bounds: { ...vector.realistic_receipt.bounds, max_runs: 9 } },
+    }),
+    { code: "MY_WORK_RECEIPT_MISMATCH" },
+  );
+  await assert.rejects(
+    executeTool("attach_cursor_receipt", {
+      ...context,
+      ticket_id: "DUB-001",
+      receipt: { ...vector.realistic_receipt, contract_fingerprint: `sha256:${"c".repeat(64)}` },
+    }),
+    { code: "MY_WORK_FINGERPRINT_MISMATCH" },
+  );
+  assert.equal((await stat(ticketsFile)).mtimeMs, before.mtimeMs);
 });
 
 test("local MCP sources have no network client and no secret tokens", async () => {
