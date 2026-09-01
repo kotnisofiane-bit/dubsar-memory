@@ -10,6 +10,13 @@ import { encodeFrame, createFrameParser } from "../packages/dubsar-my-work-mcp/s
 import { readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
 import { CONTROLLER_ARGUMENT_KEYS, CONTROLLER_TOOL } from "../packages/dubsar-my-work-mcp/src/mission-args.mjs";
 import { CREDENTIALS_FORMAT } from "../packages/dubsar-my-work-mcp/src/oauth-store.mjs";
+import {
+  controllerToolsCallBody,
+  legacyControllerLaunchHeaders,
+  streamableMcpLaunchHeaders,
+} from "../packages/dubsar-my-work-mcp/src/controller-client.mjs";
+import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
+import { z } from "zod";
 
 const bin = fileURLToPath(new URL("../packages/dubsar-my-work-mcp/bin/dubsar-my-work-mcp.mjs", import.meta.url));
 const vectorPath = fileURLToPath(
@@ -332,5 +339,138 @@ test("E2E ambiguous launch is not retried and stores no receipt", async () => {
     assert.notEqual(persisted.state, "In Progress");
   } finally {
     mock.server.close();
+  }
+});
+
+async function servePinnedController({ receipt, onCall }) {
+  const handler = createMcpHandler(() => {
+    const server = new McpServer({ name: "dubsar-controller-pin", version: "2.0.0" });
+    server.registerTool(
+      CONTROLLER_TOOL,
+      {
+        description: "Pinned createMcpHandler Controller launch",
+        inputSchema: z.object({ ticket_id: z.string() }).passthrough(),
+      },
+      async (args) => {
+        onCall?.(args);
+        return {
+          content: [{ type: "text", text: JSON.stringify(receipt) }],
+          structuredContent: receipt,
+        };
+      },
+    );
+    return server;
+  });
+  const httpServer = createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(req.headers)) {
+      if (typeof value === "string") headers.set(key, value);
+      else if (Array.isArray(value)) headers.set(key, value.join(", "));
+    }
+    const request = new Request(`http://127.0.0.1${req.url}`, {
+      method: req.method,
+      headers,
+      body: req.method === "GET" || req.method === "HEAD" ? undefined : Buffer.concat(chunks),
+    });
+    const response = await handler.fetch(request);
+    const body = Buffer.from(await response.arrayBuffer());
+    const out = {};
+    response.headers.forEach((value, key) => {
+      out[key] = value;
+    });
+    res.writeHead(response.status, out);
+    res.end(body);
+  });
+  await new Promise((resolve) => httpServer.listen(0, "127.0.0.1", resolve));
+  const { port } = httpServer.address();
+  return { server: httpServer, url: `http://127.0.0.1:${port}/mcp` };
+}
+
+test("pinned createMcpHandler transport: legacy request is 406, launch decodes SSE receipt once", async () => {
+  const start = await mkdtemp(path.join(tmpdir(), "dubsar-mcp-e2e-pin-"));
+  const allocationRoot = await mkdtemp(path.join(tmpdir(), "dubsar-mcp-e2e-pin-global-"));
+  const configDir = await mkdtemp(path.join(tmpdir(), "dubsar-mcp-e2e-pin-oauth-"));
+  await mkdir(path.join(start, ".dubsar"));
+  const context = { start, allocation_root: allocationRoot, project_id: "project-e2e-pin" };
+  const vector = JSON.parse(await readFile(vectorPath, "utf8"));
+  const calls = [];
+  const pinned = await servePinnedController({
+    receipt: vector.realistic_receipt,
+    onCall(args) {
+      calls.push(args);
+    },
+  });
+  await writeLocalCredentials(configDir, pinned.url);
+  const env = { DUBSAR_MY_WORK_CONFIG_DIR: configDir };
+  try {
+    const legacy = await fetch(pinned.url, {
+      method: "POST",
+      headers: legacyControllerLaunchHeaders("e2e-access-token"),
+      body: JSON.stringify(controllerToolsCallBody({ ticket_id: "DUB-001" })),
+    });
+    assert.equal(legacy.status, 406);
+    assert.equal(calls.length, 0);
+    const compatible = await fetch(pinned.url, {
+      method: "POST",
+      headers: streamableMcpLaunchHeaders("e2e-access-token"),
+      body: JSON.stringify(controllerToolsCallBody({ ticket_id: "DUB-001" })),
+    });
+    assert.equal(compatible.status, 200);
+    assert.match(String(compatible.headers.get("content-type") ?? ""), /text\/event-stream/u);
+    assert.equal(calls.length, 1);
+    calls.length = 0;
+
+    const first = startServer(env);
+    try {
+      await first.call("initialize", {
+        protocolVersion: "2024-11-05",
+        capabilities: {},
+        clientInfo: { name: "test" },
+      });
+      const launched = await first.call("tools/call", {
+        name: "launch_cursor_mission",
+        arguments: frozenMission(context, vector),
+      });
+      const body = launched.result.structuredContent;
+      assert.equal(body.ticket_id, "DUB-001");
+      assert.equal(body.agent_id, vector.realistic_receipt.agent_id);
+      assert.equal(body.run_id, vector.realistic_receipt.run_id);
+      assert.equal(body.state, "In Progress");
+      assert.equal(calls.length, 1);
+      assert.equal("contract_fingerprint" in calls[0], false);
+      assert.equal("receipt_bounds" in calls[0], false);
+      assert.deepEqual(Object.keys(calls[0]).sort(), [...CONTROLLER_ARGUMENT_KEYS].sort());
+    } finally {
+      await stopServer(first.child);
+    }
+
+    const second = startServer(env);
+    try {
+      await second.call("initialize", {
+        protocolVersion: "2024-11-05",
+        capabilities: {},
+        clientInfo: { name: "test" },
+      });
+      const reread = await second.call("tools/call", {
+        name: "get_ticket",
+        arguments: { ...context, ticket_id: "DUB-001" },
+      });
+      const body = reread.result.structuredContent;
+      assert.equal(body.ticket.state, "In Progress");
+      assert.equal(body.attached_receipt.agent_id, vector.realistic_receipt.agent_id);
+      assert.equal(body.attached_receipt.run_id, vector.realistic_receipt.run_id);
+      const relaunch = await second.call("tools/call", {
+        name: "launch_cursor_mission",
+        arguments: frozenMission(context, vector),
+      });
+      assert.equal(relaunch.result.structuredContent.launched, false);
+      assert.equal(calls.length, 1);
+    } finally {
+      await stopServer(second.child);
+    }
+  } finally {
+    pinned.server.close();
   }
 });

@@ -2,6 +2,8 @@ import { CONTROLLER_TOOL } from "./mission-args.mjs";
 import { MyWorkMcpError } from "./canonical.mjs";
 import { readCredentials } from "./oauth-store.mjs";
 
+export const MCP_STREAMABLE_ACCEPT = "application/json, text/event-stream";
+
 let testTransport = null;
 
 export function setTestControllerTransport(transport) {
@@ -10,6 +12,52 @@ export function setTestControllerTransport(transport) {
 
 export function resetTestControllerTransport() {
   testTransport = null;
+}
+
+export function legacyControllerLaunchHeaders(accessToken) {
+  return {
+    "content-type": "application/json",
+    authorization: `Bearer ${accessToken}`,
+  };
+}
+
+export function streamableMcpLaunchHeaders(accessToken) {
+  return {
+    "content-type": "application/json",
+    accept: MCP_STREAMABLE_ACCEPT,
+    authorization: `Bearer ${accessToken}`,
+  };
+}
+
+export function controllerToolsCallBody(args) {
+  return {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: {
+      name: CONTROLLER_TOOL,
+      arguments: args,
+    },
+  };
+}
+
+export function parseSseJsonRpc(text) {
+  if (typeof text !== "string" || text.length < 1) return null;
+  const blocks = text.split(/\r?\n\r?\n/u);
+  let last = null;
+  for (const block of blocks) {
+    const dataLines = [];
+    for (const line of block.split(/\r?\n/u)) {
+      if (line.startsWith("data:")) dataLines.push(line.slice(5).replace(/^\s/u, ""));
+    }
+    if (dataLines.length < 1) continue;
+    try {
+      last = JSON.parse(dataLines.join("\n"));
+    } catch {
+      last = null;
+    }
+  }
+  return last;
 }
 
 function receiptFromToolResult(payload) {
@@ -32,6 +80,24 @@ function receiptFromToolResult(payload) {
     return { ambiguous: false, receipt: result };
   }
   return { ambiguous: true, receipt: null };
+}
+
+export async function readMcpJsonRpc(response) {
+  if (!response || typeof response.text !== "function") {
+    throw new MyWorkMcpError("MY_WORK_LAUNCH_AMBIGUOUS");
+  }
+  const text = await response.text();
+  const type = String(response.headers?.get?.("content-type") ?? "");
+  if (type.includes("text/event-stream")) {
+    const payload = parseSseJsonRpc(text);
+    if (!payload) throw new MyWorkMcpError("MY_WORK_LAUNCH_AMBIGUOUS");
+    return payload;
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new MyWorkMcpError("MY_WORK_LAUNCH_AMBIGUOUS");
+  }
 }
 
 export function assertControllerArgumentsOnly(args) {
@@ -62,28 +128,17 @@ export async function callCreateDubsarWorkCursorAgent(args, { fetchImpl = fetch 
   try {
     response = await fetchImpl(credentials.controller_url, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${credentials.access_token}`,
-      },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "tools/call",
-        params: {
-          name: CONTROLLER_TOOL,
-          arguments: forwarded,
-        },
-      }),
+      headers: streamableMcpLaunchHeaders(credentials.access_token),
+      body: JSON.stringify(controllerToolsCallBody(forwarded)),
     });
   } catch {
     throw new MyWorkMcpError("MY_WORK_LAUNCH_AMBIGUOUS");
   }
   let payload;
   try {
-    payload = await response.json();
-  } catch {
-    throw new MyWorkMcpError("MY_WORK_LAUNCH_AMBIGUOUS");
+    payload = await readMcpJsonRpc(response);
+  } catch (error) {
+    throw error instanceof MyWorkMcpError ? error : new MyWorkMcpError("MY_WORK_LAUNCH_AMBIGUOUS");
   }
   const parsed = receiptFromToolResult(payload);
   if (parsed.ambiguous || !parsed.receipt) throw new MyWorkMcpError("MY_WORK_LAUNCH_AMBIGUOUS");

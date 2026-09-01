@@ -57,11 +57,18 @@ and `project_id`. Incomplete missions, invalid 40-hex SHAs, unsafe relative
 paths, contradictory repository URLs, `correction_budget` other than `3`, or a
 missing project fail before a ticket write.
 
-`launch_cursor_mission` fails with `MY_WORK_CONTROLLER_NOT_CONNECTED` before a
-launch request when no local credentials exist. After a request is submitted,
-an ambiguous or mismatched Controller response is `MY_WORK_LAUNCH_AMBIGUOUS`
-(or the attach mismatch code), records a bounded failure, fabricates no receipt,
-and later calls return `MY_WORK_LAUNCH_NOT_RETRYABLE` without a second request.
+`launch_cursor_mission` talks to the remote Controller over Streamable HTTP:
+`Accept: application/json, text/event-stream`. The delivered Controller
+(`createMcpHandler` from `@modelcontextprotocol/server` 2.0.0) rejects the
+previous JSON-only request with HTTP 406 and answers a compatible request with
+`text/event-stream`. The local client decodes that SSE JSON-RPC result. It
+still issues exactly one `tools/call`.
+
+It fails with `MY_WORK_CONTROLLER_NOT_CONNECTED` before a launch request when
+no local credentials exist. After a request is submitted, an ambiguous or
+mismatched Controller response is `MY_WORK_LAUNCH_AMBIGUOUS` (or the attach
+mismatch code), records a bounded failure, fabricates no receipt, and later
+calls return `MY_WORK_LAUNCH_NOT_RETRYABLE` without a second request.
 
 ## What is forwarded to the Controller
 
