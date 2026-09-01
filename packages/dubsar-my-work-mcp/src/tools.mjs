@@ -18,11 +18,14 @@ import {
   controllerToolCall,
   refsMatch,
 } from "./mission-args.mjs";
+import { callCreateDubsarWorkCursorAgent, controllerLaunchConfigured } from "./controller-client.mjs";
+import { readCredentials } from "./oauth-store.mjs";
 
 export const TOOL_NAMES = Object.freeze([
   "list_tickets",
   "get_ticket",
   "prepare_cursor_mission",
+  "launch_cursor_mission",
   "attach_cursor_receipt",
   "sync_cursor_status",
 ]);
@@ -61,6 +64,49 @@ export const TOOL_DEFINITIONS = Object.freeze([
     name: "prepare_cursor_mission",
     description:
       "Create exactly one DUB ticket and return create_dubsar_work_cursor_agent arguments.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "start",
+        "allocation_root",
+        "project_id",
+        "title",
+        "objective",
+        "criteria",
+        "target_repository_url",
+        "allowed_paths",
+      ],
+      properties: {
+        start: { type: "string" },
+        allocation_root: { type: "string" },
+        project_id: { type: "string" },
+        title: { type: "string" },
+        objective: { type: "string" },
+        criteria: { type: "array", items: { type: "string" } },
+        target_repository_url: { type: "string" },
+        starting_sha: { type: "string" },
+        repository_refs: { type: "array" },
+        allowed_paths: { type: "array", items: { type: "string" } },
+        linear_issue: { type: "string" },
+        linear_issue_id: { type: "string" },
+        work_id: { type: "string" },
+        pr_repository_url: { type: "string" },
+        mission: { type: "string" },
+        acceptance_criteria: { type: "array", items: { type: "string" } },
+        expected_evidence: { type: "array", items: { type: "string" } },
+        required_capabilities: { type: "array", items: { type: "string" } },
+        preferred_plugins: { type: "array", items: { type: "string" } },
+        required_plugins: { type: "array", items: { type: "string" } },
+        human_gates: { type: "array", items: { type: "string" } },
+        correction_budget: { type: "integer" },
+      },
+    },
+  },
+  {
+    name: "launch_cursor_mission",
+    description:
+      "Create exactly one DUB ticket and issue exactly one Controller create_dubsar_work_cursor_agent call.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -162,6 +208,13 @@ function expectedFingerprint(ticket, supplied, contract) {
     throw new MyWorkMcpError("MY_WORK_FINGERPRINT_MISMATCH");
   }
   return fromTicket;
+}
+
+function launchSubmissionRecorded(ticket) {
+  const activities = Array.isArray(ticket?.activity) ? ticket.activity : [];
+  return activities.some(
+    (row) => row?.kind === "launch_submitted" || row?.kind === "cursor_launch_failed",
+  );
 }
 
 function preparedContractFrom(ticket) {
@@ -319,6 +372,88 @@ export async function executeTool(name, args = {}) {
         ...controllerToolCall(envelope.arguments),
       };
     }
+    if (name === "launch_cursor_mission") {
+      const prepared = await executeTool("prepare_cursor_mission", args);
+      const store = await readTickets({ start: env.start });
+      const ticket = store.tickets.find((item) => item.id === prepared.ticket_id);
+      if (!ticket) throw new MyWorkMcpError("MY_WORK_TICKET_NOT_FOUND");
+      if (ticket.cursor_launch) {
+        return {
+          format: "dubsar.my-work-cursor-launch/1",
+          ticket_id: ticket.id,
+          state: ticket.state,
+          agent_id: ticket.cursor_launch.agent_id,
+          run_id: ticket.cursor_launch.run_id,
+          source_url: ticket.cursor_launch.source_url,
+          launched: false,
+        };
+      }
+      if (launchSubmissionRecorded(ticket)) {
+        throw new MyWorkMcpError("MY_WORK_LAUNCH_NOT_RETRYABLE");
+      }
+      if (controllerLaunchConfigured() !== true) {
+        const credentials = await readCredentials();
+        if (!credentials?.access_token || typeof credentials.controller_url !== "string") {
+          throw new MyWorkMcpError("MY_WORK_CONTROLLER_NOT_CONNECTED");
+        }
+      }
+      await mutate(env, {
+        type: "activity",
+        id: ticket.id,
+        kind: "launch_submitted",
+        summary: `single ${CONTROLLER_TOOL} request`,
+        evidence: { tool: CONTROLLER_TOOL, ticket_id: ticket.id },
+      });
+      let receipt;
+      try {
+        receipt = await callCreateDubsarWorkCursorAgent(prepared.arguments);
+        if (
+          !receipt ||
+          typeof receipt !== "object" ||
+          receipt.receipt_version !== "dubsar.cursor-launch-receipt/1" ||
+          typeof receipt.agent_id !== "string" ||
+          typeof receipt.run_id !== "string" ||
+          typeof receipt.ticket_id !== "string" ||
+          typeof receipt.contract_fingerprint !== "string" ||
+          !receipt.bounds
+        ) {
+          throw new MyWorkMcpError("MY_WORK_LAUNCH_AMBIGUOUS");
+        }
+      } catch (error) {
+        await mutate(env, {
+          type: "fail-cursor-launch",
+          id: ticket.id,
+          code: error instanceof MyWorkMcpError ? error.code : "MY_WORK_LAUNCH_AMBIGUOUS",
+          summary: "Controller launch failed or was ambiguous; no retry",
+        });
+        throw error instanceof MyWorkMcpError ? error : new MyWorkMcpError("MY_WORK_LAUNCH_AMBIGUOUS");
+      }
+      try {
+        const attached = await executeTool("attach_cursor_receipt", {
+          ...args,
+          ticket_id: ticket.id,
+          receipt,
+          expected_contract_fingerprint: prepared.contract_fingerprint,
+        });
+        return {
+          format: "dubsar.my-work-cursor-launch/1",
+          ticket_id: attached.ticket_id,
+          state: attached.state,
+          agent_id: attached.cursor_launch.agent_id,
+          run_id: attached.cursor_launch.run_id,
+          source_url: attached.cursor_launch.source_url,
+          launched: true,
+        };
+      } catch (error) {
+        await mutate(env, {
+          type: "fail-cursor-launch",
+          id: ticket.id,
+          code: error instanceof MyWorkMcpError || error instanceof TicketError ? error.code : "MY_WORK_LAUNCH_AMBIGUOUS",
+          summary: "Controller receipt did not match local ticket bounds; no fabricated receipt",
+        });
+        throw error instanceof MyWorkMcpError ? error : new MyWorkMcpError("MY_WORK_LAUNCH_AMBIGUOUS");
+      }
+    }
     if (name === "attach_cursor_receipt") {
       const store = await readTickets({ start: env.start });
       const ticket = store.tickets.find((item) => item.id === args.ticket_id);
@@ -368,6 +503,7 @@ export async function executeTool(name, args = {}) {
         cursor_launch: updated.cursor_launch,
       };
     }
+    if (name !== "sync_cursor_status") throw new MyWorkMcpError("MY_WORK_TOOL_UNKNOWN");
     const store = await readTickets({ start: env.start });
     const ticket = store.tickets.find((item) => item.id === args.ticket_id);
     if (!ticket) throw new MyWorkMcpError("MY_WORK_TICKET_NOT_FOUND");
