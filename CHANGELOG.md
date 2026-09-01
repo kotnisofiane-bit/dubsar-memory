@@ -7,6 +7,7 @@
 - Complete the default shortcut path with serialized allocation, public ticket CLI exports, catalog-wide My Work aggregation, guided forms, post-apply refresh, and restart persistence coverage.
 - Recover abandoned allocation locks through a validated bounded lease and an atomic single-recoverer claim while preserving fail-closed handling for unsafe locks.
 - Recover an expired `ticket-allocations.recovery.lock` the same way as an abandoned primary lock so a crash during recovery cannot permanently block ticket writes.
+- Bind `prepare_cursor_mission` Controller arguments to the ticket id allocated inside the lock, and retry stale creates, so a concurrent allocation cannot attach a contract to the wrong ticket.
 
 All notable source changes are documented here. Package publication remains a
 separate, explicitly reviewed decision.

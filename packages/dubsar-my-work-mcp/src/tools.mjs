@@ -148,6 +148,69 @@ async function mutate(env, operation) {
   return applyTicketChange({ ...env, operation, expectedChange: preview.change_sha256 });
 }
 
+const PREPARE_CREATE_ATTEMPTS = 8;
+
+function isRetryableTicketWrite(error) {
+  return (
+    error instanceof TicketError &&
+    (error.code === "TICKET_CHANGE_STALE" || error.code === "TICKET_ALLOCATION_BUSY")
+  );
+}
+
+async function persistPreparedMission(env, envelopeInput, createFields) {
+  let lastError = null;
+  for (let attempt = 0; attempt < PREPARE_CREATE_ATTEMPTS; attempt += 1) {
+    const allocations = await readTicketAllocations({ allocationRoot: env.allocationRoot });
+    const ticketId = `DUB-${String(allocations.next_number).padStart(3, "0")}`;
+    const envelope = buildControllerEnvelope({ ticketId, ...envelopeInput });
+    const operation = {
+      type: "create",
+      title: createFields.title,
+      objective: createFields.objective,
+      criteria: createFields.criteria,
+      work_id: createFields.work_id ?? null,
+      references: [envelope.contract_fingerprint, envelope.arguments.target_repository_url],
+    };
+    const preview = await previewTicketChange({ ...env, operation });
+    const created = preview.after.tickets.find((ticket) => ticket.id === ticketId);
+    if (!created || !(created.references ?? []).includes(envelope.contract_fingerprint)) {
+      lastError = new TicketError("TICKET_CHANGE_STALE");
+      continue;
+    }
+    try {
+      await applyTicketChange({
+        ...env,
+        operation,
+        expectedChange: preview.change_sha256,
+      });
+    } catch (error) {
+      if (isRetryableTicketWrite(error)) {
+        lastError = error;
+        continue;
+      }
+      throw error;
+    }
+    for (let activityAttempt = 0; activityAttempt < PREPARE_CREATE_ATTEMPTS; activityAttempt += 1) {
+      try {
+        await mutate(env, {
+          type: "activity",
+          id: ticketId,
+          kind: "cursor_contract",
+          summary: `${CONTROLLER_TOOL} arguments persisted`,
+          evidence: { ...envelope },
+        });
+        return envelope;
+      } catch (error) {
+        if (isRetryableTicketWrite(error) && activityAttempt < PREPARE_CREATE_ATTEMPTS - 1) {
+          continue;
+        }
+        throw error;
+      }
+    }
+  }
+  throw lastError ?? new MyWorkMcpError("MY_WORK_OPERATION_FAILED");
+}
+
 function expectedFingerprint(ticket, supplied, contract) {
   const fromTicket = (ticket.references ?? []).find((item) => CONTRACT_FINGERPRINT.test(item));
   const fromContract = contract?.contract_fingerprint;
@@ -273,42 +336,11 @@ export async function executeTool(name, args = {}) {
           ...controllerToolCall(contract.arguments),
         };
       }
-      const allocations = await readTicketAllocations({ allocationRoot: env.allocationRoot });
-      const ticketId = `DUB-${String(allocations.next_number).padStart(3, "0")}`;
-      const envelope = buildControllerEnvelope({
-        ticketId,
-        targetRepositoryUrl: args.target_repository_url,
-        startingSha: args.starting_sha,
-        repositoryRefs: args.repository_refs,
-        allowedPaths: args.allowed_paths,
-        linearIssue,
-        prRepositoryUrl: args.pr_repository_url,
-        mission: args.mission,
-        acceptanceCriteria: args.acceptance_criteria,
-        expectedEvidence: args.expected_evidence,
-        requiredCapabilities: args.required_capabilities,
-        preferredPlugins: args.preferred_plugins,
-        requiredPlugins: args.required_plugins,
-        humanGates: args.human_gates,
-        title: args.title,
-        objective: args.objective,
-        criteria: args.criteria,
-      });
-      const operation = {
-        type: "create",
+      const envelope = await persistPreparedMission(env, envelopeInput, {
         title: args.title,
         objective: args.objective,
         criteria: args.criteria,
         work_id: args.work_id ?? null,
-        references: [envelope.contract_fingerprint, envelope.arguments.target_repository_url],
-      };
-      await mutate(env, operation);
-      await mutate(env, {
-        type: "activity",
-        id: ticketId,
-        kind: "cursor_contract",
-        summary: `${CONTROLLER_TOOL} arguments persisted`,
-        evidence: { ...envelope },
       });
       return {
         format: "dubsar.my-work-cursor-mission/1",

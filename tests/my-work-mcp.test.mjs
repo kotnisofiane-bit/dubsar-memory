@@ -9,7 +9,7 @@ import { executeTool } from "../packages/dubsar-my-work-mcp/src/tools.mjs";
 import { handleMessage, encodeFrame, createFrameParser } from "../packages/dubsar-my-work-mcp/src/server.mjs";
 import { buildControllerEnvelope } from "../packages/dubsar-my-work-mcp/src/canonical.mjs";
 import { CONTROLLER_ARGUMENT_KEYS, CONTROLLER_TOOL, controllerContractFingerprint } from "../packages/dubsar-my-work-mcp/src/mission-args.mjs";
-import { readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
+import { applyTicketChange, previewTicketChange, readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const mcpRoot = path.join(repositoryRoot, "packages", "dubsar-my-work-mcp");
@@ -217,6 +217,65 @@ test("stdio framing is newline-delimited JSON-RPC", async () => {
   const frame = encodeFrame({ jsonrpc: "2.0", id: 2, result: {} });
   assert.equal(frame.includes(0x0a), true);
   assert.equal(frame.toString("utf8").startsWith("Content-Length"), false);
+});
+
+function assertPreparedBinding(prepared, ticket) {
+  assert.equal(prepared.ticket_id, ticket.id);
+  assert.equal(prepared.arguments.ticket_id, ticket.id);
+  assert.equal(ticket.references[0], prepared.contract_fingerprint);
+  const contracts = ticket.activity.filter((item) => item.kind === "cursor_contract");
+  assert.equal(contracts.length, 1);
+  assert.equal(contracts[0].evidence.arguments.ticket_id, ticket.id);
+  assert.equal(contracts[0].evidence.contract_fingerprint, prepared.contract_fingerprint);
+}
+
+test("prepare binds the allocated ticket after a prior create advances the counter", async () => {
+  const context = await env();
+  const input = {
+    start: context.start,
+    allocationRoot: context.allocation_root,
+    projectId: context.project_id,
+    operation: {
+      type: "create",
+      title: "Existant",
+      objective: "Réserver DUB-001",
+      criteria: ["Alloué"],
+    },
+  };
+  const preview = await previewTicketChange(input);
+  await applyTicketChange({ ...input, expectedChange: preview.change_sha256 });
+  const prepared = await executeTool("prepare_cursor_mission", { ...context, ...mission({ title: "Mission suivante" }) });
+  assert.equal(prepared.ticket_id, "DUB-002");
+  const store = await readTickets({ start: context.start });
+  assert.equal(store.tickets.length, 2);
+  assertPreparedBinding(prepared, store.tickets.find((ticket) => ticket.id === "DUB-002"));
+  const first = store.tickets.find((ticket) => ticket.id === "DUB-001");
+  assert.equal(first.activity.some((item) => item.kind === "cursor_contract"), false);
+});
+
+test("concurrent prepares keep each contract on the ticket they allocated", async () => {
+  const context = await env();
+  const settled = await Promise.allSettled([
+    executeTool("prepare_cursor_mission", { ...context, ...mission({ title: "Mission A", objective: "Livrer A" }) }),
+    executeTool("prepare_cursor_mission", { ...context, ...mission({ title: "Mission B", objective: "Livrer B" }) }),
+  ]);
+  const prepared = settled.filter((result) => result.status === "fulfilled").map((result) => result.value);
+  assert.equal(prepared.length >= 1, true);
+  const store = await readTickets({ start: context.start });
+  const boundIds = new Set();
+  for (const item of prepared) {
+    const ticket = store.tickets.find((row) => row.id === item.ticket_id);
+    assert.equal(Boolean(ticket), true);
+    assertPreparedBinding(item, ticket);
+    boundIds.add(ticket.id);
+  }
+  for (const ticket of store.tickets) {
+    const contracts = ticket.activity.filter((item) => item.kind === "cursor_contract");
+    for (const contract of contracts) {
+      assert.equal(contract.evidence.arguments.ticket_id, ticket.id);
+    }
+  }
+  assert.equal(boundIds.size, prepared.length);
 });
 
 test("prepare is idempotent for the same persisted fingerprint", async () => {
