@@ -102,6 +102,7 @@ export const TICKET_CHANGE_FORMAT = "dubsar.ticket-change/1";
 export const TICKET_ALLOCATIONS_FORMAT = "dubsar.ticket-allocations/1";
 export const TICKET_ALLOCATIONS_NAME = "ticket-allocations.json";
 export const TICKET_ALLOCATIONS_LOCK_NAME = "ticket-allocations.lock";
+export const TICKET_ALLOCATIONS_RECOVERY_LOCK_NAME = "ticket-allocations.recovery.lock";
 export const TICKET_ALLOCATIONS_LOCK_FORMAT = "dubsar.ticket-allocation-lock/1";
 export const TICKET_STATES = Object.freeze([
   "Backlog", "To Do", "In Progress", "In Review", "Blocked", "Paused",
@@ -134,13 +135,33 @@ function validateAllocationLock(value) {
   if (!value || Object.keys(value).length !== 4 || value.format !== TICKET_ALLOCATIONS_LOCK_FORMAT || !Number.isSafeInteger(value.acquired_at_ms) || value.acquired_at_ms < 0 || !Number.isSafeInteger(value.expires_at_ms) || value.expires_at_ms <= value.acquired_at_ms || value.expires_at_ms - value.acquired_at_ms !== LOCK_LEASE_MS || typeof value.owner_nonce !== "string" || !/^[0-9a-f]{32}$/u.test(value.owner_nonce)) throw new TicketError("TICKET_ALLOCATION_LOCK_INVALID");
   return Object.freeze({ format: value.format, acquired_at_ms: value.acquired_at_ms, expires_at_ms: value.expires_at_ms, owner_nonce: value.owner_nonce });
 }
-async function captureAllocationLock(root) {
+async function captureNamedAllocationLock(root, name) {
   try {
-    const captured = await captureRegularFile(root, TICKET_ALLOCATIONS_LOCK_NAME, 1024);
+    const captured = await captureRegularFile(root, name, 1024);
     return validateAllocationLock(JSON.parse(captured.content.toString("utf8")));
   } catch (error) {
     if (error instanceof TicketError) throw error;
     throw new TicketError("TICKET_ALLOCATION_LOCK_INVALID");
+  }
+}
+async function captureAllocationLock(root) {
+  return captureNamedAllocationLock(root, TICKET_ALLOCATIONS_LOCK_NAME);
+}
+async function claimExclusiveLockFile(root, name, lockBytes, lockNow) {
+  const target = path.join(root, name);
+  try {
+    await stagePrivateFile(target, lockBytes);
+    return true;
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+    const existing = await captureNamedAllocationLock(root, name);
+    const observedAt = lockNow();
+    if (!Number.isSafeInteger(observedAt) || observedAt < 0) throw new TicketError("TICKET_ALLOCATION_LOCK_IDENTITY_AMBIGUOUS");
+    if (observedAt <= existing.expires_at_ms) throw new TicketError("TICKET_ALLOCATION_BUSY");
+    const abandoned = `${target}.${randomBytes(16).toString("hex")}.abandoned`;
+    try { await rename(target, abandoned); } catch (recoveryError) { if (recoveryError?.code === "ENOENT") throw new TicketError("TICKET_ALLOCATION_BUSY"); throw new TicketError("TICKET_ALLOCATION_LOCK_INVALID"); }
+    await unlink(abandoned).catch(() => {});
+    try { await stagePrivateFile(target, lockBytes); return true; } catch (claimError) { if (claimError?.code === "EEXIST") throw new TicketError("TICKET_ALLOCATION_BUSY"); throw claimError; }
   }
 }
 function stable(value) {
@@ -456,10 +477,11 @@ export async function applyTicketChange({ start, allocationRoot, projectId, oper
       const observedAt = lockNow();
       if (!Number.isSafeInteger(observedAt) || observedAt < 0) throw new TicketError("TICKET_ALLOCATION_LOCK_IDENTITY_AMBIGUOUS");
       if (observedAt <= existing.expires_at_ms) throw new TicketError("TICKET_ALLOCATION_BUSY");
-      const recovery = path.join(safeAllocationRoot, "ticket-allocations.recovery.lock");
+      const recovery = path.join(safeAllocationRoot, TICKET_ALLOCATIONS_RECOVERY_LOCK_NAME);
       let recoveryOwned = false;
       try {
-        try { await stagePrivateFile(recovery, lockBytes); recoveryOwned = true; } catch (claimError) { if (claimError?.code === "EEXIST") throw new TicketError("TICKET_ALLOCATION_BUSY"); throw claimError; }
+        await claimExclusiveLockFile(safeAllocationRoot, TICKET_ALLOCATIONS_RECOVERY_LOCK_NAME, lockBytes, lockNow);
+        recoveryOwned = true;
         const confirmed = await captureAllocationLock(safeAllocationRoot);
         if (stable(confirmed) !== stable(existing)) throw new TicketError("TICKET_ALLOCATION_BUSY");
         const abandoned = `${recovery}.${randomBytes(16).toString("hex")}.abandoned`;
