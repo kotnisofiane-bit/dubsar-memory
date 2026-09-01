@@ -228,6 +228,44 @@ test("prepare is idempotent for the same persisted fingerprint", async () => {
   assert.equal((await readTickets({ start: context.start })).tickets.length, 1);
 });
 
+function assertContractBoundToTicket(ticket) {
+  const evidence = ticket.activity.find((row) => row.kind === "cursor_contract")?.evidence;
+  assert.equal(evidence?.arguments?.ticket_id, ticket.id);
+  assert.equal(ticket.references[0], evidence.contract_fingerprint);
+  assert.equal(evidence.contract_fingerprint, controllerContractFingerprint(evidence.arguments));
+}
+
+test("prepare binds each Controller fingerprint to the allocated ticket id", async () => {
+  const context = await env();
+  const first = await executeTool("prepare_cursor_mission", { ...context, ...mission({ title: "Mission A", objective: "A" }) });
+  const second = await executeTool("prepare_cursor_mission", { ...context, ...mission({ title: "Mission B", objective: "B" }) });
+  assert.equal(first.ticket_id, "DUB-001");
+  assert.equal(second.ticket_id, "DUB-002");
+  assert.notEqual(first.contract_fingerprint, second.contract_fingerprint);
+  const store = await readTickets({ start: context.start });
+  assert.equal(store.tickets.length, 2);
+  for (const ticket of store.tickets) assertContractBoundToTicket(ticket);
+});
+
+test("concurrent prepares do not cross-bind a stale DUB id into a later ticket", async () => {
+  const context = await env();
+  const results = await Promise.allSettled([
+    executeTool("prepare_cursor_mission", { ...context, ...mission({ title: "Concurrent A", objective: "A" }) }),
+    executeTool("prepare_cursor_mission", { ...context, ...mission({ title: "Concurrent B", objective: "B" }) }),
+  ]);
+  const fulfilled = results.filter((result) => result.status === "fulfilled").map((result) => result.value);
+  assert.equal(fulfilled.length >= 1, true);
+  const store = await readTickets({ start: context.start });
+  assert.equal(store.tickets.length, fulfilled.length);
+  const ids = new Set(fulfilled.map((item) => item.ticket_id));
+  assert.equal(ids.size, fulfilled.length);
+  for (const ticket of store.tickets) {
+    assertContractBoundToTicket(ticket);
+    const prepared = fulfilled.find((item) => item.ticket_id === ticket.id);
+    assert.equal(prepared.contract_fingerprint, ticket.references[0]);
+  }
+});
+
 test("frozen Controller vector fingerprint is a literal, not a locally recomputed oracle", async () => {
   const vectorPath = path.join(mcpRoot, "vectors", "controller-canonical-v1.json");
   const vector = JSON.parse(await readFile(vectorPath, "utf8"));

@@ -109,3 +109,46 @@ test("locks malformé, surdimensionné, symbolique et hardlinké échouent ferm�
     assert.equal((await readTicketAllocations(env)).allocations.length, 0);
   }
 });
+test("create refuse un expected_ticket_id qui ne correspond plus à l'allocation", async () => {
+  const env = await environment();
+  await perform(env, env.first, "project-a", create());
+  await assert.rejects(
+    previewTicketChange(request(env, env.first, "project-a", { ...create("Deux"), expected_ticket_id: "DUB-001" })),
+    { code: "TICKET_CHANGE_STALE" },
+  );
+  const matched = await previewTicketChange(request(env, env.first, "project-a", { ...create("Deux"), expected_ticket_id: "DUB-002" }));
+  assert.equal(matched.after.tickets.at(-1).id, "DUB-002");
+  await applyTicketChange({ ...request(env, env.first, "project-a", { ...create("Deux"), expected_ticket_id: "DUB-002" }), expectedChange: matched.change_sha256 });
+  assert.equal((await readTickets({ start: env.first })).tickets.at(-1).id, "DUB-002");
+});
+test("un apply dont la lease expire ne republie pas par-dessus un récupérateur", async () => {
+  const env = await environment();
+  await perform(env, env.first, "project-a", create());
+  for (const to of ["To Do", "In Progress", "In Review"]) await perform(env, env.first, "project-a", { type: "transition", id: "DUB-001", to });
+  let releaseObserver;
+  const observerHeld = new Promise((resolve) => { releaseObserver = resolve; });
+  let finishObserver;
+  const holdObserver = new Promise((resolve) => { finishObserver = resolve; });
+  let calls = 0;
+  const observer = async ({ repository, pr, ticket_id }) => {
+    calls += 1;
+    if (calls > 1) {
+      releaseObserver();
+      await holdObserver;
+    }
+    return { source: "trusted_github_observer", merged: true, repository, pr, merge_commit_sha: "a".repeat(40), ticket_id };
+  };
+  const doneOp = { type: "transition", id: "DUB-001", to: "Done", github_claim: { repository: "owner/repo", pr: 23, merge_commit_sha: "a".repeat(40) } };
+  const donePreview = await previewTicketChange(request(env, env.first, "project-a", doneOp, { observeGithubMerge: observer }));
+  const applying = applyTicketChange({ ...request(env, env.first, "project-a", doneOp, { observeGithubMerge: observer }), expectedChange: donePreview.change_sha256, lockNow: () => 1_000 });
+  await observerHeld;
+  const recovered = request(env, env.first, "project-a", create("Récupéré"));
+  const recoveredPreview = await previewTicketChange(recovered);
+  await applyTicketChange({ ...recovered, expectedChange: recoveredPreview.change_sha256, lockNow: () => 61_000 });
+  finishObserver();
+  await assert.rejects(applying, { code: "TICKET_ALLOCATION_BUSY" });
+  const store = await readTickets({ start: env.first });
+  assert.equal(store.tickets.length, 2);
+  assert.equal(store.tickets[0].state, "In Review");
+  assert.equal(store.tickets[1].title, "Récupéré");
+});

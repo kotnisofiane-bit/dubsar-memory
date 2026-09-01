@@ -805,8 +805,8 @@
     },
     {
       "path": "packages/dubsar-workbench-launcher/src/registry-store.mjs",
-      "bytes": 36432,
-      "sha256": "e6c8a3e793f556a04f19cf884b0335f21e3faf3ebc99db9d9d990c18f7e32d36",
+      "bytes": 37020,
+      "sha256": "1958b02a6dc05bd42f37003a58681068b3fb77effa3657d2c23318769cf3a9e5",
       "role": "runtime"
     },
     {
@@ -888,5 +888,5 @@
       "role": "runtime"
     }
   ],
-  "content_root_sha256": "161ae0ce4eada982a8fd7cb88ab457499fe0954f23df0cfe512964c98089c4e1"
+  "content_root_sha256": "2135b7788fd3ad34e403ceb8a669a0d2c35d04ff08917588c196cd62662ad474"
 }

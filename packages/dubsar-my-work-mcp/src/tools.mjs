@@ -143,9 +143,72 @@ function wrap(error) {
   return new MyWorkMcpError("MY_WORK_OPERATION_FAILED");
 }
 
+const RETRYABLE_TICKET_CODES = new Set(["TICKET_CHANGE_STALE", "TICKET_ALLOCATION_BUSY"]);
+
 async function mutate(env, operation) {
   const preview = await previewTicketChange({ ...env, operation });
   return applyTicketChange({ ...env, operation, expectedChange: preview.change_sha256 });
+}
+
+function isRetryableTicketError(error) {
+  return error instanceof TicketError && RETRYABLE_TICKET_CODES.has(error.code);
+}
+
+async function existingPreparedMission(env, envelopeInput) {
+  const existingStore = await readTickets({ start: env.start });
+  for (const existing of existingStore.tickets) {
+    const candidate = buildControllerEnvelope({ ticketId: existing.id, ...envelopeInput });
+    if (!(existing.references ?? []).includes(candidate.contract_fingerprint)) continue;
+    return { existing, candidate };
+  }
+  return null;
+}
+
+async function persistPreparedMission(env, args, envelopeInput) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const found = await existingPreparedMission(env, envelopeInput);
+    if (found) {
+      let contract = preparedContractFrom(found.existing);
+      if (!contract) {
+        await mutate(env, {
+          type: "activity",
+          id: found.existing.id,
+          kind: "cursor_contract",
+          summary: `${CONTROLLER_TOOL} arguments persisted`,
+          evidence: { ...found.candidate },
+        });
+        contract = found.candidate;
+      }
+      return { ticketId: found.existing.id, envelope: contract, persisted: false };
+    }
+    const allocations = await readTicketAllocations({ allocationRoot: env.allocationRoot });
+    const ticketId = `DUB-${String(allocations.next_number).padStart(3, "0")}`;
+    const envelope = buildControllerEnvelope({ ticketId, ...envelopeInput });
+    const operation = {
+      type: "create",
+      expected_ticket_id: ticketId,
+      title: args.title,
+      objective: args.objective,
+      criteria: args.criteria,
+      work_id: args.work_id ?? null,
+      references: [envelope.contract_fingerprint, envelope.arguments.target_repository_url],
+    };
+    try {
+      await mutate(env, operation);
+      await mutate(env, {
+        type: "activity",
+        id: ticketId,
+        kind: "cursor_contract",
+        summary: `${CONTROLLER_TOOL} arguments persisted`,
+        evidence: { ...envelope },
+      });
+      return { ticketId, envelope, persisted: true };
+    } catch (error) {
+      if (isRetryableTicketError(error) && attempt < 7) continue;
+      throw error;
+    }
+  }
+  throw new MyWorkMcpError("MY_WORK_OPERATION_FAILED");
 }
 
 function expectedFingerprint(ticket, supplied, contract) {
@@ -249,74 +312,14 @@ export async function executeTool(name, args = {}) {
         criteria: args.criteria,
       };
       buildControllerEnvelope({ ticketId: "DUB-001", ...envelopeInput });
-      const existingStore = await readTickets({ start: env.start });
-      for (const existing of existingStore.tickets) {
-        const candidate = buildControllerEnvelope({ ticketId: existing.id, ...envelopeInput });
-        if (!(existing.references ?? []).includes(candidate.contract_fingerprint)) continue;
-        let contract = preparedContractFrom(existing);
-        if (!contract) {
-          await mutate(env, {
-            type: "activity",
-            id: existing.id,
-            kind: "cursor_contract",
-            summary: `${CONTROLLER_TOOL} arguments persisted`,
-            evidence: { ...candidate },
-          });
-          contract = candidate;
-        }
-        return {
-          format: "dubsar.my-work-cursor-mission/1",
-          ticket_id: existing.id,
-          persisted: false,
-          contract_fingerprint: contract.contract_fingerprint,
-          receipt_bounds: contract.receipt_bounds,
-          ...controllerToolCall(contract.arguments),
-        };
-      }
-      const allocations = await readTicketAllocations({ allocationRoot: env.allocationRoot });
-      const ticketId = `DUB-${String(allocations.next_number).padStart(3, "0")}`;
-      const envelope = buildControllerEnvelope({
-        ticketId,
-        targetRepositoryUrl: args.target_repository_url,
-        startingSha: args.starting_sha,
-        repositoryRefs: args.repository_refs,
-        allowedPaths: args.allowed_paths,
-        linearIssue,
-        prRepositoryUrl: args.pr_repository_url,
-        mission: args.mission,
-        acceptanceCriteria: args.acceptance_criteria,
-        expectedEvidence: args.expected_evidence,
-        requiredCapabilities: args.required_capabilities,
-        preferredPlugins: args.preferred_plugins,
-        requiredPlugins: args.required_plugins,
-        humanGates: args.human_gates,
-        title: args.title,
-        objective: args.objective,
-        criteria: args.criteria,
-      });
-      const operation = {
-        type: "create",
-        title: args.title,
-        objective: args.objective,
-        criteria: args.criteria,
-        work_id: args.work_id ?? null,
-        references: [envelope.contract_fingerprint, envelope.arguments.target_repository_url],
-      };
-      await mutate(env, operation);
-      await mutate(env, {
-        type: "activity",
-        id: ticketId,
-        kind: "cursor_contract",
-        summary: `${CONTROLLER_TOOL} arguments persisted`,
-        evidence: { ...envelope },
-      });
+      const prepared = await persistPreparedMission(env, args, envelopeInput);
       return {
         format: "dubsar.my-work-cursor-mission/1",
-        ticket_id: envelope.ticket_id ?? envelope.arguments.ticket_id,
-        persisted: true,
-        contract_fingerprint: envelope.contract_fingerprint,
-        receipt_bounds: envelope.receipt_bounds,
-        ...controllerToolCall(envelope.arguments),
+        ticket_id: prepared.ticketId,
+        persisted: prepared.persisted,
+        contract_fingerprint: prepared.envelope.contract_fingerprint,
+        receipt_bounds: prepared.envelope.receipt_bounds,
+        ...controllerToolCall(prepared.envelope.arguments),
       };
     }
     if (name === "attach_cursor_receipt") {

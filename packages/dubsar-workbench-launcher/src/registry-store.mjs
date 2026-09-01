@@ -427,10 +427,21 @@ function applyOperation(store, operation, allocation = null, corroboration = nul
   } else throw new TicketError("TICKET_OPERATION_INVALID");
   return validateTicketStore(next);
 }
+function lockMatchesOwner(current, owner) {
+  return stable(current) === stable(owner);
+}
+async function allocationLockHeldBy(root, owner) {
+  try {
+    return lockMatchesOwner(await captureAllocationLock(root), owner);
+  } catch {
+    return false;
+  }
+}
 export async function previewTicketChange({ start, allocationRoot, projectId, operation, observeGithubMerge }) {
   const before = await readTickets({ start });
   const allocations = await readTicketAllocations({ allocationRoot });
   const allocation = operation.type === "create" ? { id: `DUB-${String(allocations.next_number).padStart(3, "0")}`, project_id: text(projectId, 64) } : null;
+  if (allocation && operation.expected_ticket_id != null && operation.expected_ticket_id !== allocation.id) throw new TicketError("TICKET_CHANGE_STALE");
   const corroboration = operation.type === "transition" && operation.to === "Done" ? await corroborateGithubMerge(operation, observeGithubMerge) : null;
   const after = applyOperation(before, operation, allocation, corroboration);
   const allocationsAfter = allocation === null ? allocations : validateTicketAllocations({ format: TICKET_ALLOCATIONS_FORMAT, next_number: allocations.next_number + 1, allocations: [...allocations.allocations, allocation] });
@@ -470,6 +481,7 @@ export async function applyTicketChange({ start, allocationRoot, projectId, oper
     }
     const preview = await previewTicketChange({ start, allocationRoot: safeAllocationRoot, projectId, operation, observeGithubMerge });
     if (preview.change_sha256 !== expectedChange) throw new TicketError("TICKET_CHANGE_STALE");
+    if (!(await allocationLockHeldBy(safeAllocationRoot, owner))) throw new TicketError("TICKET_ALLOCATION_BUSY");
     if (preview.before_sha256 === sha(preview.after)) {
       return Object.freeze({ format: "dubsar.ticket-receipt/1", change_sha256: expectedChange, store_sha256: preview.before_sha256, tickets: preview.after.tickets.length });
     }
@@ -492,5 +504,7 @@ export async function applyTicketChange({ start, allocationRoot, projectId, oper
       throw error;
     } finally { await unlink(projectTemporary).catch(() => {}); await unlink(allocationTemporary).catch(() => {}); }
     return Object.freeze({ format: "dubsar.ticket-receipt/1", change_sha256: expectedChange, store_sha256: sha(preview.after), tickets: preview.after.tickets.length });
-  } finally { if (lockOwned) await unlink(lock).catch(() => {}); }
+  } finally {
+    if (lockOwned && await allocationLockHeldBy(safeAllocationRoot, owner)) await unlink(lock).catch(() => {});
+  }
 }
