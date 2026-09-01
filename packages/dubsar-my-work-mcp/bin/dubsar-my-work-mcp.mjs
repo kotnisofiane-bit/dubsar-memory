@@ -1,4 +1,5 @@
 #!/usr/bin/env node
-import { attachStdio } from "../src/server.mjs";
+import { runCli } from "../src/cli.mjs";
 
-attachStdio(process);
+const code = await runCli(process.argv.slice(2), process);
+if (typeof code === "number" && code !== 0) process.exitCode = code;

@@ -10,6 +10,15 @@ import { handleMessage, encodeFrame, createFrameParser } from "../packages/dubsa
 import { buildControllerEnvelope } from "../packages/dubsar-my-work-mcp/src/canonical.mjs";
 import { CONTROLLER_ARGUMENT_KEYS, CONTROLLER_TOOL, controllerContractFingerprint } from "../packages/dubsar-my-work-mcp/src/mission-args.mjs";
 import { readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
+import {
+  resetTestControllerTransport,
+  setTestControllerTransport,
+} from "../packages/dubsar-my-work-mcp/src/controller-client.mjs";
+import { connectionStatus, credentialsPath, writeCredentials } from "../packages/dubsar-my-work-mcp/src/oauth-store.mjs";
+import { connectController } from "../packages/dubsar-my-work-mcp/src/oauth-flow.mjs";
+import { runCli } from "../packages/dubsar-my-work-mcp/src/cli.mjs";
+import { spawnSync } from "node:child_process";
+import { createServer } from "node:http";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const mcpRoot = path.join(repositoryRoot, "packages", "dubsar-my-work-mcp");
@@ -204,6 +213,7 @@ test("MCP initialize and tools/list expose the closed surface", async () => {
     "list_tickets",
     "get_ticket",
     "prepare_cursor_mission",
+    "launch_cursor_mission",
     "attach_cursor_receipt",
     "sync_cursor_status",
   ]);
@@ -360,19 +370,200 @@ test("frozen realistic Controller receipt attaches; divergences do not mutate", 
   assert.equal((await stat(ticketsFile)).mtimeMs, before.mtimeMs);
 });
 
-test("local MCP sources have no network client and no secret tokens", async () => {
+test("one public launch call creates one ticket, one Controller request, matching receipt, and survives restart", async () => {
+  const context = await env();
+  const calls = [];
+  setTestControllerTransport(async (request) => {
+    calls.push(request);
+    assert.equal(request.tool, CONTROLLER_TOOL);
+    assert.equal("contract_fingerprint" in request.arguments, false);
+    assert.equal("receipt_bounds" in request.arguments, false);
+    const preparedLater = await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" });
+    assert.deepEqual(request.arguments, preparedLater.prepared_contract.arguments);
+    return receiptFor({ arguments: request.arguments, contract_fingerprint: preparedLater.prepared_contract.contract_fingerprint, receipt_bounds: preparedLater.prepared_contract.receipt_bounds });
+  });
+  try {
+    const launched = await executeTool("launch_cursor_mission", { ...context, ...mission() });
+    assert.equal(launched.ticket_id, "DUB-001");
+    assert.equal(launched.agent_id, "agent-1");
+    assert.equal(launched.run_id, "run-1");
+    assert.equal(launched.state, "In Progress");
+    assert.equal(calls.length, 1);
+    const again = await executeTool("launch_cursor_mission", { ...context, ...mission() });
+    assert.equal(again.launched, false);
+    assert.equal(calls.length, 1);
+    const restarted = await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" });
+    assert.equal(restarted.ticket.state, "In Progress");
+    assert.equal(restarted.attached_receipt.run_id, "run-1");
+    assert.equal(restarted.attached_receipt.agent_id, "agent-1");
+  } finally {
+    resetTestControllerTransport();
+  }
+});
+
+test("ambiguous Controller response is not retried and fabricates no receipt", async () => {
+  const context = await env();
+  const calls = [];
+  setTestControllerTransport(async (request) => {
+    calls.push(request);
+    return {};
+  });
+  try {
+    await assert.rejects(
+      executeTool("launch_cursor_mission", { ...context, ...mission() }),
+      { code: "MY_WORK_LAUNCH_AMBIGUOUS" },
+    );
+    assert.equal(calls.length, 1);
+    await assert.rejects(
+      executeTool("launch_cursor_mission", { ...context, ...mission() }),
+      { code: "MY_WORK_LAUNCH_NOT_RETRYABLE" },
+    );
+    assert.equal(calls.length, 1);
+    const loaded = await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" });
+    assert.equal(loaded.attached_receipt, null);
+    assert.notEqual(loaded.ticket.state, "In Progress");
+    assert.equal(loaded.ticket.cursor_launch, null);
+  } finally {
+    resetTestControllerTransport();
+  }
+});
+
+test("browser OAuth connect stores credentials locally and redacts them from output", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "dubsar-mcp-connect-"));
+  const previous = {
+    config: process.env.DUBSAR_MY_WORK_CONFIG_DIR,
+    url: process.env.DUBSAR_CONTROLLER_URL,
+    auth: process.env.DUBSAR_CONTROLLER_AUTHORIZATION_ENDPOINT,
+    token: process.env.DUBSAR_CONTROLLER_TOKEN_ENDPOINT,
+    client: process.env.DUBSAR_CONTROLLER_CLIENT_ID,
+    open: process.env.DUBSAR_MY_WORK_OPEN_BROWSER,
+  };
+  let tokenHits = 0;
+  const tokenServer = createServer((request, response) => {
+    tokenHits += 1;
+    const chunks = [];
+    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("end", () => {
+      const body = Buffer.concat(chunks).toString("utf8");
+      assert.match(body, /code=auth-code/);
+      assert.doesNotMatch(body, /super-secret/);
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        access_token: "super-secret-access-token",
+        refresh_token: "super-secret-refresh-token",
+        token_type: "Bearer",
+        expires_in: 3600,
+      }));
+    });
+  });
+  await new Promise((resolve) => tokenServer.listen(0, "127.0.0.1", resolve));
+  const tokenPort = tokenServer.address().port;
+  process.env.DUBSAR_MY_WORK_CONFIG_DIR = dir;
+  process.env.DUBSAR_CONTROLLER_URL = "https://controller.example/mcp";
+  process.env.DUBSAR_CONTROLLER_AUTHORIZATION_ENDPOINT = "https://controller.example/authorize";
+  process.env.DUBSAR_CONTROLLER_TOKEN_ENDPOINT = `http://127.0.0.1:${tokenPort}/token`;
+  process.env.DUBSAR_CONTROLLER_CLIENT_ID = "public-client";
+  process.env.DUBSAR_MY_WORK_OPEN_BROWSER = "0";
+  const chunks = [];
+  try {
+    const done = connectController({
+      write: { write(text) { chunks.push(text); return true; } },
+      openBrowserImpl: async (url) => {
+        const parsed = new URL(url);
+        assert.equal(parsed.searchParams.get("code_challenge_method"), "S256");
+        const redirect = parsed.searchParams.get("redirect_uri");
+        const state = parsed.searchParams.get("state");
+        await fetch(`${redirect}?code=auth-code&state=${state}`);
+      },
+    });
+    await done;
+    const output = chunks.join("");
+    assert.match(output, /Open this URL/);
+    assert.doesNotMatch(output, /super-secret-access-token/);
+    const stored = JSON.parse(await readFile(path.join(dir, "credentials.json"), "utf8"));
+    assert.equal(stored.access_token, "super-secret-access-token");
+    assert.equal(tokenHits, 1);
+    const statusChunks = [];
+    await runCli(["status"], { stdout: { write(text) { statusChunks.push(text); return true; } } });
+    assert.doesNotMatch(statusChunks.join(""), /super-secret-access-token/);
+  } finally {
+    tokenServer.close();
+    for (const [key, value] of Object.entries({
+      DUBSAR_MY_WORK_CONFIG_DIR: previous.config,
+      DUBSAR_CONTROLLER_URL: previous.url,
+      DUBSAR_CONTROLLER_AUTHORIZATION_ENDPOINT: previous.auth,
+      DUBSAR_CONTROLLER_TOKEN_ENDPOINT: previous.token,
+      DUBSAR_CONTROLLER_CLIENT_ID: previous.client,
+      DUBSAR_MY_WORK_OPEN_BROWSER: previous.open,
+    })) {
+      if (value == null) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("CLI status redacts credentials and stores them only in the local config dir", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "dubsar-mcp-oauth-"));
+  const previous = process.env.DUBSAR_MY_WORK_CONFIG_DIR;
+  process.env.DUBSAR_MY_WORK_CONFIG_DIR = dir;
+  try {
+    await writeCredentials({
+      controller_url: "https://controller.example/mcp",
+      access_token: "super-secret-access-token",
+      refresh_token: "super-secret-refresh-token",
+    });
+    const chunks = [];
+    await runCli(["status"], { stdout: { write(text) { chunks.push(text); return true; } } });
+    const output = chunks.join("");
+    assert.match(output, /\[redacted\]/);
+    assert.doesNotMatch(output, /super-secret-access-token/);
+    assert.doesNotMatch(output, /super-secret-refresh-token/);
+    const status = await connectionStatus();
+    assert.equal(status.connected, true);
+    assert.equal(status.access_token, "[redacted]");
+    assert.equal(credentialsPath().startsWith(dir), true);
+    const tracked = spawnSync("git", ["check-ignore", "-q", credentialsPath()], { cwd: repositoryRoot });
+    assert.equal(path.relative(repositoryRoot, credentialsPath()).startsWith("..") || tracked.status === 0, true);
+  } finally {
+    if (previous == null) delete process.env.DUBSAR_MY_WORK_CONFIG_DIR;
+    else process.env.DUBSAR_MY_WORK_CONFIG_DIR = previous;
+  }
+});
+
+test("OAuth and Controller network stay in dedicated modules; credentials are not in the package tree", async () => {
   const files = await filesUnder(path.join(mcpRoot, "src"));
   files.push(path.join(mcpRoot, "bin", "dubsar-my-work-mcp.mjs"));
-  const forbiddenModules = new Set(["node:http", "node:https", "node:net", "node:tls", "node:dgram", "node:dns", "node:child_process", "undici"]);
-  const secret = /api[_-]?key|authorization|bearer|secret|oauth|token/iu;
+  const networkFiles = new Set([
+    path.join(mcpRoot, "src", "oauth-flow.mjs"),
+    path.join(mcpRoot, "src", "controller-client.mjs"),
+  ]);
+  const oauthFiles = new Set([
+    ...networkFiles,
+    path.join(mcpRoot, "src", "oauth-store.mjs"),
+    path.join(mcpRoot, "src", "redact.mjs"),
+    path.join(mcpRoot, "src", "cli.mjs"),
+    path.join(mcpRoot, "src", "tools.mjs"),
+    path.join(mcpRoot, "src", "index.mjs"),
+  ]);
+  const forbiddenModules = new Set(["node:https", "node:net", "node:tls", "node:dgram", "node:dns", "undici"]);
+  const secretLiteral = /super-secret|sk_live_|eyJ[A-Za-z0-9_-]{20,}/u;
   for (const file of files) {
     const source = await readFile(file, "utf8");
-    assert.doesNotMatch(source, secret);
+    assert.doesNotMatch(source, secretLiteral);
     const ast = parse(source, { ecmaVersion: "latest", sourceType: "module" });
     for (const node of ast.body) {
       if (node.type === "ImportDeclaration") {
+        if (node.source.value === "node:http" || node.source.value === "node:child_process") {
+          assert.equal(file, path.join(mcpRoot, "src", "oauth-flow.mjs"));
+          continue;
+        }
         assert.equal(forbiddenModules.has(node.source.value), false, file);
       }
     }
+    if (!oauthFiles.has(file)) {
+      assert.doesNotMatch(source, /oauth|access_token|authorization|bearer/iu);
+    }
   }
+  const packageFiles = await readdir(mcpRoot, { recursive: true });
+  assert.equal(packageFiles.includes("credentials.json"), false);
 });

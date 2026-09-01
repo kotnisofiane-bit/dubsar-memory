@@ -7,13 +7,13 @@
     "background_service": "none",
     "filesystem_read": "explicit_selected_project_ticket_store",
     "filesystem_write": "explicit_ticket_preview_apply",
-    "network": "none",
-    "process_execution": "none",
-    "remote_mutation": "none"
+    "network": "explicit_single_controller_launch",
+    "process_execution": "optional_local_browser_open_for_oauth",
+    "remote_mutation": "bounded_cursor_agent_creation"
   },
   "integrations": {
     "backend": "none",
-    "mcp": "local_stdio_closed_surface",
+    "mcp": "local_stdio_plus_remote_controller_launch",
     "personal_memory": "none"
   }
 }

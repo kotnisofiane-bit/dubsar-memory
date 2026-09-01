@@ -3,7 +3,7 @@
   "version": "0.1.0-dev",
   "private": true,
   "type": "module",
-  "description": "Local stdio MCP for DUBSAR My Work tickets, Cursor envelopes, receipts, and sync.",
+  "description": "Local stdio MCP for DUBSAR My Work tickets and one Controller launch.",
   "bin": {
     "dubsar-my-work-mcp": "./bin/dubsar-my-work-mcp.mjs"
   },
