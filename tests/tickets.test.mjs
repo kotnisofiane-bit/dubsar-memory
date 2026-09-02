@@ -96,6 +96,38 @@ test("deux récupérateurs concurrents d'un verrou abandonné gardent une seule 
   const results = await Promise.allSettled([applyTicketChange({ ...one, expectedChange: previews[0].change_sha256, lockNow: () => 60_000 }), applyTicketChange({ ...two, expectedChange: previews[1].change_sha256, lockNow: () => 60_000 })]); assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
   assert.equal((await readTicketAllocations(env)).allocations.length, 1); assert.equal((await Promise.all([readTickets({ start: env.first }), readTickets({ start: env.second })])).flatMap((store) => store.tickets).length, 1);
 });
+test("verrou de recovery encore actif bloque le récupérateur sans le supprimer", async () => {
+  const env = await environment(); const input = request(env, env.first, "project-a", create()); const preview = await previewTicketChange(input);
+  const lock = path.join(env.allocationRoot, "ticket-allocations.lock");
+  const recovery = path.join(env.allocationRoot, "ticket-allocations.recovery.lock");
+  const abandoned = { format: "dubsar.ticket-allocation-lock/1", acquired_at_ms: 1, expires_at_ms: 30_001, owner_nonce: "e".repeat(32) };
+  const activeRecovery = { format: "dubsar.ticket-allocation-lock/1", acquired_at_ms: 50_000, expires_at_ms: 80_000, owner_nonce: "f".repeat(32) };
+  await writeFile(lock, JSON.stringify(abandoned));
+  await writeFile(recovery, JSON.stringify(activeRecovery));
+  await assert.rejects(applyTicketChange({ ...input, expectedChange: preview.change_sha256, lockNow: () => 60_000 }), { code: "TICKET_ALLOCATION_BUSY" });
+  assert.deepEqual(JSON.parse(await readFile(recovery, "utf8")), activeRecovery);
+  assert.equal((await readTicketAllocations(env)).allocations.length, 0);
+});
+test("verrou de recovery abandonné est récupéré et les mutations reprennent", async () => {
+  const env = await environment(); const input = request(env, env.first, "project-a", create()); const preview = await previewTicketChange(input);
+  await writeFile(path.join(env.allocationRoot, "ticket-allocations.lock"), JSON.stringify({ format: "dubsar.ticket-allocation-lock/1", acquired_at_ms: 1, expires_at_ms: 30_001, owner_nonce: "a".repeat(32) }));
+  await writeFile(path.join(env.allocationRoot, "ticket-allocations.recovery.lock"), JSON.stringify({ format: "dubsar.ticket-allocation-lock/1", acquired_at_ms: 1, expires_at_ms: 30_001, owner_nonce: "b".repeat(32) }));
+  await applyTicketChange({ ...input, expectedChange: preview.change_sha256, lockNow: () => 60_000 });
+  assert.equal((await readTickets({ start: env.first })).tickets[0].id, "DUB-001");
+  assert.equal((await readTicketAllocations(env)).next_number, 2);
+});
+test("deux récupérateurs d'un recovery abandonné gardent une seule allocation", async () => {
+  const env = await environment(); const one = request(env, env.first, "project-a", create("A")); const two = request(env, env.second, "project-b", create("B"));
+  const previews = await Promise.all([previewTicketChange(one), previewTicketChange(two)]);
+  await writeFile(path.join(env.allocationRoot, "ticket-allocations.lock"), JSON.stringify({ format: "dubsar.ticket-allocation-lock/1", acquired_at_ms: 1, expires_at_ms: 30_001, owner_nonce: "c".repeat(32) }));
+  await writeFile(path.join(env.allocationRoot, "ticket-allocations.recovery.lock"), JSON.stringify({ format: "dubsar.ticket-allocation-lock/1", acquired_at_ms: 1, expires_at_ms: 30_001, owner_nonce: "d".repeat(32) }));
+  const results = await Promise.allSettled([
+    applyTicketChange({ ...one, expectedChange: previews[0].change_sha256, lockNow: () => 60_000 }),
+    applyTicketChange({ ...two, expectedChange: previews[1].change_sha256, lockNow: () => 60_000 }),
+  ]);
+  assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+  assert.equal((await readTicketAllocations(env)).allocations.length, 1);
+});
 test("locks malformé, surdimensionné, symbolique et hardlinké échouent fermés", async (t) => {
   const variants = [
     async (lock) => writeFile(lock, "not-json"),
