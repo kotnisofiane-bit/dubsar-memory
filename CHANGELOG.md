@@ -6,6 +6,7 @@
 - Harden KOT-116 with launcher-global multi-project allocation, injected GitHub merge corroboration, an allowlisted loopback preview/apply channel, actionable filters/details, bilingual UI, and transversal acceptance coverage.
 - Complete the default shortcut path with serialized allocation, public ticket CLI exports, catalog-wide My Work aggregation, guided forms, post-apply refresh, and restart persistence coverage.
 - Recover abandoned allocation locks through a validated bounded lease and an atomic single-recoverer claim while preserving fail-closed handling for unsafe locks.
+- Reclaim an expired `ticket-allocations.recovery.lock` so a crashed recoverer cannot permanently block ticket writes.
 
 All notable source changes are documented here. Package publication remains a
 separate, explicitly reviewed decision.
