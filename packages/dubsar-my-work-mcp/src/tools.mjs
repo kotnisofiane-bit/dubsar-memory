@@ -1,4 +1,5 @@
 import {
+  TERMINAL_TICKET_STATES,
   TicketError,
   applyTicketChange,
   previewTicketChange,
@@ -217,6 +218,10 @@ function launchSubmissionRecorded(ticket) {
   );
 }
 
+function isTerminalTicket(ticket) {
+  return TERMINAL_TICKET_STATES.includes(ticket?.state);
+}
+
 function preparedContractFrom(ticket) {
   const activities = Array.isArray(ticket?.activity) ? ticket.activity : [];
   for (let i = activities.length - 1; i >= 0; i -= 1) {
@@ -304,6 +309,7 @@ export async function executeTool(name, args = {}) {
       buildControllerEnvelope({ ticketId: "DUB-001", ...envelopeInput });
       const existingStore = await readTickets({ start: env.start });
       for (const existing of existingStore.tickets) {
+        if (isTerminalTicket(existing)) continue;
         const candidate = buildControllerEnvelope({ ticketId: existing.id, ...envelopeInput });
         if (!(existing.references ?? []).includes(candidate.contract_fingerprint)) continue;
         let contract = preparedContractFrom(existing);
@@ -377,6 +383,9 @@ export async function executeTool(name, args = {}) {
       const store = await readTickets({ start: env.start });
       const ticket = store.tickets.find((item) => item.id === prepared.ticket_id);
       if (!ticket) throw new MyWorkMcpError("MY_WORK_TICKET_NOT_FOUND");
+      if (isTerminalTicket(ticket)) {
+        throw new MyWorkMcpError("MY_WORK_TICKET_TERMINAL");
+      }
       if (ticket.cursor_launch) {
         return {
           format: "dubsar.my-work-cursor-launch/1",
