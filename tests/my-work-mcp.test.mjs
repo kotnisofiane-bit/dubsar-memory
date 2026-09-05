@@ -9,7 +9,7 @@ import { executeTool } from "../packages/dubsar-my-work-mcp/src/tools.mjs";
 import { handleMessage, encodeFrame, createFrameParser } from "../packages/dubsar-my-work-mcp/src/server.mjs";
 import { buildControllerEnvelope } from "../packages/dubsar-my-work-mcp/src/canonical.mjs";
 import { CONTROLLER_ARGUMENT_KEYS, CONTROLLER_TOOL, controllerContractFingerprint } from "../packages/dubsar-my-work-mcp/src/mission-args.mjs";
-import { readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
+import { applyTicketChange, previewTicketChange, readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
 import {
   resetTestControllerTransport,
   setTestControllerTransport,
@@ -396,6 +396,50 @@ test("one public launch call creates one ticket, one Controller request, matchin
     assert.equal(restarted.ticket.state, "In Progress");
     assert.equal(restarted.attached_receipt.run_id, "run-1");
     assert.equal(restarted.attached_receipt.agent_id, "agent-1");
+  } finally {
+    resetTestControllerTransport();
+  }
+});
+
+test("cancelled ticket is not reused; same mission allocates a new ticket before Controller", async () => {
+  const context = await env();
+  const calls = [];
+  const first = await executeTool("prepare_cursor_mission", { ...context, ...mission() });
+  assert.equal(first.ticket_id, "DUB-001");
+  const cancelInput = {
+    start: context.start,
+    allocationRoot: context.allocation_root,
+    projectId: context.project_id,
+    operation: { type: "transition", id: "DUB-001", to: "Cancelled" },
+  };
+  const cancelPreview = await previewTicketChange(cancelInput);
+  await applyTicketChange({ ...cancelInput, expectedChange: cancelPreview.change_sha256 });
+  setTestControllerTransport(async (request) => {
+    calls.push(request);
+    const preparedLater = await executeTool("get_ticket", { ...context, ticket_id: request.arguments.ticket_id });
+    return receiptFor({
+      arguments: request.arguments,
+      contract_fingerprint: preparedLater.prepared_contract.contract_fingerprint,
+      receipt_bounds: preparedLater.prepared_contract.receipt_bounds,
+    });
+  });
+  try {
+    const launched = await executeTool("launch_cursor_mission", { ...context, ...mission() });
+    assert.equal(launched.ticket_id, "DUB-002");
+    assert.equal(launched.state, "In Progress");
+    assert.equal(launched.launched, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].arguments.ticket_id, "DUB-002");
+    const cancelled = await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" });
+    assert.equal(cancelled.ticket.state, "Cancelled");
+    assert.equal(cancelled.ticket.cursor_launch, null);
+    assert.equal(
+      cancelled.ticket.activity.some((row) => row.kind === "launch_submitted"),
+      false,
+    );
+    const created = await executeTool("get_ticket", { ...context, ticket_id: "DUB-002" });
+    assert.equal(created.ticket.state, "In Progress");
+    assert.equal(created.attached_receipt.agent_id, "agent-1");
   } finally {
     resetTestControllerTransport();
   }
