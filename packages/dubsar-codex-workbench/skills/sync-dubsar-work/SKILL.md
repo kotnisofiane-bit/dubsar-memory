@@ -13,8 +13,8 @@ Do not poll Cursor or GitHub.
 ## Fixed identity
 
 Use only the persisted `cursor_launch.agent_id` and `cursor_launch.run_id`.
-Never launch, retry, discover, or switch agents. Read the Cursor result
-exactly once per eligible ticket. Independently verify any named pull
+Never launch, retry, discover, or switch agents. Do not call a follow-up or
+relance tool. Read the Cursor result exactly once per eligible ticket. Independently verify any named pull
 request on GitHub. Do not trust Cursor's merge or review claim.
 
 ## Eligibility

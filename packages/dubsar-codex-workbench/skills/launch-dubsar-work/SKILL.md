@@ -11,11 +11,17 @@ repository (`owner/name`). My Work is a local view, not an MCP client.
 ## Fixed Controller boundary
 
 - Read-only upstream: `kotnisofiane-bit/kotnisofiane-bit-dubsar-cursor-reader-mcp`
-  PR 24 at `26e962a0098656fdb0dcaa1b46bf823d0e513fb8`.
+  PR 26 at `90a35ac02cf22399e389b048acf2c074053b763d`.
 - Call `create_dubsar_work_cursor_agent` exactly once. Do not call
-  `create_dubsar_work_cursor_agent_run` in this launch workflow and do not poll.
-- Accept only `dubsar.cursor-launch-receipt/1` or
-  `dubsar.cursor-run-receipt/1`. Never persist credentials or MCP tokens.
+  `create_dubsar_work_cursor_agent_run` and do not invent a follow-up
+  orchestration for corrections 4 or 5. My Work has no relance tool.
+- New contracts send `correction_budget: "uncapped"`. Accept only
+  `dubsar.cursor-launch-receipt/1` or `dubsar.cursor-run-receipt/1` whose
+  bounds match the persisted metadata (`correction_budget` and
+  `correction_policy` both `uncapped` for new receipts). Run receipts from
+  Controller `createDubsarWorkCursorAgentRun` keep the same `agent_id` and
+  add `bounds.correction_number`; they may be attached as the first matching
+  receipt only. Never persist credentials or MCP tokens.
 
 ## Workflow
 
@@ -67,7 +73,7 @@ repository (`owner/name`). My Work is a local view, not an MCP client.
 
 ## Limits
 
-No polling, webhook, daemon, secret storage, second launch, or retry.
-Temporary proposals must be outside user memory and deleted when the workflow
-stops. The launcher remains local-only: it is not an MCP client and it does
-not open outbound network.
+No polling, webhook, daemon, secret storage, second launch, retry, or
+follow-up/relance tool. Do not poll. Temporary proposals must be outside user
+memory and deleted when the workflow stops. The launcher remains local-only: it
+is not an MCP client and it does not open outbound network.

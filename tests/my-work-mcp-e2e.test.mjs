@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { encodeFrame, createFrameParser } from "../packages/dubsar-my-work-mcp/src/server.mjs";
-import { readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
+import { applyTicketChange, previewTicketChange, readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
 import { CONTROLLER_ARGUMENT_KEYS, CONTROLLER_TOOL } from "../packages/dubsar-my-work-mcp/src/mission-args.mjs";
 import { CREDENTIALS_FORMAT } from "../packages/dubsar-my-work-mcp/src/oauth-store.mjs";
 import {
@@ -20,10 +20,13 @@ import { z } from "zod";
 
 const bin = fileURLToPath(new URL("../packages/dubsar-my-work-mcp/bin/dubsar-my-work-mcp.mjs", import.meta.url));
 const vectorPath = fileURLToPath(
+  new URL("../packages/dubsar-my-work-mcp/vectors/controller-canonical-pr26.json", import.meta.url),
+);
+const legacyVectorPath = fileURLToPath(
   new URL("../packages/dubsar-my-work-mcp/vectors/controller-canonical-v1.json", import.meta.url),
 );
 const FROZEN_CONTROLLER_FINGERPRINT =
-  "sha256:56ada5fb957c3c84449688dc79169e093ee4b7d6d05dc0cfc64be9c0db89f574";
+  "sha256:0f70c44c67c84c156eca8d8fcf57cf25340447d5e4d19867377ee2e3be87e3b6";
 
 function rpc(child) {
   let nextId = 1;
@@ -103,7 +106,7 @@ test("E2E prepare, restart, attach realistic receipt, restart, read and sync", a
         preferred_plugins: vector.unsigned_arguments.preferred_plugins,
         required_plugins: vector.unsigned_arguments.required_plugins,
         human_gates: vector.unsigned_arguments.human_gates,
-        correction_budget: 3,
+        correction_budget: "uncapped",
       },
     });
     mission = prepared.result.structuredContent;
@@ -213,7 +216,7 @@ function frozenMission(context, vector) {
     preferred_plugins: vector.unsigned_arguments.preferred_plugins,
     required_plugins: vector.unsigned_arguments.required_plugins,
     human_gates: vector.unsigned_arguments.human_gates,
-    correction_budget: 3,
+    correction_budget: "uncapped",
   };
 }
 
@@ -242,6 +245,7 @@ test("E2E public launch persists ticket and matching receipt across MCP restart"
   const mock = await listenMock(({ body, response }) => {
     posts.push(JSON.parse(body));
     const args = JSON.parse(body).params.arguments;
+    assert.equal(args.correction_budget, "uncapped");
     assert.equal("contract_fingerprint" in args, false);
     assert.equal("receipt_bounds" in args, false);
     assert.deepEqual(Object.keys(args).sort(), [...CONTROLLER_ARGUMENT_KEYS].sort());
@@ -472,5 +476,81 @@ test("pinned createMcpHandler transport: legacy request is 406, launch decodes S
     }
   } finally {
     pinned.server.close();
+  }
+});
+
+test("E2E legacy budget-3 receipt survives MCP restart without rewrite", async () => {
+  const start = await mkdtemp(path.join(tmpdir(), "dubsar-mcp-e2e-legacy-"));
+  const allocationRoot = await mkdtemp(path.join(tmpdir(), "dubsar-mcp-e2e-legacy-global-"));
+  await mkdir(path.join(start, ".dubsar"));
+  const context = { start, allocation_root: allocationRoot, project_id: "project-e2e-legacy" };
+  const vector = JSON.parse(await readFile(legacyVectorPath, "utf8"));
+  const envelope = {
+    arguments: vector.unsigned_arguments,
+    contract_fingerprint: vector.expected_contract_fingerprint,
+    receipt_bounds: vector.receipt_bounds,
+  };
+  async function apply(operation) {
+    const preview = await previewTicketChange({
+      start,
+      allocationRoot,
+      projectId: context.project_id,
+      operation,
+    });
+    await applyTicketChange({
+      start,
+      allocationRoot,
+      projectId: context.project_id,
+      operation,
+      expectedChange: preview.change_sha256,
+    });
+  }
+  await apply({
+    type: "create",
+    title: "Legacy",
+    objective: "Budget 3",
+    criteria: ["Ticket persisté"],
+    references: [envelope.contract_fingerprint, envelope.arguments.target_repository_url],
+  });
+  await apply({
+    type: "activity",
+    id: "DUB-001",
+    kind: "cursor_contract",
+    summary: "create_dubsar_work_cursor_agent arguments persisted",
+    evidence: envelope,
+  });
+  const server = startServer();
+  try {
+    await server.call("initialize", {
+      protocolVersion: "2024-11-05",
+      capabilities: {},
+      clientInfo: { name: "test" },
+    });
+    const attached = await server.call("tools/call", {
+      name: "attach_cursor_receipt",
+      arguments: { ...context, ticket_id: "DUB-001", receipt: vector.realistic_receipt },
+    });
+    assert.equal(attached.result.structuredContent.state, "In Progress");
+  } finally {
+    await stopServer(server.child);
+  }
+  const restarted = startServer();
+  try {
+    await restarted.call("initialize", {
+      protocolVersion: "2024-11-05",
+      capabilities: {},
+      clientInfo: { name: "test" },
+    });
+    const reread = await restarted.call("tools/call", {
+      name: "get_ticket",
+      arguments: { ...context, ticket_id: "DUB-001" },
+    });
+    const body = reread.result.structuredContent;
+    assert.equal(body.prepared_contract.arguments.correction_budget, 3);
+    assert.equal(body.attached_receipt.bounds.correction_budget, 3);
+    assert.equal("correction_policy" in body.attached_receipt.bounds, false);
+    assert.equal(body.attached_receipt.run_id, vector.realistic_receipt.run_id);
+  } finally {
+    await stopServer(restarted.child);
   }
 });

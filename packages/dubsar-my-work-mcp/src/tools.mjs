@@ -17,6 +17,7 @@ import {
   CONTROLLER_TOOL,
   controllerToolCall,
   refsMatch,
+  requireNewCorrectionBudget,
 } from "./mission-args.mjs";
 import { callCreateDubsarWorkCursorAgent, controllerLaunchConfigured } from "./controller-client.mjs";
 import { readCredentials } from "./oauth-store.mjs";
@@ -99,7 +100,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
         preferred_plugins: { type: "array", items: { type: "string" } },
         required_plugins: { type: "array", items: { type: "string" } },
         human_gates: { type: "array", items: { type: "string" } },
-        correction_budget: { type: "integer" },
+        correction_budget: { type: "string", const: "uncapped" },
       },
     },
   },
@@ -142,7 +143,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
         preferred_plugins: { type: "array", items: { type: "string" } },
         required_plugins: { type: "array", items: { type: "string" } },
         human_gates: { type: "array", items: { type: "string" } },
-        correction_budget: { type: "integer" },
+        correction_budget: { type: "string", const: "uncapped" },
       },
     },
   },
@@ -279,9 +280,7 @@ export async function executeTool(name, args = {}) {
       ) {
         throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
       }
-      if (args.correction_budget != null && args.correction_budget !== 3) {
-        throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
-      }
+      requireNewCorrectionBudget(args.correction_budget);
       const linearIssue = args.linear_issue_id ?? args.linear_issue;
       const envelopeInput = {
         targetRepositoryUrl: args.target_repository_url,
@@ -470,6 +469,20 @@ export async function executeTool(name, args = {}) {
       }
       if (receipt.contract_fingerprint !== expected) {
         throw new MyWorkMcpError("MY_WORK_FINGERPRINT_MISMATCH");
+      }
+      const receiptVersion = receipt.receipt_version;
+      if (
+        receiptVersion !== "dubsar.cursor-launch-receipt/1" &&
+        receiptVersion !== "dubsar.cursor-run-receipt/1"
+      ) {
+        throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
+      }
+      const hasCorrectionNumber = Object.hasOwn(receipt.bounds ?? {}, "correction_number");
+      if (receiptVersion === "dubsar.cursor-launch-receipt/1" && hasCorrectionNumber) {
+        throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
+      }
+      if (receiptVersion === "dubsar.cursor-run-receipt/1" && !hasCorrectionNumber) {
+        throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
       }
       if (String(receipt.target_repository_url ?? "") !== String(preparedArgs.target_repository_url ?? "")) {
         throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");

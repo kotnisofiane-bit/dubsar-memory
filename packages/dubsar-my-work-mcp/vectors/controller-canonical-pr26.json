@@ -1,0 +1,195 @@
+{
+  "controller_repository": "https://github.com/kotnisofiane-bit/kotnisofiane-bit-dubsar-cursor-reader-mcp",
+  "controller_revision": "90a35ac02cf22399e389b048acf2c074053b763d",
+  "controller_tool": "create_dubsar_work_cursor_agent",
+  "controller_source_files": [
+    "src/dubsar-work.ts",
+    "src/mission-envelope.ts",
+    "src/index.ts",
+    "docs/uncapped-correction-policy.md"
+  ],
+  "fingerprint_algorithm": "sha256: + SHA-256(UTF-8 JSON.stringify of the 13-key object in Controller src/dubsar-work.ts key order)",
+  "controller_ordered_fingerprint_json": "{\"acceptance_criteria\":[\"Le ticket DUB-001 reste le seul identifiant d allocation.\",\"Les changements respectent allowed_paths et le SHA de départ déclaré.\"],\"allowed_paths\":[\"packages/dubsar-my-work-mcp/**\"],\"correction_budget\":\"uncapped\",\"expected_evidence\":[\"diff GitHub borné aux allowed_paths\",\"sortie des tests ciblés du lot\"],\"human_gates\":[\"merge\",\"local_install\",\"deployment\",\"publication\",\"vm_cloud\",\"secrets\",\"backend_switch\",\"scope_extension\"],\"mission\":\"Préparer create_dubsar_work_cursor_agent sans reconstruction Work.\",\"preferred_plugins\":[],\"pr_repository_url\":\"https://github.com/kotnisofiane-bit/dubsar-memory\",\"required_capabilities\":[\"Node.js 20 ou supérieur\",\"Implémentation MCP stdio locale\",\"Réutilisation des APIs tickets My Work existantes\",\"Tests node:test avec vrai sous-processus\"],\"required_plugins\":[],\"repository_refs\":[{\"repository_url\":\"https://github.com/kotnisofiane-bit/dubsar-memory\",\"starting_sha\":\"799bd4d72f4ee290adc8c4f481a1fb25c072169f\"}],\"target_repository_url\":\"https://github.com/kotnisofiane-bit/dubsar-memory\",\"ticket_id\":\"DUB-001\"}",
+  "expected_contract_fingerprint": "sha256:0f70c44c67c84c156eca8d8fcf57cf25340447d5e4d19867377ee2e3be87e3b6",
+  "unsigned_arguments": {
+    "ticket_id": "DUB-001",
+    "target_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
+    "pr_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
+    "repository_refs": [
+      {
+        "repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
+        "starting_sha": "799bd4d72f4ee290adc8c4f481a1fb25c072169f"
+      }
+    ],
+    "allowed_paths": [
+      "packages/dubsar-my-work-mcp/**"
+    ],
+    "mission": "Préparer create_dubsar_work_cursor_agent sans reconstruction Work.",
+    "acceptance_criteria": [
+      "Le ticket DUB-001 reste le seul identifiant d allocation.",
+      "Les changements respectent allowed_paths et le SHA de départ déclaré."
+    ],
+    "expected_evidence": [
+      "diff GitHub borné aux allowed_paths",
+      "sortie des tests ciblés du lot"
+    ],
+    "required_capabilities": [
+      "Node.js 20 ou supérieur",
+      "Implémentation MCP stdio locale",
+      "Réutilisation des APIs tickets My Work existantes",
+      "Tests node:test avec vrai sous-processus"
+    ],
+    "preferred_plugins": [],
+    "required_plugins": [],
+    "human_gates": [
+      "merge",
+      "local_install",
+      "deployment",
+      "publication",
+      "vm_cloud",
+      "secrets",
+      "backend_switch",
+      "scope_extension"
+    ],
+    "correction_budget": "uncapped"
+  },
+  "receipt_bounds": {
+    "allowed_paths": [
+      "packages/dubsar-my-work-mcp/**"
+    ],
+    "auto_create_pr": true,
+    "correction_budget": "uncapped",
+    "correction_policy": "uncapped",
+    "human_gates": [
+      "merge",
+      "local_install",
+      "deployment",
+      "publication",
+      "vm_cloud",
+      "secrets",
+      "backend_switch",
+      "scope_extension"
+    ],
+    "pr_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
+    "stateless": true,
+    "work_on_current_branch": false
+  },
+  "realistic_receipt": {
+    "receipt_version": "dubsar.cursor-launch-receipt/1",
+    "target_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
+    "contract_fingerprint": "sha256:0f70c44c67c84c156eca8d8fcf57cf25340447d5e4d19867377ee2e3be87e3b6",
+    "repository_refs": [
+      {
+        "repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
+        "starting_sha": "799bd4d72f4ee290adc8c4f481a1fb25c072169f"
+      }
+    ],
+    "ticket_id": "DUB-001",
+    "agent_id": "bc-pr26-controller-sample",
+    "run_id": "run-pr26-controller-sample",
+    "source_url": "https://cursor.com/agents/bc-pr26-controller-sample",
+    "status": "CREATING",
+    "bounds": {
+      "allowed_paths": [
+        "packages/dubsar-my-work-mcp/**"
+      ],
+      "auto_create_pr": true,
+      "correction_budget": "uncapped",
+      "correction_policy": "uncapped",
+      "human_gates": [
+        "merge",
+        "local_install",
+        "deployment",
+        "publication",
+        "vm_cloud",
+        "secrets",
+        "backend_switch",
+        "scope_extension"
+      ],
+      "pr_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
+      "stateless": true,
+      "work_on_current_branch": false
+    }
+  },
+  "source_attribution": {
+    "kind": "codex_github_audit",
+    "controller_revision": "90a35ac02cf22399e389b048acf2c074053b763d",
+    "note": "This agent could not read the private Controller repository. Follow-up receipt shape is taken from the Codex GitHub observation of createDubsarWorkCursorAgentRun in src/dubsar-work.ts: receipt_version dubsar.cursor-run-receipt/1, same agent_id, new run_id/source_url/status, bounds = {...receiptBounds(mission), correction_number}."
+  },
+  "follow_up_4_receipt": {
+    "receipt_version": "dubsar.cursor-run-receipt/1",
+    "target_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
+    "contract_fingerprint": "sha256:0f70c44c67c84c156eca8d8fcf57cf25340447d5e4d19867377ee2e3be87e3b6",
+    "repository_refs": [
+      {
+        "repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
+        "starting_sha": "799bd4d72f4ee290adc8c4f481a1fb25c072169f"
+      }
+    ],
+    "ticket_id": "DUB-001",
+    "agent_id": "bc-pr26-controller-sample",
+    "run_id": "run-pr26-follow-up-4",
+    "source_url": "https://cursor.com/agents/bc-pr26-follow-up-4",
+    "status": "RUNNING",
+    "bounds": {
+      "allowed_paths": [
+        "packages/dubsar-my-work-mcp/**"
+      ],
+      "auto_create_pr": true,
+      "correction_budget": "uncapped",
+      "correction_policy": "uncapped",
+      "human_gates": [
+        "merge",
+        "local_install",
+        "deployment",
+        "publication",
+        "vm_cloud",
+        "secrets",
+        "backend_switch",
+        "scope_extension"
+      ],
+      "pr_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
+      "stateless": true,
+      "work_on_current_branch": false,
+      "correction_number": 4
+    }
+  },
+  "follow_up_5_receipt": {
+    "receipt_version": "dubsar.cursor-run-receipt/1",
+    "target_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
+    "contract_fingerprint": "sha256:0f70c44c67c84c156eca8d8fcf57cf25340447d5e4d19867377ee2e3be87e3b6",
+    "repository_refs": [
+      {
+        "repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
+        "starting_sha": "799bd4d72f4ee290adc8c4f481a1fb25c072169f"
+      }
+    ],
+    "ticket_id": "DUB-001",
+    "agent_id": "bc-pr26-controller-sample",
+    "run_id": "run-pr26-follow-up-5",
+    "source_url": "https://cursor.com/agents/bc-pr26-follow-up-5",
+    "status": "UNKNOWN",
+    "bounds": {
+      "allowed_paths": [
+        "packages/dubsar-my-work-mcp/**"
+      ],
+      "auto_create_pr": true,
+      "correction_budget": "uncapped",
+      "correction_policy": "uncapped",
+      "human_gates": [
+        "merge",
+        "local_install",
+        "deployment",
+        "publication",
+        "vm_cloud",
+        "secrets",
+        "backend_switch",
+        "scope_extension"
+      ],
+      "pr_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
+      "stateless": true,
+      "work_on_current_branch": false,
+      "correction_number": 5
+    }
+  }
+}
