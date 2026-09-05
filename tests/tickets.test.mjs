@@ -109,3 +109,43 @@ test("locks malformé, surdimensionné, symbolique et hardlinké échouent ferm�
     assert.equal((await readTicketAllocations(env)).allocations.length, 0);
   }
 });
+
+test("reçus budget 3 et uncapped restent lisibles sans réécriture", async () => {
+  const env = await environment();
+  await perform(env, env.first, "project-a", create());
+  const budget3 = {
+    receipt_version: "dubsar.cursor-launch-receipt/1",
+    target_repository_url: "https://github.com/owner/repo",
+    contract_fingerprint: `sha256:${"b".repeat(64)}`,
+    repository_refs: [{ repository_url: "https://github.com/owner/repo", starting_sha: "a".repeat(40) }],
+    ticket_id: "DUB-001",
+    agent_id: "agent-legacy",
+    run_id: "run-legacy",
+    source_url: "https://cursor.example/runs/legacy",
+    status: "launched",
+    bounds: { auto_create_pr: true, correction_budget: 3, stateless: true, work_on_current_branch: false },
+  };
+  await perform(env, env.first, "project-a", { type: "attach-cursor-launch", id: "DUB-001", receipt: budget3 });
+  const afterLegacy = (await readTickets({ start: env.first })).tickets[0];
+  assert.equal(afterLegacy.cursor_launch.bounds.correction_budget, 3);
+  assert.equal("correction_policy" in afterLegacy.cursor_launch.bounds, false);
+  const env2 = await environment();
+  await perform(env2, env2.first, "project-a", create());
+  const uncapped = {
+    ...budget3,
+    agent_id: "agent-uncapped",
+    run_id: "run-uncapped",
+    source_url: "https://cursor.example/runs/uncapped",
+    bounds: {
+      auto_create_pr: true,
+      correction_budget: "uncapped",
+      correction_policy: "uncapped",
+      stateless: true,
+      work_on_current_branch: false,
+    },
+  };
+  await perform(env2, env2.first, "project-a", { type: "attach-cursor-launch", id: "DUB-001", receipt: uncapped });
+  const afterUncapped = (await readTickets({ start: env2.first })).tickets[0];
+  assert.equal(afterUncapped.cursor_launch.bounds.correction_budget, "uncapped");
+  assert.equal(afterUncapped.cursor_launch.bounds.correction_policy, "uncapped");
+});

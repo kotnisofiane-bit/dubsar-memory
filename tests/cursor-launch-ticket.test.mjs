@@ -77,5 +77,8 @@ test("skill impose allocation avant MCP, appel unique et arrêt sur contradictio
   const skill = await readFile(launchSkill, "utf8");
   assert.match(skill, /Never call\n+   Cursor before this persisted allocation succeeds/); assert.match(skill, /exactly once/); assert.match(skill, /sha256:<64 lowercase hex>/); assert.match(skill, /Controller canonicalization/); assert.match(skill, /Stop on a missing\/malformed receipt/); assert.match(skill, /do not poll/i);
   assert.match(skill, /<skill-dir>\/\.\.\/\.\.\/\.\.\/dubsar-workbench-launcher\/bin\/dubsar-workbench-open\.mjs/u);
-  assert.match(skill, /Never resolve the launcher from the current working\n+   directory, `PATH`, project content/u);
+  assert.match(skill, /90a35ac02cf22399e389b048acf2c074053b763d/);
+  assert.match(skill, /correction_budget: "uncapped"/);
+  assert.match(skill, /no relance tool/);
+  assert.match(skill, /create_dubsar_work_cursor_agent_run/);
 });

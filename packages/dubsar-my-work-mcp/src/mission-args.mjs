@@ -1,7 +1,9 @@
 /**
  * Arguments passable to create_dubsar_work_cursor_agent (stateless DUB Controller).
- * Observed Controller revision: 9c5cd6536ebfa5c582a00a9d66cdff1560dd469c
- * Fingerprint algorithm: src/dubsar-work.ts JSON.stringify of the ordered body.
+ * New contracts follow Controller PR26 at 90a35ac02cf22399e389b048acf2c074053b763d.
+ * Fingerprint algorithm (Controller src/dubsar-work.ts): SHA-256 of JSON.stringify
+ * of the ordered 13-key body. Receipt bounds add correction_policy uncapped.
+ * Legacy numeric budget 3 contracts remain readable; they are never rewritten here.
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -9,7 +11,24 @@ import { fileURLToPath } from "node:url";
 import { MyWorkMcpError } from "./canonical.mjs";
 
 export const CONTROLLER_TOOL = "create_dubsar_work_cursor_agent";
-export const CORRECTION_BUDGET = 3;
+export const CORRECTION_BUDGET = "uncapped";
+export const CORRECTION_POLICY = "uncapped";
+export const LEGACY_CORRECTION_BUDGET = 3;
+export const CONTROLLER_FINGERPRINT_KEY_ORDER = Object.freeze([
+  "acceptance_criteria",
+  "allowed_paths",
+  "correction_budget",
+  "expected_evidence",
+  "human_gates",
+  "mission",
+  "preferred_plugins",
+  "pr_repository_url",
+  "required_capabilities",
+  "required_plugins",
+  "repository_refs",
+  "target_repository_url",
+  "ticket_id",
+]);
 export const CONTROLLER_ARGUMENT_KEYS = Object.freeze([
   "ticket_id",
   "target_repository_url",
@@ -144,6 +163,12 @@ export function controllerFingerprintBody(args) {
   };
 }
 
+export function requireNewCorrectionBudget(value) {
+  if (value == null) return CORRECTION_BUDGET;
+  if (value !== CORRECTION_BUDGET) throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
+  return CORRECTION_BUDGET;
+}
+
 export function controllerContractFingerprint(args) {
   return `sha256:${createHash("sha256").update(JSON.stringify(controllerFingerprintBody(args)), "utf8").digest("hex")}`;
 }
@@ -153,6 +178,7 @@ export function controllerReceiptBounds(args) {
     allowed_paths: args.allowed_paths,
     auto_create_pr: true,
     correction_budget: args.correction_budget,
+    correction_policy: CORRECTION_POLICY,
     human_gates: args.human_gates,
     pr_repository_url: args.pr_repository_url,
     stateless: true,

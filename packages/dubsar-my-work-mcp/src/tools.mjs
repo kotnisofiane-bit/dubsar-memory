@@ -17,6 +17,7 @@ import {
   CONTROLLER_TOOL,
   controllerToolCall,
   refsMatch,
+  requireNewCorrectionBudget,
 } from "./mission-args.mjs";
 import { callCreateDubsarWorkCursorAgent, controllerLaunchConfigured } from "./controller-client.mjs";
 import { readCredentials } from "./oauth-store.mjs";
@@ -99,7 +100,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
         preferred_plugins: { type: "array", items: { type: "string" } },
         required_plugins: { type: "array", items: { type: "string" } },
         human_gates: { type: "array", items: { type: "string" } },
-        correction_budget: { type: "integer" },
+        correction_budget: { type: "string", const: "uncapped" },
       },
     },
   },
@@ -142,7 +143,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
         preferred_plugins: { type: "array", items: { type: "string" } },
         required_plugins: { type: "array", items: { type: "string" } },
         human_gates: { type: "array", items: { type: "string" } },
-        correction_budget: { type: "integer" },
+        correction_budget: { type: "string", const: "uncapped" },
       },
     },
   },
@@ -279,9 +280,7 @@ export async function executeTool(name, args = {}) {
       ) {
         throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
       }
-      if (args.correction_budget != null && args.correction_budget !== 3) {
-        throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
-      }
+      requireNewCorrectionBudget(args.correction_budget);
       const linearIssue = args.linear_issue_id ?? args.linear_issue;
       const envelopeInput = {
         targetRepositoryUrl: args.target_repository_url,
