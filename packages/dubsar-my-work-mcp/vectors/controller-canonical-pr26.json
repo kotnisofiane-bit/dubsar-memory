@@ -21,7 +21,9 @@
         "starting_sha": "799bd4d72f4ee290adc8c4f481a1fb25c072169f"
       }
     ],
-    "allowed_paths": ["packages/dubsar-my-work-mcp/**"],
+    "allowed_paths": [
+      "packages/dubsar-my-work-mcp/**"
+    ],
     "mission": "Préparer create_dubsar_work_cursor_agent sans reconstruction Work.",
     "acceptance_criteria": [
       "Le ticket DUB-001 reste le seul identifiant d allocation.",
@@ -52,7 +54,9 @@
     "correction_budget": "uncapped"
   },
   "receipt_bounds": {
-    "allowed_paths": ["packages/dubsar-my-work-mcp/**"],
+    "allowed_paths": [
+      "packages/dubsar-my-work-mcp/**"
+    ],
     "auto_create_pr": true,
     "correction_budget": "uncapped",
     "correction_policy": "uncapped",
@@ -86,7 +90,9 @@
     "source_url": "https://cursor.com/agents/bc-pr26-controller-sample",
     "status": "CREATING",
     "bounds": {
-      "allowed_paths": ["packages/dubsar-my-work-mcp/**"],
+      "allowed_paths": [
+        "packages/dubsar-my-work-mcp/**"
+      ],
       "auto_create_pr": true,
       "correction_budget": "uncapped",
       "correction_policy": "uncapped",
@@ -105,8 +111,13 @@
       "work_on_current_branch": false
     }
   },
+  "source_attribution": {
+    "kind": "codex_github_audit",
+    "controller_revision": "90a35ac02cf22399e389b048acf2c074053b763d",
+    "note": "This agent could not read the private Controller repository. Follow-up receipt shape is taken from the Codex GitHub observation of createDubsarWorkCursorAgentRun in src/dubsar-work.ts: receipt_version dubsar.cursor-run-receipt/1, same agent_id, new run_id/source_url/status, bounds = {...receiptBounds(mission), correction_number}."
+  },
   "follow_up_4_receipt": {
-    "receipt_version": "dubsar.cursor-launch-receipt/1",
+    "receipt_version": "dubsar.cursor-run-receipt/1",
     "target_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
     "contract_fingerprint": "sha256:0f70c44c67c84c156eca8d8fcf57cf25340447d5e4d19867377ee2e3be87e3b6",
     "repository_refs": [
@@ -116,12 +127,14 @@
       }
     ],
     "ticket_id": "DUB-001",
-    "agent_id": "bc-pr26-follow-up-4",
+    "agent_id": "bc-pr26-controller-sample",
     "run_id": "run-pr26-follow-up-4",
     "source_url": "https://cursor.com/agents/bc-pr26-follow-up-4",
     "status": "RUNNING",
     "bounds": {
-      "allowed_paths": ["packages/dubsar-my-work-mcp/**"],
+      "allowed_paths": [
+        "packages/dubsar-my-work-mcp/**"
+      ],
       "auto_create_pr": true,
       "correction_budget": "uncapped",
       "correction_policy": "uncapped",
@@ -137,11 +150,12 @@
       ],
       "pr_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
       "stateless": true,
-      "work_on_current_branch": false
+      "work_on_current_branch": false,
+      "correction_number": 4
     }
   },
   "follow_up_5_receipt": {
-    "receipt_version": "dubsar.cursor-launch-receipt/1",
+    "receipt_version": "dubsar.cursor-run-receipt/1",
     "target_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
     "contract_fingerprint": "sha256:0f70c44c67c84c156eca8d8fcf57cf25340447d5e4d19867377ee2e3be87e3b6",
     "repository_refs": [
@@ -151,12 +165,14 @@
       }
     ],
     "ticket_id": "DUB-001",
-    "agent_id": "bc-pr26-follow-up-5",
+    "agent_id": "bc-pr26-controller-sample",
     "run_id": "run-pr26-follow-up-5",
     "source_url": "https://cursor.com/agents/bc-pr26-follow-up-5",
-    "status": "RUNNING",
+    "status": "UNKNOWN",
     "bounds": {
-      "allowed_paths": ["packages/dubsar-my-work-mcp/**"],
+      "allowed_paths": [
+        "packages/dubsar-my-work-mcp/**"
+      ],
       "auto_create_pr": true,
       "correction_budget": "uncapped",
       "correction_policy": "uncapped",
@@ -172,7 +188,8 @@
       ],
       "pr_repository_url": "https://github.com/kotnisofiane-bit/dubsar-memory",
       "stateless": true,
-      "work_on_current_branch": false
+      "work_on_current_branch": false,
+      "correction_number": 5
     }
   }
 }

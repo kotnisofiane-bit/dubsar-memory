@@ -18,8 +18,10 @@ repository (`owner/name`). My Work is a local view, not an MCP client.
 - New contracts send `correction_budget: "uncapped"`. Accept only
   `dubsar.cursor-launch-receipt/1` or `dubsar.cursor-run-receipt/1` whose
   bounds match the persisted metadata (`correction_budget` and
-  `correction_policy` both `uncapped` for new receipts). Never persist
-  credentials or MCP tokens.
+  `correction_policy` both `uncapped` for new receipts). Run receipts from
+  Controller `createDubsarWorkCursorAgentRun` keep the same `agent_id` and
+  add `bounds.correction_number`; they may be attached as the first matching
+  receipt only. Never persist credentials or MCP tokens.
 
 ## Workflow
 

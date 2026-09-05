@@ -479,10 +479,8 @@ test("legacy budget-3 tickets and receipts stay readable and unchanged after rer
   assert.equal((await readFile(ticketsFile)).toString("utf8"), before.toString("utf8"));
 });
 
-test("follow-up receipts 4 and 5 attach at existing bounds; My Work does not relaunch", async () => {
-  const vector = JSON.parse(await readFile(path.join(mcpRoot, "vectors", "controller-canonical-pr26.json"), "utf8"));
-  const context = await env();
-  await executeTool("prepare_cursor_mission", {
+async function preparePr26(context, vector) {
+  return executeTool("prepare_cursor_mission", {
     ...context,
     title: "KOT-126",
     objective: "MCP local My Work",
@@ -498,13 +496,50 @@ test("follow-up receipts 4 and 5 attach at existing bounds; My Work does not rel
     required_plugins: vector.unsigned_arguments.required_plugins,
     human_gates: vector.unsigned_arguments.human_gates,
   });
-  const first = await executeTool("attach_cursor_receipt", {
+}
+
+test("isolated Controller run receipts 4 and 5 attach as first matching receipts", async () => {
+  const vector = JSON.parse(await readFile(path.join(mcpRoot, "vectors", "controller-canonical-pr26.json"), "utf8"));
+  assert.equal(vector.follow_up_4_receipt.receipt_version, "dubsar.cursor-run-receipt/1");
+  assert.equal(vector.follow_up_5_receipt.receipt_version, "dubsar.cursor-run-receipt/1");
+  assert.equal(vector.follow_up_4_receipt.agent_id, vector.realistic_receipt.agent_id);
+  assert.equal(vector.follow_up_5_receipt.agent_id, vector.realistic_receipt.agent_id);
+  assert.equal(vector.follow_up_4_receipt.bounds.correction_number, 4);
+  assert.equal(vector.follow_up_5_receipt.bounds.correction_number, 5);
+  const four = await env();
+  await preparePr26(four, vector);
+  const attachedFour = await executeTool("attach_cursor_receipt", {
+    ...four,
+    ticket_id: "DUB-001",
+    receipt: vector.follow_up_4_receipt,
+  });
+  assert.equal(attachedFour.state, "In Progress");
+  assert.equal(attachedFour.cursor_launch.run_id, vector.follow_up_4_receipt.run_id);
+  assert.equal(attachedFour.cursor_launch.bounds.correction_number, 4);
+  const five = await env();
+  await preparePr26(five, vector);
+  const attachedFive = await executeTool("attach_cursor_receipt", {
+    ...five,
+    ticket_id: "DUB-001",
+    receipt: vector.follow_up_5_receipt,
+  });
+  assert.equal(attachedFive.state, "In Progress");
+  assert.equal(attachedFive.cursor_launch.run_id, vector.follow_up_5_receipt.run_id);
+  assert.equal(attachedFive.cursor_launch.bounds.correction_number, 5);
+  assert.equal(TOOL_NAMES.includes("create_dubsar_work_cursor_agent_run"), false);
+});
+
+test("already-attached receipt cannot be replaced; run-receipt divergences are refused", async () => {
+  const vector = JSON.parse(await readFile(path.join(mcpRoot, "vectors", "controller-canonical-pr26.json"), "utf8"));
+  const context = await env();
+  await preparePr26(context, vector);
+  await executeTool("attach_cursor_receipt", {
     ...context,
     ticket_id: "DUB-001",
     receipt: vector.follow_up_4_receipt,
   });
-  assert.equal(first.state, "In Progress");
-  assert.equal(first.cursor_launch.run_id, "run-pr26-follow-up-4");
+  const ticketsFile = path.join(context.start, ".dubsar", "tickets.json");
+  const before = await readFile(ticketsFile);
   await assert.rejects(
     executeTool("attach_cursor_receipt", {
       ...context,
@@ -513,10 +548,39 @@ test("follow-up receipts 4 and 5 attach at existing bounds; My Work does not rel
     }),
     { code: "MY_WORK_RECEIPT_MISMATCH" },
   );
-  const loaded = await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" });
-  assert.equal(loaded.attached_receipt.run_id, "run-pr26-follow-up-4");
-  assert.equal(loaded.attached_receipt.bounds.correction_budget, "uncapped");
-  assert.equal(TOOL_NAMES.includes("create_dubsar_work_cursor_agent_run"), false);
+  const other = await env();
+  await preparePr26(other, vector);
+  await assert.rejects(
+    executeTool("attach_cursor_receipt", {
+      ...other,
+      ticket_id: "DUB-001",
+      receipt: {
+        ...vector.follow_up_4_receipt,
+        bounds: { ...vector.follow_up_4_receipt.bounds, correction_budget: 3 },
+      },
+    }),
+    { code: "MY_WORK_RECEIPT_MISMATCH" },
+  );
+  await assert.rejects(
+    executeTool("attach_cursor_receipt", {
+      ...other,
+      ticket_id: "DUB-001",
+      receipt: { ...vector.follow_up_4_receipt, receipt_version: "dubsar.cursor-launch-receipt/1" },
+    }),
+    { code: "MY_WORK_RECEIPT_MISMATCH" },
+  );
+  const withoutNumber = structuredClone(vector.follow_up_4_receipt);
+  delete withoutNumber.bounds.correction_number;
+  await assert.rejects(
+    executeTool("attach_cursor_receipt", {
+      ...other,
+      ticket_id: "DUB-001",
+      receipt: withoutNumber,
+    }),
+    { code: "MY_WORK_RECEIPT_MISMATCH" },
+  );
+  assert.equal((await readFile(ticketsFile)).toString("utf8"), before.toString("utf8"));
+  assert.equal((await readTickets({ start: other.start })).tickets[0].cursor_launch, null);
 });
 
 test("ambiguous Controller response is not retried and fabricates no receipt", async () => {

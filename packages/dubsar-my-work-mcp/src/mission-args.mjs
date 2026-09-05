@@ -212,7 +212,18 @@ export function refsMatch(left, right) {
 }
 
 export function boundsMatch(receiptBounds, expected) {
-  return JSON.stringify(receiptBounds) === JSON.stringify(expected);
+  if (JSON.stringify(receiptBounds) === JSON.stringify(expected)) return true;
+  if (!receiptBounds || typeof receiptBounds !== "object" || Array.isArray(receiptBounds)) {
+    return false;
+  }
+  if (!Number.isSafeInteger(receiptBounds.correction_number) || receiptBounds.correction_number < 1) {
+    return false;
+  }
+  const expectedRunBounds = {
+    ...expected,
+    correction_number: receiptBounds.correction_number,
+  };
+  return JSON.stringify(receiptBounds) === JSON.stringify(expectedRunBounds);
 }
 
 export function humanGatesCatalog() {

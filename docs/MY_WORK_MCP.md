@@ -9,11 +9,17 @@ does not call Cursor MCP separately.
 only the existing `prepare_cursor_mission.arguments` object, unchanged.
 
 New contracts send `correction_budget: "uncapped"` and expect Controller PR26
-receipt bounds that also contain `correction_policy: "uncapped"`. My Work does
-**not** expose a follow-up / relance tool (`create_dubsar_work_cursor_agent_run`
-is never called). Relances 4 and 5, if they exist, are Controller-side only:
-a matching first receipt can be attached; a later distinct receipt is refused
-without rewrite; a second `launch_cursor_mission` is `MY_WORK_LAUNCH_NOT_RETRYABLE`.
+launch receipt bounds that also contain `correction_policy: "uncapped"`. My Work
+does **not** expose a follow-up / relance tool
+(`create_dubsar_work_cursor_agent_run` is never called). Controller run receipts
+(`dubsar.cursor-run-receipt/1`) for corrections 4 and 5 reuse the same
+`agent_id` and contract fingerprint, add `bounds.correction_number`, and may be
+attached as the **first** matching receipt. A later distinct receipt is refused
+without rewrite; a second `launch_cursor_mission` is
+`MY_WORK_LAUNCH_NOT_RETRYABLE`. Receipt shape for those run receipts is taken
+from the Codex GitHub observation of Controller
+`90a35ac02cf22399e389b048acf2c074053b763d` (`createDubsarWorkCursorAgentRun`);
+this session did not read that private repository.
 
 ## Start
 

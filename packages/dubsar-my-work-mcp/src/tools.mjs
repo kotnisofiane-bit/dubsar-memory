@@ -470,6 +470,20 @@ export async function executeTool(name, args = {}) {
       if (receipt.contract_fingerprint !== expected) {
         throw new MyWorkMcpError("MY_WORK_FINGERPRINT_MISMATCH");
       }
+      const receiptVersion = receipt.receipt_version;
+      if (
+        receiptVersion !== "dubsar.cursor-launch-receipt/1" &&
+        receiptVersion !== "dubsar.cursor-run-receipt/1"
+      ) {
+        throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
+      }
+      const hasCorrectionNumber = Object.hasOwn(receipt.bounds ?? {}, "correction_number");
+      if (receiptVersion === "dubsar.cursor-launch-receipt/1" && hasCorrectionNumber) {
+        throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
+      }
+      if (receiptVersion === "dubsar.cursor-run-receipt/1" && !hasCorrectionNumber) {
+        throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
+      }
       if (String(receipt.target_repository_url ?? "") !== String(preparedArgs.target_repository_url ?? "")) {
         throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
       }
