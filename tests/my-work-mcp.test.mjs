@@ -508,7 +508,51 @@ test("public continuation reuses ticket and agent, records 4 then 5, and keeps l
       github_observation: null,
     });
     assert.equal(synced.ticket.state, "In Progress");
+    const syncEvidence = synced.ticket.activity.findLast((row) => row.kind === "cursor_sync")?.evidence;
+    assert.equal(syncEvidence.run_id, vector.follow_up_5_receipt.run_id);
     assert.equal(TOOL_NAMES.includes("create_dubsar_work_cursor_agent_run"), false);
+  } finally {
+    resetTestControllerTransport();
+  }
+});
+
+test("continuation refuses terminal tickets before any Controller run call", async () => {
+  const context = await env();
+  const calls = [];
+  setTestControllerTransport(async (request) => {
+    calls.push(request);
+    return receiptFor({
+      arguments: request.arguments,
+      contract_fingerprint: (await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" })).prepared_contract.contract_fingerprint,
+      receipt_bounds: (await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" })).prepared_contract.receipt_bounds,
+    });
+  });
+  try {
+    await executeTool("launch_cursor_mission", { ...context, ...mission() });
+    const preview = await previewTicketChange({
+      start: context.start,
+      allocationRoot: context.allocation_root,
+      projectId: context.project_id,
+      operation: { type: "transition", id: "DUB-001", to: "Cancelled" },
+    });
+    await applyTicketChange({
+      start: context.start,
+      allocationRoot: context.allocation_root,
+      projectId: context.project_id,
+      operation: { type: "transition", id: "DUB-001", to: "Cancelled" },
+      expectedChange: preview.change_sha256,
+    });
+    const before = calls.length;
+    await assert.rejects(
+      executeTool("continue_cursor_mission", {
+        ...context,
+        ticket_id: "DUB-001",
+        correction_number: 4,
+        prompt: "must not launch",
+      }),
+      { code: "MY_WORK_TICKET_TERMINAL" },
+    );
+    assert.equal(calls.length, before);
   } finally {
     resetTestControllerTransport();
   }

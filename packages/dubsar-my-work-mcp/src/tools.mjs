@@ -5,6 +5,7 @@ import {
   previewTicketChange,
   readTicketAllocations,
   readTickets,
+  TERMINAL_TICKET_STATES,
 } from "../../dubsar-workbench-launcher/src/registry-store.mjs";
 import {
   CONTRACT_FINGERPRINT,
@@ -567,6 +568,9 @@ export async function executeTool(name, args = {}) {
       const contract = preparedContractFrom(ticket);
       if (!contract) throw new MyWorkMcpError("MY_WORK_FINGERPRINT_MISMATCH");
       if (!ticket.cursor_launch) throw new MyWorkMcpError("MY_WORK_LAUNCH_REQUIRED");
+      if (TERMINAL_TICKET_STATES.includes(ticket.state)) {
+        throw new MyWorkMcpError("MY_WORK_TICKET_TERMINAL");
+      }
       if (!contractAllowsUncappedContinuation(contract)) {
         throw new MyWorkMcpError("MY_WORK_CORRECTION_BUDGET_CAPPED");
       }

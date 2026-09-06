@@ -206,7 +206,7 @@ function cursorObservation(value, ticket) {
     const branch = observation.pr.branch == null ? undefined : text(observation.pr.branch, 300, "TICKET_SYNC_CONTRADICTION");
     pr = Object.freeze({ repository: observation.pr.repository, number: observation.pr.number, ...(branch === undefined ? {} : { branch }) });
   }
-  return Object.freeze({ source: "trusted_cursor_observer", ticket_id: ticket.id, agent_id: ticket.cursor_launch.agent_id, run_id: ticket.cursor_launch.run_id, lifecycle: observation.lifecycle, pr });
+  return Object.freeze({ source: "trusted_cursor_observer", ticket_id: ticket.id, agent_id: receipt.agent_id, run_id: receipt.run_id, lifecycle: observation.lifecycle, pr });
 }
 function githubPrObservation(value, ticket, claimed) {
   if (value == null) {
