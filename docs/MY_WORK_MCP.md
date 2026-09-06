@@ -9,7 +9,7 @@ separately and does not expose the Controller tool names as My Work tools.
 
 `contract_fingerprint` and `receipt_bounds` stay local. The Controller receives
 only the existing `prepare_cursor_mission.arguments` object on launch, and the
-same persisted arguments plus `agent_id`, `correction_number`, and `prompt` on
+same persisted arguments plus `agent_url_or_id`, `correction_number`, and `prompt` on
 continuation.
 
 New contracts send `correction_budget: "uncapped"` and expect Controller PR26
@@ -95,8 +95,9 @@ fabricates no receipt, and later calls for that same launch or
 `launch_cursor_mission` copies **only** `prepare_cursor_mission.arguments` into
 `create_dubsar_work_cursor_agent`. It must not add, drop, or rebuild fields.
 `continue_cursor_mission` copies those same persisted arguments into
-`create_dubsar_work_cursor_agent_run` and adds only `agent_id` (from the
-initial launch receipt), `correction_number`, and `prompt`.
+`create_dubsar_work_cursor_agent_run` and adds only `agent_url_or_id` (the persisted
+launch receipt `agent_id`), `correction_number`, and `prompt`. The run **receipt**
+still carries `agent_id`.
 `contract_fingerprint` and `receipt_bounds` are **local metadata**.
 
 A successful launch receipt is attached only when `ticket_id`,

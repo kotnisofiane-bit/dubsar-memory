@@ -8,11 +8,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { encodeFrame, createFrameParser } from "../packages/dubsar-my-work-mcp/src/server.mjs";
 import { applyTicketChange, previewTicketChange, readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
-import { CONTROLLER_ARGUMENT_KEYS, CONTROLLER_RUN_ARGUMENT_KEYS, CONTROLLER_RUN_TOOL, CONTROLLER_TOOL } from "../packages/dubsar-my-work-mcp/src/mission-args.mjs";
+import { CONTROLLER_ARGUMENT_KEYS, CONTROLLER_RUN_ARGUMENT_KEYS, CONTROLLER_RUN_TOOL, CONTROLLER_TOOL, controllerRunToolCall } from "../packages/dubsar-my-work-mcp/src/mission-args.mjs";
 import { CREDENTIALS_FORMAT } from "../packages/dubsar-my-work-mcp/src/oauth-store.mjs";
 import {
   controllerToolsCallBody,
   legacyControllerLaunchHeaders,
+  parseSseJsonRpc,
   streamableMcpLaunchHeaders,
 } from "../packages/dubsar-my-work-mcp/src/controller-client.mjs";
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
@@ -367,7 +368,7 @@ async function servePinnedController({ receipt, runReceipts = new Map(), onCall 
       CONTROLLER_RUN_TOOL,
       {
         description: "Pinned createMcpHandler Controller run",
-        inputSchema: z.object({ ticket_id: z.string(), agent_id: z.string(), correction_number: z.number(), prompt: z.string() }).passthrough(),
+        inputSchema: z.object({ ticket_id: z.string(), agent_url_or_id: z.string(), correction_number: z.number(), prompt: z.string() }).passthrough(),
       },
       async (args) => {
         onCall?.({ tool: CONTROLLER_RUN_TOOL, args });
@@ -495,6 +496,54 @@ test("pinned createMcpHandler transport: legacy request is 406, launch decodes S
   }
 });
 
+test("pinned Controller run schema rejects agent_id-only and accepts agent_url_or_id", async () => {
+  const vector = JSON.parse(await readFile(vectorPath, "utf8"));
+  const runReceipts = new Map([
+    [4, vector.follow_up_4_receipt],
+  ]);
+  const calls = [];
+  const pinned = await servePinnedController({
+    receipt: vector.realistic_receipt,
+    runReceipts,
+    onCall(entry) {
+      calls.push(entry);
+    },
+  });
+  try {
+    const corrected = controllerRunToolCall(vector.unsigned_arguments, {
+      agentId: vector.realistic_receipt.agent_id,
+      correctionNumber: 4,
+      prompt: "Correction 4",
+    }).arguments;
+    const legacy = { ...corrected, agent_id: vector.realistic_receipt.agent_id };
+    delete legacy.agent_url_or_id;
+    const rejected = await fetch(pinned.url, {
+      method: "POST",
+      headers: streamableMcpLaunchHeaders("e2e-access-token"),
+      body: JSON.stringify(controllerToolsCallBody(legacy, CONTROLLER_RUN_TOOL)),
+    });
+    assert.equal(rejected.status, 200);
+    const rejectedPayload = parseSseJsonRpc(await rejected.text());
+    assert.equal(rejectedPayload.result?.isError === true || Boolean(rejectedPayload.error), true);
+    assert.equal(calls.some((item) => item.tool === CONTROLLER_RUN_TOOL), false);
+    const accepted = await fetch(pinned.url, {
+      method: "POST",
+      headers: streamableMcpLaunchHeaders("e2e-access-token"),
+      body: JSON.stringify(controllerToolsCallBody(corrected, CONTROLLER_RUN_TOOL)),
+    });
+    assert.equal(accepted.status, 200);
+    const acceptedPayload = parseSseJsonRpc(await accepted.text());
+    assert.notEqual(acceptedPayload.result?.isError, true);
+    assert.equal(acceptedPayload.error, undefined);
+    assert.equal(acceptedPayload.result?.structuredContent?.agent_id, vector.follow_up_4_receipt.agent_id);
+    assert.equal(calls.filter((item) => item.tool === CONTROLLER_RUN_TOOL).length, 1);
+    assert.equal(calls.at(-1).args.agent_url_or_id, vector.realistic_receipt.agent_id);
+    assert.equal("agent_id" in calls.at(-1).args, false);
+  } finally {
+    pinned.server.close();
+  }
+});
+
 test("E2E legacy budget-3 receipt survives MCP restart without rewrite", async () => {
   const start = await mkdtemp(path.join(tmpdir(), "dubsar-mcp-e2e-legacy-"));
   const allocationRoot = await mkdtemp(path.join(tmpdir(), "dubsar-mcp-e2e-legacy-global-"));
@@ -597,7 +646,8 @@ test("E2E public launch then continuations 4/5 persist history across restart wi
     }
     assert.equal(name, CONTROLLER_RUN_TOOL);
     assert.deepEqual(Object.keys(args).sort(), [...CONTROLLER_RUN_ARGUMENT_KEYS].sort());
-    assert.equal(args.agent_id, vector.realistic_receipt.agent_id);
+    assert.equal(args.agent_url_or_id, vector.realistic_receipt.agent_id);
+    assert.equal("agent_id" in args, false);
     const receipt = args.correction_number === 4 ? vector.follow_up_4_receipt : vector.follow_up_5_receipt;
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({

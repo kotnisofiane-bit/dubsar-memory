@@ -8,7 +8,7 @@ import { parse } from "acorn";
 import { TOOL_NAMES, executeTool } from "../packages/dubsar-my-work-mcp/src/tools.mjs";
 import { handleMessage, encodeFrame, createFrameParser } from "../packages/dubsar-my-work-mcp/src/server.mjs";
 import { buildControllerEnvelope } from "../packages/dubsar-my-work-mcp/src/canonical.mjs";
-import { CONTROLLER_ARGUMENT_KEYS, CONTROLLER_RUN_ARGUMENT_KEYS, CONTROLLER_RUN_TOOL, CONTROLLER_TOOL, controllerContractFingerprint } from "../packages/dubsar-my-work-mcp/src/mission-args.mjs";
+import { CONTROLLER_ARGUMENT_KEYS, CONTROLLER_RUN_ARGUMENT_KEYS, CONTROLLER_RUN_TOOL, CONTROLLER_TOOL, controllerContractFingerprint, controllerRunToolCall, controllerRunToolIdentityContract, matchesControllerRunRequestIdentity } from "../packages/dubsar-my-work-mcp/src/mission-args.mjs";
 import { applyTicketChange, previewTicketChange, readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
 import {
   resetTestControllerTransport,
@@ -280,6 +280,33 @@ test("frozen Controller PR26 vector fingerprint is a literal corroborated by ord
   );
 });
 
+test("Controller run request identity is agent_url_or_id; agent_id-only fails the frozen 9ea48ce excerpt", async () => {
+  const identity = controllerRunToolIdentityContract();
+  assert.equal(identity.controller_revision, "9ea48ce17735b6585cf5816060afc4345b1a50cf");
+  assert.equal(identity.source_file, "src/index.ts");
+  assert.equal(identity.request_identity_field, "agent_url_or_id");
+  assert.equal(identity.receipt_identity_field, "agent_id");
+  const vector = JSON.parse(await readFile(path.join(mcpRoot, "vectors", "controller-canonical-pr26.json"), "utf8"));
+  const corrected = controllerRunToolCall(vector.unsigned_arguments, {
+    agentId: vector.realistic_receipt.agent_id,
+    correctionNumber: 4,
+    prompt: "Correction 4",
+  }).arguments;
+  const legacyAgentIdOnly = {
+    ...corrected,
+    agent_id: vector.realistic_receipt.agent_id,
+  };
+  delete legacyAgentIdOnly.agent_url_or_id;
+  assert.equal(matchesControllerRunRequestIdentity(legacyAgentIdOnly), false);
+  assert.equal(matchesControllerRunRequestIdentity(corrected), true);
+  assert.equal("agent_id" in corrected, false);
+  assert.equal(corrected.agent_url_or_id, vector.realistic_receipt.agent_id);
+  assert.equal(vector.follow_up_4_receipt.agent_id, vector.realistic_receipt.agent_id);
+  assert.notDeepEqual(Object.keys(legacyAgentIdOnly).sort(), Object.keys(corrected).sort());
+  assert.equal(CONTROLLER_RUN_ARGUMENT_KEYS.includes("agent_url_or_id"), true);
+  assert.equal(CONTROLLER_RUN_ARGUMENT_KEYS.includes("agent_id"), false);
+});
+
 test("frozen realistic Controller PR26 receipt attaches; divergences do not mutate", async () => {
   const vector = JSON.parse(
     await readFile(path.join(mcpRoot, "vectors", "controller-canonical-pr26.json"), "utf8"),
@@ -444,7 +471,9 @@ test("public continuation reuses ticket and agent, records 4 then 5, and keeps l
     assert.equal("receipt_bounds" in request.arguments, false);
     assert.deepEqual(Object.keys(request.arguments).sort(), [...CONTROLLER_RUN_ARGUMENT_KEYS].sort());
     assert.equal(request.arguments.correction_budget, "uncapped");
-    assert.equal(request.arguments.agent_id, vector.realistic_receipt.agent_id);
+    assert.equal(request.arguments.agent_url_or_id, vector.realistic_receipt.agent_id);
+    assert.equal("agent_id" in request.arguments, false);
+    assert.equal(matchesControllerRunRequestIdentity(request.arguments), true);
     assert.equal(request.arguments.ticket_id, "DUB-001");
     if (request.arguments.correction_number === 4) return vector.follow_up_4_receipt;
     if (request.arguments.correction_number === 5) return vector.follow_up_5_receipt;

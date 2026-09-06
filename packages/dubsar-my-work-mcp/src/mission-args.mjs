@@ -47,10 +47,12 @@ export const CONTROLLER_ARGUMENT_KEYS = Object.freeze([
 ]);
 export const CONTROLLER_RUN_ARGUMENT_KEYS = Object.freeze([
   ...CONTROLLER_ARGUMENT_KEYS,
-  "agent_id",
+  "agent_url_or_id",
   "correction_number",
   "prompt",
 ]);
+export const CONTROLLER_RUN_REQUEST_IDENTITY_FIELD = "agent_url_or_id";
+export const CONTROLLER_RUN_RECEIPT_IDENTITY_FIELD = "agent_id";
 export const REQUIRED_CAPABILITIES = Object.freeze([
   "Node.js 20 ou supérieur",
   "Implémentation MCP stdio locale",
@@ -62,6 +64,15 @@ const HUMAN_GATES = Object.freeze(
   JSON.parse(
     readFileSync(
       fileURLToPath(new URL("../vectors/controller-human-gates.json", import.meta.url)),
+      "utf8",
+    ),
+  ),
+);
+
+const RUN_TOOL_IDENTITY = Object.freeze(
+  JSON.parse(
+    readFileSync(
+      fileURLToPath(new URL("../vectors/controller-run-tool-identity-9ea48ce.json", import.meta.url)),
       "utf8",
     ),
   ),
@@ -236,7 +247,7 @@ export function controllerRunToolCall(args, { agentId, correctionNumber, prompt 
     required_plugins: [...args.required_plugins],
     human_gates: [...args.human_gates],
     correction_budget: CORRECTION_BUDGET,
-    agent_id: boundedItem(agentId, MAX_ITEM, "MY_WORK_MISSION_INCOMPLETE"),
+    agent_url_or_id: boundedItem(agentId, MAX_ITEM, "MY_WORK_MISSION_INCOMPLETE"),
     correction_number: requirePositiveCorrectionNumber(correctionNumber),
     prompt: boundedItem(prompt, MAX_MISSION, "MY_WORK_MISSION_INCOMPLETE"),
   };
@@ -244,6 +255,19 @@ export function controllerRunToolCall(args, { agentId, correctionNumber, prompt 
     throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
   }
   return { tool: CONTROLLER_RUN_TOOL, arguments: forwarded };
+}
+
+export function controllerRunToolIdentityContract() {
+  return RUN_TOOL_IDENTITY;
+}
+
+export function matchesControllerRunRequestIdentity(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return false;
+  const field = RUN_TOOL_IDENTITY.request_identity_field;
+  const value = args[field];
+  if (typeof value !== "string" || value.trim() !== value || value.length < 1) return false;
+  if (Object.hasOwn(args, RUN_TOOL_IDENTITY.receipt_identity_field)) return false;
+  return true;
 }
 
 export function refsMatch(left, right) {

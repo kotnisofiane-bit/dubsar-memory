@@ -82,7 +82,8 @@ When the user asks to continue the same mission, call Work
 `continue_cursor_mission` once with the existing `ticket_id`, a strictly
 increasing positive `correction_number`, and the correction prompt. That tool
 retransmits the stored contract with `correction_budget: "uncapped"` through
-`create_dubsar_work_cursor_agent_run`. Do not call Cursor directly. Do not
+`create_dubsar_work_cursor_agent_run`, sending `agent_url_or_id` (the persisted
+receipt `agent_id`). Do not call Cursor directly. Do not
 create a ticket, agent, branch, or PR. Record the validated run receipt without
 erasing the launch receipt. After restart, sync the current run.
 

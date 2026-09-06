@@ -115,7 +115,7 @@
   "source_attribution": {
     "kind": "codex_github_audit",
     "controller_revision": "90a35ac02cf22399e389b048acf2c074053b763d",
-    "note": "This agent could not read the private Controller repository. Follow-up receipt shape is taken from the Codex GitHub observation of createDubsarWorkCursorAgentRun in src/dubsar-work.ts: receipt_version dubsar.cursor-run-receipt/1, same agent_id, new run_id/source_url/status, bounds = {...receiptBounds(mission), correction_number}."
+    "note": "Receipt shape: Codex observation of createDubsarWorkCursorAgentRun. Request identity field agent_url_or_id is from Codex REWORK_MVP of src/index.ts at 9ea48ce17735b6585cf5816060afc4345b1a50cf; this session could not read that private file (403/404). Receipts keep agent_id."
   },
   "follow_up_4_receipt": {
     "receipt_version": "dubsar.cursor-run-receipt/1",
