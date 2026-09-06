@@ -12,10 +12,11 @@ Do not poll Cursor or GitHub.
 
 ## Fixed identity
 
-Use only the persisted `cursor_launch.agent_id` and `cursor_launch.run_id`.
-Never launch, retry, discover, or switch agents. Do not call a follow-up or
-relance tool. Read the Cursor result exactly once per eligible ticket. Independently verify any named pull
-request on GitHub. Do not trust Cursor's merge or review claim.
+Use only the current persisted receipt: `cursor_run` when present, otherwise
+`cursor_launch`. Pass that `agent_id` and `run_id`. Never launch, retry, discover, or switch agents. Continuation is Work `continue_cursor_mission`,
+not this skill. Read the Cursor result exactly once per eligible ticket.
+Independently verify any named pull request on GitHub. Do not trust Cursor's
+merge or review claim.
 
 ## Eligibility
 
@@ -80,8 +81,8 @@ contradictory values.
 
 ### `get_cursor_agent_result`
 
-Call with the persisted pair only. Require the returned identity to equal
-that `agent_id` and `run_id`.
+Call with the current persisted pair only (`cursor_run` else `cursor_launch`).
+Require the returned identity to equal that `agent_id` and `run_id`.
 
 | Raw `status` (case-insensitive single token) | `lifecycle` |
 | --- | --- |

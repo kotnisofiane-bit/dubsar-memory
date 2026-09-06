@@ -624,7 +624,7 @@ export async function launchWorkbenchForTest({
 
 function parseTicketArguments(argv) {
   const action = argv.at(1);
-  if (argv.at(0) !== "tickets" || !new Set(["list", "create", "transition", "activity", "attach-cursor-launch", "fail-cursor-launch"]).has(action)) throw new TicketError("TICKET_CLI_ARGUMENT_INVALID");
+  if (argv.at(0) !== "tickets" || !new Set(["list", "create", "transition", "activity", "attach-cursor-launch", "attach-cursor-run", "fail-cursor-launch", "fail-cursor-run"]).has(action)) throw new TicketError("TICKET_CLI_ARGUMENT_INVALID");
   const options = { apply: false, json: false };
   for (let index = 2; index < argv.length; index += 1) {
     const token = argv.at(index);

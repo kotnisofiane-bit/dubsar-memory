@@ -2,6 +2,7 @@
   "controller_repository": "https://github.com/kotnisofiane-bit/kotnisofiane-bit-dubsar-cursor-reader-mcp",
   "controller_revision": "90a35ac02cf22399e389b048acf2c074053b763d",
   "controller_tool": "create_dubsar_work_cursor_agent",
+  "controller_run_tool": "create_dubsar_work_cursor_agent_run",
   "controller_source_files": [
     "src/dubsar-work.ts",
     "src/mission-envelope.ts",

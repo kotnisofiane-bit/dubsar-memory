@@ -79,6 +79,6 @@ test("skill impose allocation avant MCP, appel unique et arrêt sur contradictio
   assert.match(skill, /<skill-dir>\/\.\.\/\.\.\/\.\.\/dubsar-workbench-launcher\/bin\/dubsar-workbench-open\.mjs/u);
   assert.match(skill, /90a35ac02cf22399e389b048acf2c074053b763d/);
   assert.match(skill, /correction_budget: "uncapped"/);
-  assert.match(skill, /no relance tool/);
+  assert.match(skill, /continue_cursor_mission/);
   assert.match(skill, /create_dubsar_work_cursor_agent_run/);
 });

@@ -7,7 +7,7 @@
     "background_service": "none",
     "filesystem_read": "explicit_selected_project_ticket_store",
     "filesystem_write": "explicit_ticket_preview_apply",
-    "network": "explicit_single_controller_launch",
+    "network": "explicit_single_controller_launch_or_run",
     "process_execution": "optional_local_browser_open_for_oauth",
     "remote_mutation": "bounded_cursor_agent_creation"
   },

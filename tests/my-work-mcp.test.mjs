@@ -8,7 +8,7 @@ import { parse } from "acorn";
 import { TOOL_NAMES, executeTool } from "../packages/dubsar-my-work-mcp/src/tools.mjs";
 import { handleMessage, encodeFrame, createFrameParser } from "../packages/dubsar-my-work-mcp/src/server.mjs";
 import { buildControllerEnvelope } from "../packages/dubsar-my-work-mcp/src/canonical.mjs";
-import { CONTROLLER_ARGUMENT_KEYS, CONTROLLER_TOOL, controllerContractFingerprint } from "../packages/dubsar-my-work-mcp/src/mission-args.mjs";
+import { CONTROLLER_ARGUMENT_KEYS, CONTROLLER_RUN_ARGUMENT_KEYS, CONTROLLER_RUN_TOOL, CONTROLLER_TOOL, controllerContractFingerprint } from "../packages/dubsar-my-work-mcp/src/mission-args.mjs";
 import { applyTicketChange, previewTicketChange, readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
 import {
   resetTestControllerTransport,
@@ -219,6 +219,7 @@ test("MCP initialize and tools/list expose the closed surface", async () => {
     "get_ticket",
     "prepare_cursor_mission",
     "launch_cursor_mission",
+    "continue_cursor_mission",
     "attach_cursor_receipt",
     "sync_cursor_status",
   ]);
@@ -405,6 +406,209 @@ test("one public launch call creates one ticket, one Controller request, matchin
     assert.equal(restarted.ticket.state, "In Progress");
     assert.equal(restarted.attached_receipt.run_id, "run-1");
     assert.equal(restarted.attached_receipt.agent_id, "agent-1");
+  } finally {
+    resetTestControllerTransport();
+  }
+});
+
+test("public continuation reuses ticket and agent, records 4 then 5, and keeps launch history after reread", async () => {
+  const context = await env();
+  const calls = [];
+  const vector = JSON.parse(await readFile(path.join(mcpRoot, "vectors", "controller-canonical-pr26.json"), "utf8"));
+  async function preparePr26Local() {
+    return executeTool("prepare_cursor_mission", {
+      ...context,
+      title: "KOT-126",
+      objective: "MCP local My Work",
+      criteria: ["Ticket persisté"],
+      target_repository_url: vector.unsigned_arguments.target_repository_url,
+      starting_sha: vector.unsigned_arguments.repository_refs[0].starting_sha,
+      allowed_paths: vector.unsigned_arguments.allowed_paths,
+      mission: vector.unsigned_arguments.mission,
+      acceptance_criteria: vector.unsigned_arguments.acceptance_criteria,
+      expected_evidence: vector.unsigned_arguments.expected_evidence,
+      required_capabilities: vector.unsigned_arguments.required_capabilities,
+      preferred_plugins: vector.unsigned_arguments.preferred_plugins,
+      required_plugins: vector.unsigned_arguments.required_plugins,
+      human_gates: vector.unsigned_arguments.human_gates,
+      correction_budget: "uncapped",
+    });
+  }
+  setTestControllerTransport(async (request) => {
+    calls.push(request);
+    if (request.tool === CONTROLLER_TOOL) {
+      return vector.realistic_receipt;
+    }
+    assert.equal(request.tool, CONTROLLER_RUN_TOOL);
+    assert.equal("contract_fingerprint" in request.arguments, false);
+    assert.equal("receipt_bounds" in request.arguments, false);
+    assert.deepEqual(Object.keys(request.arguments).sort(), [...CONTROLLER_RUN_ARGUMENT_KEYS].sort());
+    assert.equal(request.arguments.correction_budget, "uncapped");
+    assert.equal(request.arguments.agent_id, vector.realistic_receipt.agent_id);
+    assert.equal(request.arguments.ticket_id, "DUB-001");
+    if (request.arguments.correction_number === 4) return vector.follow_up_4_receipt;
+    if (request.arguments.correction_number === 5) return vector.follow_up_5_receipt;
+    throw new Error("unexpected correction_number");
+  });
+  try {
+    await preparePr26Local();
+    await executeTool("launch_cursor_mission", {
+      ...context,
+      title: "KOT-126",
+      objective: "MCP local My Work",
+      criteria: ["Ticket persisté"],
+      target_repository_url: vector.unsigned_arguments.target_repository_url,
+      starting_sha: vector.unsigned_arguments.repository_refs[0].starting_sha,
+      allowed_paths: vector.unsigned_arguments.allowed_paths,
+      mission: vector.unsigned_arguments.mission,
+      acceptance_criteria: vector.unsigned_arguments.acceptance_criteria,
+      expected_evidence: vector.unsigned_arguments.expected_evidence,
+      required_capabilities: vector.unsigned_arguments.required_capabilities,
+      preferred_plugins: vector.unsigned_arguments.preferred_plugins,
+      required_plugins: vector.unsigned_arguments.required_plugins,
+      human_gates: vector.unsigned_arguments.human_gates,
+      correction_budget: "uncapped",
+    });
+    assert.equal(calls.length, 1);
+    const four = await executeTool("continue_cursor_mission", {
+      ...context,
+      ticket_id: "DUB-001",
+      correction_number: 4,
+      prompt: "Correction 4",
+    });
+    assert.equal(four.continued, true);
+    assert.equal(four.agent_id, vector.realistic_receipt.agent_id);
+    assert.equal(four.run_id, vector.follow_up_4_receipt.run_id);
+    assert.equal(four.correction_number, 4);
+    const five = await executeTool("continue_cursor_mission", {
+      ...context,
+      ticket_id: "DUB-001",
+      correction_number: 5,
+      prompt: "Correction 5",
+    });
+    assert.equal(five.run_id, vector.follow_up_5_receipt.run_id);
+    assert.equal(calls.filter((item) => item.tool === CONTROLLER_TOOL).length, 1);
+    assert.equal(calls.filter((item) => item.tool === CONTROLLER_RUN_TOOL).length, 2);
+    const reread = await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" });
+    assert.equal(reread.attached_launch_receipt.run_id, vector.realistic_receipt.run_id);
+    assert.equal(reread.attached_receipt.run_id, vector.follow_up_5_receipt.run_id);
+    assert.equal(reread.attached_run_receipts.length, 2);
+    assert.equal(reread.ticket.cursor_launch.run_id, vector.realistic_receipt.run_id);
+    const synced = await executeTool("sync_cursor_status", {
+      ...context,
+      ticket_id: "DUB-001",
+      cursor_observation: {
+        source: "trusted_cursor_observer",
+        ticket_id: "DUB-001",
+        agent_id: vector.follow_up_5_receipt.agent_id,
+        run_id: vector.follow_up_5_receipt.run_id,
+        lifecycle: "running",
+        pr: null,
+      },
+      github_observation: null,
+    });
+    assert.equal(synced.ticket.state, "In Progress");
+    assert.equal(TOOL_NAMES.includes("create_dubsar_work_cursor_agent_run"), false);
+  } finally {
+    resetTestControllerTransport();
+  }
+});
+
+test("continuation refuses capped budget-3 contracts and divergent or ambiguous run receipts without retry", async () => {
+  const legacy = await env();
+  const vectorLegacy = JSON.parse(await readFile(path.join(mcpRoot, "vectors", "controller-canonical-v1.json"), "utf8"));
+  async function apply(env, operation) {
+    const preview = await previewTicketChange({ start: env.start, allocationRoot: env.allocation_root, projectId: env.project_id, operation });
+    return applyTicketChange({ start: env.start, allocationRoot: env.allocation_root, projectId: env.project_id, operation, expectedChange: preview.change_sha256 });
+  }
+  await apply(legacy, {
+    type: "create",
+    title: "Legacy",
+    objective: "Budget 3",
+    criteria: ["Ticket persisté"],
+    references: [vectorLegacy.expected_contract_fingerprint, vectorLegacy.unsigned_arguments.target_repository_url],
+  });
+  await apply(legacy, {
+    type: "activity",
+    id: "DUB-001",
+    kind: "cursor_contract",
+    summary: "legacy",
+    evidence: {
+      arguments: vectorLegacy.unsigned_arguments,
+      contract_fingerprint: vectorLegacy.expected_contract_fingerprint,
+      receipt_bounds: vectorLegacy.receipt_bounds,
+    },
+  });
+  await apply(legacy, { type: "attach-cursor-launch", id: "DUB-001", receipt: vectorLegacy.realistic_receipt });
+  const calls = [];
+  setTestControllerTransport(async (request) => {
+    calls.push(request);
+    return {};
+  });
+  try {
+    await assert.rejects(
+      executeTool("continue_cursor_mission", {
+        ...legacy,
+        ticket_id: "DUB-001",
+        correction_number: 4,
+        prompt: "should not expand budget 3",
+      }),
+      { code: "MY_WORK_CORRECTION_BUDGET_CAPPED" },
+    );
+    assert.equal(calls.length, 0);
+    const still = await executeTool("get_ticket", { ...legacy, ticket_id: "DUB-001" });
+    assert.equal(still.prepared_contract.arguments.correction_budget, 3);
+    assert.equal(still.attached_launch_receipt.bounds.correction_budget, 3);
+
+    const context = await env();
+    const vector = JSON.parse(await readFile(path.join(mcpRoot, "vectors", "controller-canonical-pr26.json"), "utf8"));
+    setTestControllerTransport(async (request) => {
+      calls.push(request);
+      if (request.tool === CONTROLLER_TOOL) return vector.realistic_receipt;
+      return { ...vector.follow_up_4_receipt, agent_id: "other-agent" };
+    });
+    await executeTool("launch_cursor_mission", {
+      ...context,
+      title: "KOT-126",
+      objective: "MCP local My Work",
+      criteria: ["Ticket persisté"],
+      target_repository_url: vector.unsigned_arguments.target_repository_url,
+      starting_sha: vector.unsigned_arguments.repository_refs[0].starting_sha,
+      allowed_paths: vector.unsigned_arguments.allowed_paths,
+      mission: vector.unsigned_arguments.mission,
+      acceptance_criteria: vector.unsigned_arguments.acceptance_criteria,
+      expected_evidence: vector.unsigned_arguments.expected_evidence,
+      required_capabilities: vector.unsigned_arguments.required_capabilities,
+      preferred_plugins: vector.unsigned_arguments.preferred_plugins,
+      required_plugins: vector.unsigned_arguments.required_plugins,
+      human_gates: vector.unsigned_arguments.human_gates,
+      correction_budget: "uncapped",
+    });
+    const before = await readFile(path.join(context.start, ".dubsar", "tickets.json"));
+    await assert.rejects(
+      executeTool("continue_cursor_mission", {
+        ...context,
+        ticket_id: "DUB-001",
+        correction_number: 4,
+        prompt: "divergent agent",
+      }),
+      { code: "MY_WORK_CONTINUE_AMBIGUOUS" },
+    );
+    await assert.rejects(
+      executeTool("continue_cursor_mission", {
+        ...context,
+        ticket_id: "DUB-001",
+        correction_number: 4,
+        prompt: "divergent agent",
+      }),
+      { code: "MY_WORK_CONTINUE_NOT_RETRYABLE" },
+    );
+    const after = await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" });
+    assert.equal(after.attached_launch_receipt.run_id, vector.realistic_receipt.run_id);
+    assert.equal(after.ticket.cursor_run, null);
+    assert.notEqual(after.attached_receipt.run_id, vector.follow_up_4_receipt.run_id);
+    assert.equal(after.ticket.cursor_launch.run_id, vector.realistic_receipt.run_id);
+    assert.notEqual(before.length, 0);
   } finally {
     resetTestControllerTransport();
   }

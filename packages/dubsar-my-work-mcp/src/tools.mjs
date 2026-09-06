@@ -1,6 +1,7 @@
 import {
   TicketError,
   applyTicketChange,
+  currentCursorReceipt,
   previewTicketChange,
   readTicketAllocations,
   readTickets,
@@ -14,12 +15,20 @@ import {
 } from "./canonical.mjs";
 import {
   boundsMatch,
+  CONTROLLER_RUN_TOOL,
   CONTROLLER_TOOL,
+  contractAllowsUncappedContinuation,
+  controllerRunToolCall,
   controllerToolCall,
   refsMatch,
   requireNewCorrectionBudget,
+  requirePositiveCorrectionNumber,
 } from "./mission-args.mjs";
-import { callCreateDubsarWorkCursorAgent, controllerLaunchConfigured } from "./controller-client.mjs";
+import {
+  callCreateDubsarWorkCursorAgent,
+  callCreateDubsarWorkCursorAgentRun,
+  controllerLaunchConfigured,
+} from "./controller-client.mjs";
 import { readCredentials } from "./oauth-store.mjs";
 
 export const TOOL_NAMES = Object.freeze([
@@ -27,6 +36,7 @@ export const TOOL_NAMES = Object.freeze([
   "get_ticket",
   "prepare_cursor_mission",
   "launch_cursor_mission",
+  "continue_cursor_mission",
   "attach_cursor_receipt",
   "sync_cursor_status",
 ]);
@@ -148,6 +158,31 @@ export const TOOL_DEFINITIONS = Object.freeze([
     },
   },
   {
+    name: "continue_cursor_mission",
+    description:
+      "Continue an existing DUB ticket through exactly one Controller create_dubsar_work_cursor_agent_run call. Reuses the persisted agent, branch, PR, and contract; does not allocate a ticket.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "start",
+        "allocation_root",
+        "project_id",
+        "ticket_id",
+        "correction_number",
+        "prompt",
+      ],
+      properties: {
+        start: { type: "string" },
+        allocation_root: { type: "string" },
+        project_id: { type: "string" },
+        ticket_id: { type: "string" },
+        correction_number: { type: "integer", minimum: 1 },
+        prompt: { type: "string" },
+      },
+    },
+  },
+  {
     name: "attach_cursor_receipt",
     description:
       "Attach a Controller receipt to the prepared ticket when ticket_id and contract_fingerprint match.",
@@ -211,6 +246,50 @@ function expectedFingerprint(ticket, supplied, contract) {
   return fromTicket;
 }
 
+function assertReceiptMatchesContract(ticket, receipt, { expectedCorrectionNumber = null, expectedAgentId = null } = {}) {
+  const contract = preparedContractFrom(ticket);
+  if (!contract) throw new MyWorkMcpError("MY_WORK_FINGERPRINT_MISMATCH");
+  const preparedArgs = contract.arguments ?? contract;
+  const expectedBounds = contract.receipt_bounds;
+  const expected = expectedFingerprint(ticket, null, contract);
+  if (receipt.ticket_id !== ticket.id) {
+    throw new MyWorkMcpError("MY_WORK_TICKET_MISMATCH");
+  }
+  if (receipt.contract_fingerprint !== expected) {
+    throw new MyWorkMcpError("MY_WORK_FINGERPRINT_MISMATCH");
+  }
+  const receiptVersion = receipt.receipt_version;
+  if (
+    receiptVersion !== "dubsar.cursor-launch-receipt/1" &&
+    receiptVersion !== "dubsar.cursor-run-receipt/1"
+  ) {
+    throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
+  }
+  const hasCorrectionNumber = Object.hasOwn(receipt.bounds ?? {}, "correction_number");
+  if (receiptVersion === "dubsar.cursor-launch-receipt/1" && hasCorrectionNumber) {
+    throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
+  }
+  if (receiptVersion === "dubsar.cursor-run-receipt/1" && !hasCorrectionNumber) {
+    throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
+  }
+  if (expectedCorrectionNumber != null && receipt.bounds?.correction_number !== expectedCorrectionNumber) {
+    throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
+  }
+  if (expectedAgentId != null && receipt.agent_id !== expectedAgentId) {
+    throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
+  }
+  if (String(receipt.target_repository_url ?? "") !== String(preparedArgs.target_repository_url ?? "")) {
+    throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
+  }
+  if (!refsMatch(receipt.repository_refs, preparedArgs.repository_refs)) {
+    throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
+  }
+  if (!boundsMatch(receipt.bounds, expectedBounds)) {
+    throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
+  }
+  return contract;
+}
+
 function launchSubmissionRecorded(ticket) {
   const activities = Array.isArray(ticket?.activity) ? ticket.activity : [];
   return activities.some(
@@ -229,7 +308,30 @@ function preparedContractFrom(ticket) {
   return null;
 }
 
+function cursorRunHistory(ticket) {
+  const activities = Array.isArray(ticket?.activity) ? ticket.activity : [];
+  return activities
+    .filter((row) => row?.kind === "cursor_run" && row.evidence && typeof row.evidence === "object")
+    .map((row) => row.evidence);
+}
+
+function continuationSubmittedFor(ticket, correctionNumber) {
+  const activities = Array.isArray(ticket?.activity) ? ticket.activity : [];
+  return activities.some(
+    (row) =>
+      row?.kind === "continuation_submitted" &&
+      row.evidence?.correction_number === correctionNumber,
+  );
+}
+
+function lastRecordedCorrectionNumber(ticket) {
+  const current = ticket?.cursor_run?.bounds?.correction_number;
+  if (Number.isSafeInteger(current) && current >= 1) return current;
+  return 0;
+}
+
 function publicTicket(ticket) {
+  const current = currentCursorReceipt(ticket);
   return {
     id: ticket.id,
     title: ticket.title,
@@ -239,6 +341,7 @@ function publicTicket(ticket) {
     project_id: ticket.project_id,
     references: ticket.references,
     cursor_launch: ticket.cursor_launch,
+    cursor_run: ticket.cursor_run ?? null,
     prepared_contract: preparedContractFrom(ticket),
     work_id: ticket.work_id ?? null,
     duplicate_of: ticket.duplicate_of ?? null,
@@ -247,6 +350,7 @@ function publicTicket(ticket) {
     pr: ticket.pr,
     blocker: ticket.blocker,
     activity: ticket.activity,
+    current_run_id: current?.run_id ?? null,
   };
 }
 
@@ -263,11 +367,14 @@ export async function executeTool(name, args = {}) {
       const ticket = store.tickets.find((item) => item.id === args.ticket_id);
       if (!ticket) throw new MyWorkMcpError("MY_WORK_TICKET_NOT_FOUND");
       const prepared = preparedContractFrom(ticket);
+      const current = currentCursorReceipt(ticket);
       return {
         format: "dubsar.my-work-ticket/1",
         ticket: publicTicket(ticket),
         prepared_contract: prepared,
-        attached_receipt: ticket.cursor_launch,
+        attached_receipt: current,
+        attached_launch_receipt: ticket.cursor_launch ?? null,
+        attached_run_receipts: cursorRunHistory(ticket),
       };
     }
     if (name === "prepare_cursor_mission") {
@@ -453,6 +560,113 @@ export async function executeTool(name, args = {}) {
         throw error instanceof MyWorkMcpError ? error : new MyWorkMcpError("MY_WORK_LAUNCH_AMBIGUOUS");
       }
     }
+    if (name === "continue_cursor_mission") {
+      const store = await readTickets({ start: env.start });
+      const ticket = store.tickets.find((item) => item.id === args.ticket_id);
+      if (!ticket) throw new MyWorkMcpError("MY_WORK_TICKET_NOT_FOUND");
+      const contract = preparedContractFrom(ticket);
+      if (!contract) throw new MyWorkMcpError("MY_WORK_FINGERPRINT_MISMATCH");
+      if (!ticket.cursor_launch) throw new MyWorkMcpError("MY_WORK_LAUNCH_REQUIRED");
+      if (!contractAllowsUncappedContinuation(contract)) {
+        throw new MyWorkMcpError("MY_WORK_CORRECTION_BUDGET_CAPPED");
+      }
+      const correctionNumber = requirePositiveCorrectionNumber(args.correction_number);
+      const lastNumber = lastRecordedCorrectionNumber(ticket);
+      if (ticket.cursor_run && lastNumber === correctionNumber) {
+        return {
+          format: "dubsar.my-work-cursor-continue/1",
+          ticket_id: ticket.id,
+          state: ticket.state,
+          agent_id: ticket.cursor_run.agent_id,
+          run_id: ticket.cursor_run.run_id,
+          source_url: ticket.cursor_run.source_url,
+          correction_number: correctionNumber,
+          continued: false,
+        };
+      }
+      if (correctionNumber <= lastNumber) {
+        throw new MyWorkMcpError("MY_WORK_CORRECTION_NUMBER_INVALID");
+      }
+      if (continuationSubmittedFor(ticket, correctionNumber)) {
+        throw new MyWorkMcpError("MY_WORK_CONTINUE_NOT_RETRYABLE");
+      }
+      if (controllerLaunchConfigured() !== true) {
+        const credentials = await readCredentials();
+        if (!credentials?.access_token || typeof credentials.controller_url !== "string") {
+          throw new MyWorkMcpError("MY_WORK_CONTROLLER_NOT_CONNECTED");
+        }
+      }
+      const runCall = controllerRunToolCall(contract.arguments, {
+        agentId: ticket.cursor_launch.agent_id,
+        correctionNumber,
+        prompt: args.prompt,
+      });
+      await mutate(env, {
+        type: "activity",
+        id: ticket.id,
+        kind: "continuation_submitted",
+        summary: `single ${CONTROLLER_RUN_TOOL} request`,
+        evidence: {
+          tool: CONTROLLER_RUN_TOOL,
+          ticket_id: ticket.id,
+          agent_id: ticket.cursor_launch.agent_id,
+          correction_number: correctionNumber,
+        },
+      });
+      let receipt;
+      try {
+        receipt = await callCreateDubsarWorkCursorAgentRun(runCall.arguments);
+        if (
+          !receipt ||
+          typeof receipt !== "object" ||
+          receipt.receipt_version !== "dubsar.cursor-run-receipt/1" ||
+          typeof receipt.agent_id !== "string" ||
+          typeof receipt.run_id !== "string" ||
+          typeof receipt.ticket_id !== "string" ||
+          typeof receipt.contract_fingerprint !== "string" ||
+          !receipt.bounds ||
+          receipt.agent_id !== ticket.cursor_launch.agent_id ||
+          receipt.bounds.correction_number !== correctionNumber
+        ) {
+          throw new MyWorkMcpError("MY_WORK_CONTINUE_AMBIGUOUS");
+        }
+      } catch (error) {
+        await mutate(env, {
+          type: "fail-cursor-run",
+          id: ticket.id,
+          code: error instanceof MyWorkMcpError ? error.code : "MY_WORK_CONTINUE_AMBIGUOUS",
+          summary: "Controller continuation failed or was ambiguous; no retry",
+        });
+        throw error instanceof MyWorkMcpError ? error : new MyWorkMcpError("MY_WORK_CONTINUE_AMBIGUOUS");
+      }
+      try {
+        assertReceiptMatchesContract(ticket, receipt, {
+          expectedCorrectionNumber: correctionNumber,
+          expectedAgentId: ticket.cursor_launch.agent_id,
+        });
+        await mutate(env, { type: "attach-cursor-run", id: ticket.id, receipt });
+        const after = await readTickets({ start: env.start });
+        const updated = after.tickets.find((item) => item.id === ticket.id);
+        return {
+          format: "dubsar.my-work-cursor-continue/1",
+          ticket_id: updated.id,
+          state: updated.state,
+          agent_id: updated.cursor_run.agent_id,
+          run_id: updated.cursor_run.run_id,
+          source_url: updated.cursor_run.source_url,
+          correction_number: correctionNumber,
+          continued: true,
+        };
+      } catch (error) {
+        await mutate(env, {
+          type: "fail-cursor-run",
+          id: ticket.id,
+          code: error instanceof MyWorkMcpError || error instanceof TicketError ? error.code : "MY_WORK_CONTINUE_AMBIGUOUS",
+          summary: "Controller run receipt did not match local ticket, agent, fingerprint, or correction_number; no fabricated receipt",
+        });
+        throw error instanceof MyWorkMcpError ? error : new MyWorkMcpError("MY_WORK_CONTINUE_AMBIGUOUS");
+      }
+    }
     if (name === "attach_cursor_receipt") {
       const store = await readTickets({ start: env.start });
       const ticket = store.tickets.find((item) => item.id === args.ticket_id);
@@ -461,38 +675,8 @@ export async function executeTool(name, args = {}) {
       if (!receipt || typeof receipt !== "object") throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
       const contract = preparedContractFrom(ticket);
       if (!contract) throw new MyWorkMcpError("MY_WORK_FINGERPRINT_MISMATCH");
-      const preparedArgs = contract.arguments ?? contract;
-      const expectedBounds = contract.receipt_bounds;
-      const expected = expectedFingerprint(ticket, args.expected_contract_fingerprint, contract);
-      if (receipt.ticket_id !== ticket.id) {
-        throw new MyWorkMcpError("MY_WORK_TICKET_MISMATCH");
-      }
-      if (receipt.contract_fingerprint !== expected) {
-        throw new MyWorkMcpError("MY_WORK_FINGERPRINT_MISMATCH");
-      }
-      const receiptVersion = receipt.receipt_version;
-      if (
-        receiptVersion !== "dubsar.cursor-launch-receipt/1" &&
-        receiptVersion !== "dubsar.cursor-run-receipt/1"
-      ) {
-        throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
-      }
-      const hasCorrectionNumber = Object.hasOwn(receipt.bounds ?? {}, "correction_number");
-      if (receiptVersion === "dubsar.cursor-launch-receipt/1" && hasCorrectionNumber) {
-        throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
-      }
-      if (receiptVersion === "dubsar.cursor-run-receipt/1" && !hasCorrectionNumber) {
-        throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
-      }
-      if (String(receipt.target_repository_url ?? "") !== String(preparedArgs.target_repository_url ?? "")) {
-        throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
-      }
-      if (!refsMatch(receipt.repository_refs, preparedArgs.repository_refs)) {
-        throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
-      }
-      if (!boundsMatch(receipt.bounds, expectedBounds)) {
-        throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");
-      }
+      expectedFingerprint(ticket, args.expected_contract_fingerprint, contract);
+      assertReceiptMatchesContract(ticket, receipt);
       if (ticket.cursor_launch) {
         if (stableJson(ticket.cursor_launch) !== stableJson(receipt)) {
           throw new MyWorkMcpError("MY_WORK_RECEIPT_MISMATCH");

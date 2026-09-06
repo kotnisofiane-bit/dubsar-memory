@@ -255,7 +255,7 @@ test("skills imposent synchro avant My Work, identité persistée et absence de 
   assert.match(launch, /sync-dubsar-work/);
   assert.match(resume, /sync-dubsar-work/);
   assert.match(sync, /exactly once/);
-  assert.match(sync, /persisted `cursor_launch.agent_id`/);
+  assert.match(sync, /current persisted receipt/);
   assert.match(sync, /do not poll/i);
   assert.match(sync, /Never launch, retry, discover, or switch agents/);
   assert.match(sync, /<skill-dir>\/\.\.\/\.\.\/\.\.\/dubsar-workbench-launcher\/bin\/dubsar-workbench-open\.mjs/u);

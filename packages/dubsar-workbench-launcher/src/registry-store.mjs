@@ -179,8 +179,13 @@ const CURSOR_LIFECYCLES = new Set(["running", "failed", "completed"]);
 const GITHUB_PR_STATES = new Set(["open", "draft", "closed", "merged"]);
 const OWNER_REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const SHA40 = /^[0-9a-f]{40}$/u;
+export function currentCursorReceipt(ticket) {
+  if (ticket?.cursor_run && ticket.cursor_run.agent_id && ticket.cursor_run.run_id) return ticket.cursor_run;
+  if (ticket?.cursor_launch && ticket.cursor_launch.agent_id && ticket.cursor_launch.run_id) return ticket.cursor_launch;
+  return null;
+}
 export function isTicketSyncEligible(ticket) {
-  return Boolean(ticket && !terminal.has(ticket.state) && ticket.cursor_launch && ticket.cursor_launch.agent_id && ticket.cursor_launch.run_id);
+  return Boolean(ticket && !terminal.has(ticket.state) && currentCursorReceipt(ticket));
 }
 function repositoryFromTargetUrl(url) {
   let parsed;
@@ -190,13 +195,14 @@ function repositoryFromTargetUrl(url) {
   return `${parts[0]}/${parts[1]}`;
 }
 function cursorObservation(value, ticket) {
-  if (!ticket.cursor_launch) throw new TicketError("TICKET_SYNC_RECEIPT_REQUIRED");
+  const receipt = currentCursorReceipt(ticket);
+  if (!receipt) throw new TicketError("TICKET_SYNC_RECEIPT_REQUIRED");
   const observation = boundedJson(value);
-  if (observation.source !== "trusted_cursor_observer" || observation.ticket_id !== ticket.id || observation.agent_id !== ticket.cursor_launch.agent_id || observation.run_id !== ticket.cursor_launch.run_id || !CURSOR_LIFECYCLES.has(observation.lifecycle)) throw new TicketError("TICKET_SYNC_CONTRADICTION");
+  if (observation.source !== "trusted_cursor_observer" || observation.ticket_id !== ticket.id || observation.agent_id !== receipt.agent_id || observation.run_id !== receipt.run_id || !CURSOR_LIFECYCLES.has(observation.lifecycle)) throw new TicketError("TICKET_SYNC_CONTRADICTION");
   let pr = null;
   if (observation.pr != null) {
     if (!observation.pr || !OWNER_REPO.test(observation.pr.repository ?? "") || !Number.isSafeInteger(observation.pr.number) || observation.pr.number < 1) throw new TicketError("TICKET_SYNC_CONTRADICTION");
-    if (observation.pr.repository !== repositoryFromTargetUrl(ticket.cursor_launch.target_repository_url)) throw new TicketError("TICKET_SYNC_CONTRADICTION");
+    if (observation.pr.repository !== repositoryFromTargetUrl(receipt.target_repository_url)) throw new TicketError("TICKET_SYNC_CONTRADICTION");
     const branch = observation.pr.branch == null ? undefined : text(observation.pr.branch, 300, "TICKET_SYNC_CONTRADICTION");
     pr = Object.freeze({ repository: observation.pr.repository, number: observation.pr.number, ...(branch === undefined ? {} : { branch }) });
   }
@@ -263,7 +269,7 @@ export async function synchronizeEligibleTickets({ start, allocationRoot, projec
   const results = [];
   for (const ticket of before.tickets) {
     if (!isTicketSyncEligible(ticket)) {
-      results.push(Object.freeze({ id: ticket.id, status: "skipped", code: ticket.cursor_launch ? "TICKET_SYNC_TERMINAL" : "TICKET_SYNC_RECEIPT_REQUIRED" }));
+      results.push(Object.freeze({ id: ticket.id, status: "skipped", code: currentCursorReceipt(ticket) ? "TICKET_SYNC_TERMINAL" : "TICKET_SYNC_RECEIPT_REQUIRED" }));
       continue;
     }
     if (typeof observeCursorRun !== "function") {
@@ -271,7 +277,8 @@ export async function synchronizeEligibleTickets({ start, allocationRoot, projec
       continue;
     }
     try {
-      const rawCursor = await observeCursorRun(Object.freeze({ ticket_id: ticket.id, agent_id: ticket.cursor_launch.agent_id, run_id: ticket.cursor_launch.run_id }));
+      const receipt = currentCursorReceipt(ticket);
+      const rawCursor = await observeCursorRun(Object.freeze({ ticket_id: ticket.id, agent_id: receipt.agent_id, run_id: receipt.run_id }));
       const cursorObs = cursorObservation(rawCursor, ticket);
       let rawGithub = null;
       if (cursorObs.pr) {
@@ -333,7 +340,10 @@ export function validateTicketStore(value) {
     if ((ticket.state === "Duplicate") !== (ticket.duplicate_of !== null)) throw new TicketError("TICKET_STORE_INVALID");
     if (typeof ticket.project_id !== "string" || ticket.project_id.length < 1 || ticket.project_id.length > 64 || ![ticket.agent, ticket.branch, ticket.pr, ticket.blocker].every((item) => item === null || (typeof item === "string" && item.length <= 300)) || !Array.isArray(ticket.references) || ticket.references.length > 20 || ticket.references.some((item) => typeof item !== "string" || item.length < 1 || item.length > 300)) throw new TicketError("TICKET_STORE_INVALID");
     const launch = ticket.cursor_launch == null ? null : cursorReceipt(ticket.cursor_launch, ticket.id);
-    return Object.freeze({ ...ticket, cursor_launch: launch, criteria: Object.freeze([...ticket.criteria]), activity: Object.freeze(validateActivity(ticket.activity)) });
+    const run = ticket.cursor_run == null ? null : cursorReceipt(ticket.cursor_run, ticket.id);
+    if (run && run.receipt_version !== "dubsar.cursor-run-receipt/1") throw new TicketError("TICKET_STORE_INVALID");
+    if (run && launch && run.agent_id !== launch.agent_id) throw new TicketError("TICKET_STORE_INVALID");
+    return Object.freeze({ ...ticket, cursor_launch: launch, cursor_run: run, criteria: Object.freeze([...ticket.criteria]), activity: Object.freeze(validateActivity(ticket.activity)) });
   });
   return Object.freeze({ format: TICKETS_FORMAT, tickets: Object.freeze(tickets) });
 }
@@ -383,7 +393,7 @@ function applyOperation(store, operation, allocation = null, corroboration = nul
     if (!Array.isArray(criteria) || criteria.length > 20 || criteria.some((x) => typeof x !== "string" || x.length < 1 || x.length > 300)) throw new TicketError("TICKET_FIELD_INVALID");
     const references = operation.references ?? [];
     if (!Array.isArray(references) || references.length > 20 || references.some((item) => typeof item !== "string" || item.length < 1 || item.length > 300)) throw new TicketError("TICKET_FIELD_INVALID");
-    next.tickets.push({ id, work_id: operation.work_id ?? null, project_id: allocation.project_id, project: operation.project ?? allocation.project_id, title, objective, criteria, state: "Backlog", duplicate_of: null, agent: operation.agent ?? null, branch: operation.branch ?? null, pr: operation.pr ?? null, blocker: operation.blocker ?? null, references, cursor_launch: null, activity: [activity([], "created", `Ticket ${id} créé`)] });
+    next.tickets.push({ id, work_id: operation.work_id ?? null, project_id: allocation.project_id, project: operation.project ?? allocation.project_id, title, objective, criteria, state: "Backlog", duplicate_of: null, agent: operation.agent ?? null, branch: operation.branch ?? null, pr: operation.pr ?? null, blocker: operation.blocker ?? null, references, cursor_launch: null, cursor_run: null, activity: [activity([], "created", `Ticket ${id} créé`)] });
   } else if (operation.type === "transition") {
     const ticket = next.tickets.find((item) => item.id === operation.id);
     if (!ticket || !states.has(operation.to) || ticket.state === operation.to) throw new TicketError("TICKET_TRANSITION_INVALID");
@@ -403,6 +413,28 @@ function applyOperation(store, operation, allocation = null, corroboration = nul
     const receipt = cursorReceipt(operation.receipt, ticket.id);
     const from = ticket.state; ticket.cursor_launch = receipt; ticket.agent = receipt.agent_id; ticket.blocker = null; ticket.state = "In Progress"; ticket.duplicate_of = null;
     ticket.activity.push(activity(ticket.activity, "cursor_launch", `${from} → In Progress · lancement Cursor attaché`, receipt));
+  } else if (operation.type === "attach-cursor-run") {
+    const ticket = next.tickets.find((item) => item.id === operation.id); if (!ticket) throw new TicketError("TICKET_NOT_FOUND");
+    if (!ticket.cursor_launch || terminal.has(ticket.state) || ticket.activity.length >= MAX_ACTIVITY) throw new TicketError("TICKET_CURSOR_RUN_INVALID");
+    const receipt = cursorReceipt(operation.receipt, ticket.id);
+    if (receipt.receipt_version !== "dubsar.cursor-run-receipt/1") throw new TicketError("TICKET_CURSOR_RUN_INVALID");
+    if (receipt.agent_id !== ticket.cursor_launch.agent_id) throw new TicketError("TICKET_CURSOR_RUN_INVALID");
+    const previousNumber = ticket.cursor_run?.bounds?.correction_number;
+    const nextNumber = receipt.bounds?.correction_number;
+    if (!Number.isSafeInteger(nextNumber) || nextNumber < 1) throw new TicketError("TICKET_CURSOR_RUN_INVALID");
+    if (Number.isSafeInteger(previousNumber) && nextNumber <= previousNumber) throw new TicketError("TICKET_CURSOR_RUN_INVALID");
+    ticket.cursor_run = receipt;
+    ticket.agent = receipt.agent_id;
+    ticket.blocker = null;
+    ticket.state = "In Progress";
+    ticket.duplicate_of = null;
+    ticket.activity.push(activity(ticket.activity, "cursor_run", `In Progress · continuation Cursor ${nextNumber} attachée`, receipt));
+  } else if (operation.type === "fail-cursor-run") {
+    const ticket = next.tickets.find((item) => item.id === operation.id); if (!ticket) throw new TicketError("TICKET_NOT_FOUND");
+    if (!ticket.cursor_launch || terminal.has(ticket.state) || ticket.activity.length >= MAX_ACTIVITY) throw new TicketError("TICKET_CURSOR_RUN_INVALID");
+    const code = text(operation.code, 80, "TICKET_CURSOR_FAILURE_INVALID"); const summary = text(operation.summary, 500, "TICKET_CURSOR_FAILURE_INVALID");
+    const from = ticket.state; ticket.state = "Blocked"; ticket.blocker = summary; ticket.duplicate_of = null;
+    ticket.activity.push(activity(ticket.activity, "cursor_run_failed", `${from} → Blocked · ${summary}`, { code }));
   } else if (operation.type === "fail-cursor-launch") {
     const ticket = next.tickets.find((item) => item.id === operation.id); if (!ticket) throw new TicketError("TICKET_NOT_FOUND");
     if (ticket.cursor_launch !== null || terminal.has(ticket.state) || ticket.activity.length >= MAX_ACTIVITY) throw new TicketError("TICKET_CURSOR_LAUNCH_INVALID");
@@ -411,7 +443,7 @@ function applyOperation(store, operation, allocation = null, corroboration = nul
     ticket.activity.push(activity(ticket.activity, "cursor_launch_failed", `${from} → Blocked · ${summary}`, { code }));
   } else if (operation.type === "sync-cursor-status") {
     const ticket = next.tickets.find((item) => item.id === operation.id); if (!ticket) throw new TicketError("TICKET_NOT_FOUND");
-    if (!isTicketSyncEligible(ticket)) throw new TicketError(ticket.cursor_launch ? "TICKET_SYNC_TERMINAL" : "TICKET_SYNC_RECEIPT_REQUIRED");
+    if (!isTicketSyncEligible(ticket)) throw new TicketError(currentCursorReceipt(ticket) ? "TICKET_SYNC_TERMINAL" : "TICKET_SYNC_RECEIPT_REQUIRED");
     if (ticket.activity.length >= MAX_ACTIVITY) throw new TicketError("TICKET_ACTIVITY_LIMIT");
     const cursorObs = cursorObservation(operation.cursor_observation, ticket);
     const githubObs = githubPrObservation(operation.github_observation, ticket, cursorObs.pr);
