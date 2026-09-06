@@ -289,8 +289,8 @@
     },
     {
       "path": "packages/dubsar-codex-workbench/skills/launch-dubsar-work/SKILL.md",
-      "bytes": 4619,
-      "sha256": "794a06a5f3fa997703b087819f48c44f086e39b901293f876ea1449ff95da728",
+      "bytes": 5573,
+      "sha256": "b43822738954f151e9e7d9d7275170fe256887d7df8ffb94e63968c5b9c01ba1",
       "role": "runtime"
     },
     {
@@ -313,8 +313,8 @@
     },
     {
       "path": "packages/dubsar-codex-workbench/skills/sync-dubsar-work/SKILL.md",
-      "bytes": 7439,
-      "sha256": "5f40089a4e3706e4635a2e7de8fe6d7f2766fb567607b66e766954bd33826f62",
+      "bytes": 7559,
+      "sha256": "0361772659dbeb283a58b405a6ac19e1f6c6aac22cacc8edd0007276f14ef312",
       "role": "runtime"
     },
     {
@@ -781,8 +781,8 @@
     },
     {
       "path": "packages/dubsar-workbench-launcher/src/index.mjs",
-      "bytes": 3440,
-      "sha256": "0031e04dff8abf27b205cf73f19d5657ac5caf1f03dcde9bf0ef9cf855957f3c",
+      "bytes": 3464,
+      "sha256": "c75cccf4695533b099d8aeee6f2dedb813eb88226b0a77b34e89546b5c65d258",
       "role": "runtime"
     },
     {
@@ -793,8 +793,8 @@
     },
     {
       "path": "packages/dubsar-workbench-launcher/src/launcher.mjs",
-      "bytes": 25469,
-      "sha256": "8f7b94adfdba9744680b13e5d34e2beccf8bf5db5522056c427e91dadbfeab8d",
+      "bytes": 25509,
+      "sha256": "9b93c4fb0b7dffca6bd40a1d2057e92c930e93e3b6d91a779ca4a4e31f17fd77",
       "role": "runtime"
     },
     {
@@ -805,8 +805,8 @@
     },
     {
       "path": "packages/dubsar-workbench-launcher/src/registry-store.mjs",
-      "bytes": 36432,
-      "sha256": "e6c8a3e793f556a04f19cf884b0335f21e3faf3ebc99db9d9d990c18f7e32d36",
+      "bytes": 39074,
+      "sha256": "ac0d1c457900273a71dc80cb5409c6ce3e07f16bff1e739c2b6822b80572d472",
       "role": "runtime"
     },
     {
@@ -888,5 +888,5 @@
       "role": "runtime"
     }
   ],
-  "content_root_sha256": "4b71f7a481e17c6d118252663e25ad2946e407ae98561918d0435c3cd0176cbc"
+  "content_root_sha256": "4d9755538101a564e0e79a49208ecf0fff08a69107152aca9a9089e81a7194c0"
 }

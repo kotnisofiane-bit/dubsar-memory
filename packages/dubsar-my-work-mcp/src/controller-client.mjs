@@ -1,4 +1,4 @@
-import { CONTROLLER_TOOL } from "./mission-args.mjs";
+import { CONTROLLER_RUN_TOOL, CONTROLLER_TOOL } from "./mission-args.mjs";
 import { MyWorkMcpError } from "./canonical.mjs";
 import { readCredentials } from "./oauth-store.mjs";
 
@@ -29,13 +29,13 @@ export function streamableMcpLaunchHeaders(accessToken) {
   };
 }
 
-export function controllerToolsCallBody(args) {
+export function controllerToolsCallBody(args, tool = CONTROLLER_TOOL) {
   return {
     jsonrpc: "2.0",
     id: 1,
     method: "tools/call",
     params: {
-      name: CONTROLLER_TOOL,
+      name: tool,
       arguments: args,
     },
   };
@@ -82,21 +82,21 @@ function receiptFromToolResult(payload) {
   return { ambiguous: true, receipt: null };
 }
 
-export async function readMcpJsonRpc(response) {
+export async function readMcpJsonRpc(response, ambiguousCode = "MY_WORK_LAUNCH_AMBIGUOUS") {
   if (!response || typeof response.text !== "function") {
-    throw new MyWorkMcpError("MY_WORK_LAUNCH_AMBIGUOUS");
+    throw new MyWorkMcpError(ambiguousCode);
   }
   const text = await response.text();
   const type = String(response.headers?.get?.("content-type") ?? "");
   if (type.includes("text/event-stream")) {
     const payload = parseSseJsonRpc(text);
-    if (!payload) throw new MyWorkMcpError("MY_WORK_LAUNCH_AMBIGUOUS");
+    if (!payload) throw new MyWorkMcpError(ambiguousCode);
     return payload;
   }
   try {
     return JSON.parse(text);
   } catch {
-    throw new MyWorkMcpError("MY_WORK_LAUNCH_AMBIGUOUS");
+    throw new MyWorkMcpError(ambiguousCode);
   }
 }
 
@@ -115,10 +115,10 @@ export function controllerLaunchConfigured() {
   return null;
 }
 
-export async function callCreateDubsarWorkCursorAgent(args, { fetchImpl = fetch } = {}) {
+async function postControllerTool(tool, args, ambiguousCode, { fetchImpl = fetch } = {}) {
   const forwarded = assertControllerArgumentsOnly(args);
   if (typeof testTransport === "function") {
-    return testTransport({ tool: CONTROLLER_TOOL, arguments: forwarded });
+    return testTransport({ tool, arguments: forwarded });
   }
   const credentials = await readCredentials();
   if (!credentials?.access_token || typeof credentials.controller_url !== "string") {
@@ -129,18 +129,26 @@ export async function callCreateDubsarWorkCursorAgent(args, { fetchImpl = fetch 
     response = await fetchImpl(credentials.controller_url, {
       method: "POST",
       headers: streamableMcpLaunchHeaders(credentials.access_token),
-      body: JSON.stringify(controllerToolsCallBody(forwarded)),
+      body: JSON.stringify(controllerToolsCallBody(forwarded, tool)),
     });
   } catch {
-    throw new MyWorkMcpError("MY_WORK_LAUNCH_AMBIGUOUS");
+    throw new MyWorkMcpError(ambiguousCode);
   }
   let payload;
   try {
-    payload = await readMcpJsonRpc(response);
+    payload = await readMcpJsonRpc(response, ambiguousCode);
   } catch (error) {
-    throw error instanceof MyWorkMcpError ? error : new MyWorkMcpError("MY_WORK_LAUNCH_AMBIGUOUS");
+    throw error instanceof MyWorkMcpError ? error : new MyWorkMcpError(ambiguousCode);
   }
   const parsed = receiptFromToolResult(payload);
-  if (parsed.ambiguous || !parsed.receipt) throw new MyWorkMcpError("MY_WORK_LAUNCH_AMBIGUOUS");
+  if (parsed.ambiguous || !parsed.receipt) throw new MyWorkMcpError(ambiguousCode);
   return parsed.receipt;
+}
+
+export async function callCreateDubsarWorkCursorAgent(args, options = {}) {
+  return postControllerTool(CONTROLLER_TOOL, args, "MY_WORK_LAUNCH_AMBIGUOUS", options);
+}
+
+export async function callCreateDubsarWorkCursorAgentRun(args, options = {}) {
+  return postControllerTool(CONTROLLER_RUN_TOOL, args, "MY_WORK_CONTINUE_AMBIGUOUS", options);
 }

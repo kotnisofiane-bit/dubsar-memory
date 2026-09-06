@@ -1,0 +1,14 @@
+{
+  "controller_repository": "https://github.com/kotnisofiane-bit/kotnisofiane-bit-dubsar-cursor-reader-mcp",
+  "controller_revision": "9ea48ce17735b6585cf5816060afc4345b1a50cf",
+  "source_file": "src/index.ts",
+  "tool": "create_dubsar_work_cursor_agent_run",
+  "provenance": "Codex REWORK_MVP audit of the deployed Controller public tool schema. This My Work session could not fetch src/index.ts (GitHub 403/404 on the private repository) and therefore stores only the audited identity-field excerpt, not a full copy of the upstream file.",
+  "request_identity_field": "agent_url_or_id",
+  "request_identity_type": "string",
+  "receipt_identity_field": "agent_id",
+  "limits": [
+    "Full inputSchema of create_dubsar_work_cursor_agent_run was not recopied from the private tree.",
+    "This excerpt is sufficient to discriminate the required request identity field from the receipt agent_id field."
+  ]
+}

@@ -1,25 +1,34 @@
 # My Work MCP (local stdio)
 
 The local My Work MCP is a closed stdio server for ChatGPT Work. ChatGPT Work
-calls **`launch_cursor_mission` once**. That call persists one `DUB-###` ticket
-and issues exactly one remote `create_dubsar_work_cursor_agent` request. Work
-does not call Cursor MCP separately.
+calls **`launch_cursor_mission` once** to persist one `DUB-###` ticket and issue
+exactly one remote `create_dubsar_work_cursor_agent` request. Later follow-ups
+use **`continue_cursor_mission`**, which issues exactly one
+`create_dubsar_work_cursor_agent_run` request. Work does not call Cursor MCP
+separately and does not expose the Controller tool names as My Work tools.
 
 `contract_fingerprint` and `receipt_bounds` stay local. The Controller receives
-only the existing `prepare_cursor_mission.arguments` object, unchanged.
+only the existing `prepare_cursor_mission.arguments` object on launch, and the
+same persisted arguments plus `agent_url_or_id`, `correction_number`, and `prompt` on
+continuation.
 
 New contracts send `correction_budget: "uncapped"` and expect Controller PR26
-launch receipt bounds that also contain `correction_policy: "uncapped"`. My Work
-does **not** expose a follow-up / relance tool
-(`create_dubsar_work_cursor_agent_run` is never called). Controller run receipts
-(`dubsar.cursor-run-receipt/1`) for corrections 4 and 5 reuse the same
-`agent_id` and contract fingerprint, add `bounds.correction_number`, and may be
-attached as the **first** matching receipt. A later distinct receipt is refused
-without rewrite; a second `launch_cursor_mission` is
-`MY_WORK_LAUNCH_NOT_RETRYABLE`. Receipt shape for those run receipts is taken
-from the Codex GitHub observation of Controller
-`90a35ac02cf22399e389b048acf2c074053b763d` (`createDubsarWorkCursorAgentRun`);
-this session did not read that private repository.
+launch receipt bounds that also contain `correction_policy: "uncapped"`.
+`continue_cursor_mission` retransmits that persisted contract with
+`correction_budget: "uncapped"` and a caller-supplied positive
+`correction_number` (including 4 and 5). It never allocates a ticket, never
+calls `create_dubsar_work_cursor_agent` again, and never invents an agent,
+branch, or PR. Legacy numeric budget `3` tickets remain readable; continuation
+refuses them with `MY_WORK_CORRECTION_BUDGET_CAPPED` and does not rewrite them
+to uncapped.
+
+Controller run receipts (`dubsar.cursor-run-receipt/1`) keep the same
+`agent_id` and contract fingerprint, add `bounds.correction_number`, and are
+recorded beside the initial launch receipt. Receipt shape for those run
+receipts is taken from the Codex GitHub observation of Controller
+`createDubsarWorkCursorAgentRun` (reader SHA
+`9ea48ce17735b6585cf5816060afc4345b1a50cf`); this session did not read that
+private repository.
 
 ## Start
 
@@ -61,9 +70,10 @@ Set `DUBSAR_MY_WORK_OPEN_BROWSER=0` to print the URL without spawning a browser.
 | `list_tickets` | no |
 | `get_ticket` | no |
 | `launch_cursor_mission` | creates exactly one `DUB-###` and issues exactly one Controller launch |
+| `continue_cursor_mission` | continues an existing ticket through exactly one Controller run; no ticket/agent allocation |
 | `prepare_cursor_mission` | creates exactly one `DUB-###` and persists Controller arguments plus local metadata (no network) |
 | `attach_cursor_receipt` | attaches a Controller receipt, or no-op when identical |
-| `sync_cursor_status` | applies existing Cursor/GitHub mapping |
+| `sync_cursor_status` | applies existing Cursor/GitHub mapping to the current receipt run |
 
 Every tool requires an explicit selected project: `start`, `allocation_root`,
 and `project_id`. Incomplete missions, invalid 40-hex SHAs, unsafe relative
@@ -72,112 +82,37 @@ paths, contradictory repository URLs, `correction_budget` other than
 and receipts that still carry numeric `correction_budget` `3` remain readable
 and are never rewritten to uncapped.
 
-`launch_cursor_mission` talks to the remote Controller over Streamable HTTP:
-`Accept: application/json, text/event-stream`. The delivered Controller
-(`createMcpHandler` from `@modelcontextprotocol/server` 2.0.0) rejects the
-previous JSON-only request with HTTP 406 and answers a compatible request with
-`text/event-stream`. The local client decodes that SSE JSON-RPC result. It
-still issues exactly one `tools/call`.
-
-It fails with `MY_WORK_CONTROLLER_NOT_CONNECTED` before a launch request when
-no local credentials exist. After a request is submitted, an ambiguous or
-mismatched Controller response is `MY_WORK_LAUNCH_AMBIGUOUS` (or the attach
-mismatch code), records a bounded failure, fabricates no receipt, and later
-calls return `MY_WORK_LAUNCH_NOT_RETRYABLE` without a second request.
+`launch_cursor_mission` and `continue_cursor_mission` talk to the remote
+Controller over Streamable HTTP: `Accept: application/json, text/event-stream`.
+Each issues exactly one `tools/call`. After a request is submitted, an
+ambiguous or mismatched Controller response records a bounded failure,
+fabricates no receipt, and later calls for that same launch or
+`correction_number` return `MY_WORK_LAUNCH_NOT_RETRYABLE` or
+`MY_WORK_CONTINUE_NOT_RETRYABLE` without a second request.
 
 ## What is forwarded to the Controller
 
 `launch_cursor_mission` copies **only** `prepare_cursor_mission.arguments` into
 `create_dubsar_work_cursor_agent`. It must not add, drop, or rebuild fields.
-`contract_fingerprint` and `receipt_bounds` are **local metadata**: persist them
-on the ticket, then match the real Controller receipt against them. They are
-not tool arguments.
+`continue_cursor_mission` copies those same persisted arguments into
+`create_dubsar_work_cursor_agent_run` and adds only `agent_url_or_id` (the persisted
+launch receipt `agent_id`), `correction_number`, and `prompt`. The run **receipt**
+still carries `agent_id`.
+`contract_fingerprint` and `receipt_bounds` are **local metadata**.
 
-```json
-{
-  "name": "create_dubsar_work_cursor_agent",
-  "arguments": {
-    "ticket_id": "DUB-001",
-    "target_repository_url": "https://github.com/owner/repo",
-    "pr_repository_url": "https://github.com/owner/repo",
-    "repository_refs": [
-      { "repository_url": "https://github.com/owner/repo", "starting_sha": "<40 hex>" }
-    ],
-    "allowed_paths": ["packages/dubsar-my-work-mcp/**"],
-    "mission": "…",
-    "acceptance_criteria": ["…"],
-    "expected_evidence": ["…"],
-    "required_capabilities": ["…"],
-    "preferred_plugins": [],
-    "required_plugins": [],
-    "human_gates": [
-      "merge",
-      "local_install",
-      "deployment",
-      "publication",
-      "vm_cloud",
-      "secrets",
-      "backend_switch",
-      "scope_extension"
-    ],
-    "correction_budget": "uncapped"
-  }
-}
-```
-
-Local metadata returned beside `arguments` (never passed to the Controller):
-
-```json
-{
-  "contract_fingerprint": "sha256:<64 lowercase hex>",
-  "receipt_bounds": {
-    "allowed_paths": ["packages/dubsar-my-work-mcp/**"],
-    "auto_create_pr": true,
-    "correction_budget": "uncapped",
-    "correction_policy": "uncapped",
-    "human_gates": ["merge", "local_install", "deployment", "publication", "vm_cloud", "secrets", "backend_switch", "scope_extension"],
-    "pr_repository_url": "https://github.com/owner/repo",
-    "stateless": true,
-    "work_on_current_branch": false
-  }
-}
-```
-
-The fingerprint is `sha256:` plus SHA-256 of `JSON.stringify` of an object
-built in this exact key order (Controller `src/dubsar-work.ts` at
-`90a35ac02cf22399e389b048acf2c074053b763d`):
-`acceptance_criteria`, `allowed_paths`, `correction_budget`,
-`expected_evidence`, `human_gates`, `mission`, `preferred_plugins`,
-`pr_repository_url`, `required_capabilities`, `required_plugins`,
-`repository_refs`, `target_repository_url`, `ticket_id`. No extra fields, no
-stable key sort. Frozen vectors:
-`packages/dubsar-my-work-mcp/vectors/controller-canonical-pr26.json`
-(`sha256:0f70c44c67c84c156eca8d8fcf57cf25340447d5e4d19867377ee2e3be87e3b6`) and
-the legacy budget-3 vector
-`packages/dubsar-my-work-mcp/vectors/controller-canonical-v1.json`
-(`sha256:56ada5fb957c3c84449688dc79169e093ee4b7d6d05dc0cfc64be9c0db89f574`).
-
-## Coordinated cutover (no deployment in this lot)
-
-The currently deployed Controller still launches with numeric budget `3`. This
-code emits uncapped contracts. Bring Controller PR26
-(`90a35ac02cf22399e389b048acf2c074053b763d`) into service **before** this My
-Work revision, then merge this repository. Do not mix a budget-3 Controller
-with uncapped arguments. This document does not deploy either repository.
-
-A successful Controller receipt is attached only when `ticket_id`,
+A successful launch receipt is attached only when `ticket_id`,
 `target_repository_url`, `repository_refs`, the complete Controller
 `receiptBounds` object, and `contract_fingerprint` match the persisted
-metadata. `launch_cursor_mission` then returns `ticket_id`, `agent_id`,
-`run_id`, and `source_url`. These survive MCP restart (`cursor_contract`
-activity, `launch_submitted`, and `cursor_launch`). The ticket state is
-`In Progress`.
+metadata. A successful run receipt must also match the persisted `agent_id`
+and the requested `correction_number`. The initial launch receipt stays on
+`cursor_launch`; later validated run receipts are appended (`cursor_run` plus
+activity). After MCP restart, `get_ticket.attached_receipt` and
+`sync_cursor_status` use the current run (`cursor_run` when present, otherwise
+the launch receipt).
 
 `get_ticket` returns `prepared_contract` with `arguments`,
-`contract_fingerprint`, and `receipt_bounds`, plus `attached_receipt`.
-
-`attach_cursor_receipt` remains available for receipts obtained outside the
-combined launch tool. Any divergence fails without writing.
+`contract_fingerprint`, and `receipt_bounds`, plus `attached_receipt`,
+`attached_launch_receipt`, and `attached_run_receipts`.
 
 Merge, local install, deployment, publication, VM/cloud, secrets, backend
 switch, and scope extension stay human gates.

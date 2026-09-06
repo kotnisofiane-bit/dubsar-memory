@@ -34,6 +34,7 @@ export {
 export {
   TicketError,
   applyTicketChange,
+  currentCursorReceipt,
   previewTicketChange,
   readTicketAllocations,
   readTickets,

@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { MyWorkMcpError } from "./canonical.mjs";
 
 export const CONTROLLER_TOOL = "create_dubsar_work_cursor_agent";
+export const CONTROLLER_RUN_TOOL = "create_dubsar_work_cursor_agent_run";
 export const CORRECTION_BUDGET = "uncapped";
 export const CORRECTION_POLICY = "uncapped";
 export const LEGACY_CORRECTION_BUDGET = 3;
@@ -44,6 +45,14 @@ export const CONTROLLER_ARGUMENT_KEYS = Object.freeze([
   "human_gates",
   "correction_budget",
 ]);
+export const CONTROLLER_RUN_ARGUMENT_KEYS = Object.freeze([
+  ...CONTROLLER_ARGUMENT_KEYS,
+  "agent_url_or_id",
+  "correction_number",
+  "prompt",
+]);
+export const CONTROLLER_RUN_REQUEST_IDENTITY_FIELD = "agent_url_or_id";
+export const CONTROLLER_RUN_RECEIPT_IDENTITY_FIELD = "agent_id";
 export const REQUIRED_CAPABILITIES = Object.freeze([
   "Node.js 20 ou supérieur",
   "Implémentation MCP stdio locale",
@@ -55,6 +64,15 @@ const HUMAN_GATES = Object.freeze(
   JSON.parse(
     readFileSync(
       fileURLToPath(new URL("../vectors/controller-human-gates.json", import.meta.url)),
+      "utf8",
+    ),
+  ),
+);
+
+const RUN_TOOL_IDENTITY = Object.freeze(
+  JSON.parse(
+    readFileSync(
+      fileURLToPath(new URL("../vectors/controller-run-tool-identity-9ea48ce.json", import.meta.url)),
       "utf8",
     ),
   ),
@@ -196,6 +214,60 @@ export function assemblePreparedMission(args) {
 
 export function controllerToolCall(args) {
   return { tool: CONTROLLER_TOOL, arguments: args };
+}
+
+export function requirePositiveCorrectionNumber(value) {
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new MyWorkMcpError("MY_WORK_CORRECTION_NUMBER_INVALID");
+  }
+  return value;
+}
+
+export function contractAllowsUncappedContinuation(contract) {
+  const args = contract?.arguments ?? {};
+  const bounds = contract?.receipt_bounds ?? {};
+  return args.correction_budget === CORRECTION_BUDGET && bounds.correction_budget === CORRECTION_BUDGET && bounds.correction_policy === CORRECTION_POLICY;
+}
+
+export function controllerRunToolCall(args, { agentId, correctionNumber, prompt }) {
+  const forwarded = {
+    ticket_id: args.ticket_id,
+    target_repository_url: args.target_repository_url,
+    pr_repository_url: args.pr_repository_url,
+    repository_refs: args.repository_refs.map((ref) => ({
+      repository_url: ref.repository_url,
+      starting_sha: ref.starting_sha,
+    })),
+    allowed_paths: [...args.allowed_paths],
+    mission: args.mission,
+    acceptance_criteria: [...args.acceptance_criteria],
+    expected_evidence: [...args.expected_evidence],
+    required_capabilities: [...args.required_capabilities],
+    preferred_plugins: [...args.preferred_plugins],
+    required_plugins: [...args.required_plugins],
+    human_gates: [...args.human_gates],
+    correction_budget: CORRECTION_BUDGET,
+    agent_url_or_id: boundedItem(agentId, MAX_ITEM, "MY_WORK_MISSION_INCOMPLETE"),
+    correction_number: requirePositiveCorrectionNumber(correctionNumber),
+    prompt: boundedItem(prompt, MAX_MISSION, "MY_WORK_MISSION_INCOMPLETE"),
+  };
+  if (Buffer.byteLength(JSON.stringify(forwarded), "utf8") > MAX_CONTRACT_BYTES) {
+    throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
+  }
+  return { tool: CONTROLLER_RUN_TOOL, arguments: forwarded };
+}
+
+export function controllerRunToolIdentityContract() {
+  return RUN_TOOL_IDENTITY;
+}
+
+export function matchesControllerRunRequestIdentity(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return false;
+  const field = RUN_TOOL_IDENTITY.request_identity_field;
+  const value = args[field];
+  if (typeof value !== "string" || value.trim() !== value || value.length < 1) return false;
+  if (Object.hasOwn(args, RUN_TOOL_IDENTITY.receipt_identity_field)) return false;
+  return true;
 }
 
 export function refsMatch(left, right) {

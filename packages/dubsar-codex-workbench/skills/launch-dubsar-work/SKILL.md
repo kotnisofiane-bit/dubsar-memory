@@ -11,17 +11,21 @@ repository (`owner/name`). My Work is a local view, not an MCP client.
 ## Fixed Controller boundary
 
 - Read-only upstream: `kotnisofiane-bit/kotnisofiane-bit-dubsar-cursor-reader-mcp`
-  PR 26 at `90a35ac02cf22399e389b048acf2c074053b763d`.
-- Call `create_dubsar_work_cursor_agent` exactly once. Do not call
-  `create_dubsar_work_cursor_agent_run` and do not invent a follow-up
-  orchestration for corrections 4 or 5. My Work has no relance tool.
+  at `9ea48ce17735b6585cf5816060afc4345b1a50cf` (launch contract also matches
+  PR26 `90a35ac02cf22399e389b048acf2c074053b763d`).
+- Call `create_dubsar_work_cursor_agent` exactly once to start. Work's public
+  MCP tool `continue_cursor_mission` later calls
+  `create_dubsar_work_cursor_agent_run` once per positive `correction_number`.
+  That continuation reuses the same ticket, agent, branch, and PR. It must not
+  allocate a ticket, create an agent, or open another PR.
 - New contracts send `correction_budget: "uncapped"`. Accept only
   `dubsar.cursor-launch-receipt/1` or `dubsar.cursor-run-receipt/1` whose
   bounds match the persisted metadata (`correction_budget` and
-  `correction_policy` both `uncapped` for new receipts). Run receipts from
-  Controller `createDubsarWorkCursorAgentRun` keep the same `agent_id` and
-  add `bounds.correction_number`; they may be attached as the first matching
-  receipt only. Never persist credentials or MCP tokens.
+  `correction_policy` both `uncapped` for new receipts). Run receipts keep the
+  same `agent_id` and add `bounds.correction_number`. Persist them beside the
+  initial launch receipt; do not overwrite launch history. Legacy budget-3
+  contracts stay readable and are not silently expanded. Never persist
+  credentials or MCP tokens.
 
 ## Workflow
 
@@ -59,21 +63,33 @@ repository (`owner/name`). My Work is a local view, not an MCP client.
    Stop on a missing/malformed receipt or when its `ticket_id` or exact
    `sha256:<64 lowercase hex>` `contract_fingerprint` differs from the value
    computed by the same Controller canonicalization. Do not normalize or accept
-   another fingerprint. Do not attach it, retry, call the run tool,
-   or invent an agent. Record the bounded failure through `tickets
+   another fingerprint. Do not attach it, retry, invent an agent, or treat an
+   ambiguous response as success. Record the bounded failure through `tickets
    fail-cursor-launch` preview/apply when a safe error code and summary exist.
 8. Otherwise put the complete receipt in a temporary `attach-cursor-launch`
    proposal. Preview and apply that CLI operation with the returned digest.
    Re-read the ticket and require `In Progress` plus the exact persisted
    receipt.
 9. Before presenting My Work, run the `sync-dubsar-work` workflow for this
-   ticket using only the persisted `agent_id` and `run_id`. Do not launch,
-   retry, discover, or switch agents. Then open My Work exactly once with
+   ticket using only the current persisted `agent_id` and `run_id` (`cursor_run`
+   when present, otherwise `cursor_launch`). Do not launch, retry, discover, or
+   switch agents. Then open My Work exactly once with
    `node "<launcher-bin>" --start <root>`.
+
+## Continuation (existing ticket only)
+
+When the user asks to continue the same mission, call Work
+`continue_cursor_mission` once with the existing `ticket_id`, a strictly
+increasing positive `correction_number`, and the correction prompt. That tool
+retransmits the stored contract with `correction_budget: "uncapped"` through
+`create_dubsar_work_cursor_agent_run`, sending `agent_url_or_id` (the persisted
+receipt `agent_id`). Do not call Cursor directly. Do not
+create a ticket, agent, branch, or PR. Record the validated run receipt without
+erasing the launch receipt. After restart, sync the current run.
 
 ## Limits
 
-No polling, webhook, daemon, secret storage, second launch, retry, or
-follow-up/relance tool. Do not poll. Temporary proposals must be outside user
+No polling, webhook, daemon, secret storage, second launch, or retry of an
+ambiguous call. Do not poll. Temporary proposals must be outside user
 memory and deleted when the workflow stops. The launcher remains local-only: it
 is not an MCP client and it does not open outbound network.
