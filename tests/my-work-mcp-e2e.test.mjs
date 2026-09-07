@@ -767,6 +767,12 @@ test("E2E continuation ambiguity does not retry and keeps the launch receipt", a
       });
       assert.equal(retry.result.isError, true);
       assert.equal(retry.result.structuredContent.code, "MY_WORK_CONTINUE_NOT_RETRYABLE");
+      const skip = await first.call("tools/call", {
+        name: "continue_cursor_mission",
+        arguments: { ...context, ticket_id: "DUB-001", correction_number: 5, prompt: "Correction 5" },
+      });
+      assert.equal(skip.result.isError, true);
+      assert.equal(skip.result.structuredContent.code, "MY_WORK_CONTINUE_NOT_RETRYABLE");
       assert.equal(posts.filter((name) => name === CONTROLLER_RUN_TOOL).length, 1);
     } finally {
       await stopServer(first.child);
