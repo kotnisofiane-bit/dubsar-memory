@@ -587,6 +587,95 @@ test("continuation refuses terminal tickets before any Controller run call", asy
   }
 });
 
+test("launch refuses terminal tickets before any Controller launch call", async () => {
+  const context = await env();
+  const calls = [];
+  setTestControllerTransport(async (request) => {
+    calls.push(request);
+    return receiptFor({
+      arguments: request.arguments,
+      contract_fingerprint: (await executeTool("get_ticket", { ...context, ticket_id: request.arguments.ticket_id })).prepared_contract.contract_fingerprint,
+      receipt_bounds: (await executeTool("get_ticket", { ...context, ticket_id: request.arguments.ticket_id })).prepared_contract.receipt_bounds,
+    });
+  });
+  try {
+    await executeTool("prepare_cursor_mission", { ...context, ...mission() });
+    const preview = await previewTicketChange({
+      start: context.start,
+      allocationRoot: context.allocation_root,
+      projectId: context.project_id,
+      operation: { type: "transition", id: "DUB-001", to: "Cancelled" },
+    });
+    await applyTicketChange({
+      start: context.start,
+      allocationRoot: context.allocation_root,
+      projectId: context.project_id,
+      operation: { type: "transition", id: "DUB-001", to: "Cancelled" },
+      expectedChange: preview.change_sha256,
+    });
+    await assert.rejects(
+      executeTool("launch_cursor_mission", { ...context, ...mission() }),
+      { code: "MY_WORK_TICKET_TERMINAL" },
+    );
+    assert.equal(calls.length, 0);
+    const ticket = (await readTickets({ start: context.start })).tickets[0];
+    assert.equal(ticket.state, "Cancelled");
+    assert.equal(ticket.cursor_launch, null);
+    assert.equal(ticket.activity.some((row) => row.kind === "launch_submitted"), false);
+  } finally {
+    resetTestControllerTransport();
+  }
+});
+
+test("continuation treats a first-attached run receipt as the recorded correction baseline", async () => {
+  const vector = JSON.parse(await readFile(path.join(mcpRoot, "vectors", "controller-canonical-pr26.json"), "utf8"));
+  const context = await env();
+  const calls = [];
+  setTestControllerTransport(async (request) => {
+    calls.push(request);
+    if (request.arguments.correction_number === 5) return vector.follow_up_5_receipt;
+    throw new Error("unexpected Controller call");
+  });
+  try {
+    await preparePr26(context, vector);
+    await executeTool("attach_cursor_receipt", {
+      ...context,
+      ticket_id: "DUB-001",
+      receipt: vector.follow_up_4_receipt,
+    });
+    await assert.rejects(
+      executeTool("continue_cursor_mission", {
+        ...context,
+        ticket_id: "DUB-001",
+        correction_number: 1,
+        prompt: "must not rewind past the attached run receipt",
+      }),
+      { code: "MY_WORK_CORRECTION_NUMBER_INVALID" },
+    );
+    const replay = await executeTool("continue_cursor_mission", {
+      ...context,
+      ticket_id: "DUB-001",
+      correction_number: 4,
+      prompt: "already recorded on cursor_launch",
+    });
+    assert.equal(replay.continued, false);
+    assert.equal(replay.run_id, vector.follow_up_4_receipt.run_id);
+    assert.equal(replay.correction_number, 4);
+    const five = await executeTool("continue_cursor_mission", {
+      ...context,
+      ticket_id: "DUB-001",
+      correction_number: 5,
+      prompt: "Correction 5",
+    });
+    assert.equal(five.continued, true);
+    assert.equal(five.run_id, vector.follow_up_5_receipt.run_id);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].arguments.correction_number, 5);
+  } finally {
+    resetTestControllerTransport();
+  }
+});
+
 test("continuation refuses capped budget-3 contracts and divergent or ambiguous run receipts without retry", async () => {
   const legacy = await env();
   const vectorLegacy = JSON.parse(await readFile(path.join(mcpRoot, "vectors", "controller-canonical-v1.json"), "utf8"));
