@@ -73,6 +73,49 @@ test("skill résout le launcher installé et persiste le ticket depuis un cwd ar
   assert.equal(JSON.parse(list.stdout).tickets[0].id, "DUB-001");
 });
 
+test("attach-cursor-run refuse un correction_number déjà porté par cursor_launch", async () => {
+  const env = await setup();
+  await apply(env, create);
+  const launchRun = {
+    ...receipt,
+    receipt_version: "dubsar.cursor-run-receipt/1",
+    run_id: "run-4",
+    source_url: "https://cursor.example/runs/4",
+    bounds: { ...receipt.bounds, correction_number: 4 },
+  };
+  await apply(env, { type: "attach-cursor-launch", id: "DUB-001", receipt: launchRun });
+  const duplicate = {
+    ...launchRun,
+    run_id: "run-4-duplicate",
+    source_url: "https://cursor.example/runs/4-duplicate",
+  };
+  await assert.rejects(
+    previewTicketChange({ ...env, operation: { type: "attach-cursor-run", id: "DUB-001", receipt: duplicate } }),
+    { code: "TICKET_CURSOR_RUN_INVALID" },
+  );
+  const lower = {
+    ...launchRun,
+    run_id: "run-1",
+    source_url: "https://cursor.example/runs/1-lower",
+    bounds: { ...launchRun.bounds, correction_number: 1 },
+  };
+  await assert.rejects(
+    previewTicketChange({ ...env, operation: { type: "attach-cursor-run", id: "DUB-001", receipt: lower } }),
+    { code: "TICKET_CURSOR_RUN_INVALID" },
+  );
+  const next = {
+    ...launchRun,
+    run_id: "run-5",
+    source_url: "https://cursor.example/runs/5",
+    bounds: { ...launchRun.bounds, correction_number: 5 },
+  };
+  await apply(env, { type: "attach-cursor-run", id: "DUB-001", receipt: next });
+  const ticket = (await readTickets({ start: env.start })).tickets[0];
+  assert.equal(ticket.cursor_launch.run_id, "run-4");
+  assert.equal(ticket.cursor_run.run_id, "run-5");
+  assert.equal(ticket.cursor_run.bounds.correction_number, 5);
+});
+
 test("skill impose allocation avant MCP, appel unique et arrêt sur contradiction", async () => {
   const skill = await readFile(launchSkill, "utf8");
   assert.match(skill, /Never call\n+   Cursor before this persisted allocation succeeds/); assert.match(skill, /exactly once/); assert.match(skill, /sha256:<64 lowercase hex>/); assert.match(skill, /Controller canonicalization/); assert.match(skill, /Stop on a missing\/malformed receipt/); assert.match(skill, /do not poll/i);

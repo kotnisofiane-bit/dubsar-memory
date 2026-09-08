@@ -179,10 +179,19 @@ const CURSOR_LIFECYCLES = new Set(["running", "failed", "completed"]);
 const GITHUB_PR_STATES = new Set(["open", "draft", "closed", "merged"]);
 const OWNER_REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const SHA40 = /^[0-9a-f]{40}$/u;
+function correctionNumberFrom(receipt) {
+  const value = receipt?.bounds?.correction_number;
+  return Number.isSafeInteger(value) && value >= 1 ? value : 0;
+}
+
 export function currentCursorReceipt(ticket) {
   if (ticket?.cursor_run && ticket.cursor_run.agent_id && ticket.cursor_run.run_id) return ticket.cursor_run;
   if (ticket?.cursor_launch && ticket.cursor_launch.agent_id && ticket.cursor_launch.run_id) return ticket.cursor_launch;
   return null;
+}
+
+export function recordedCorrectionNumber(ticket) {
+  return Math.max(correctionNumberFrom(ticket?.cursor_run), correctionNumberFrom(ticket?.cursor_launch));
 }
 export function isTicketSyncEligible(ticket) {
   return Boolean(ticket && !terminal.has(ticket.state) && currentCursorReceipt(ticket));
@@ -419,10 +428,10 @@ function applyOperation(store, operation, allocation = null, corroboration = nul
     const receipt = cursorReceipt(operation.receipt, ticket.id);
     if (receipt.receipt_version !== "dubsar.cursor-run-receipt/1") throw new TicketError("TICKET_CURSOR_RUN_INVALID");
     if (receipt.agent_id !== ticket.cursor_launch.agent_id) throw new TicketError("TICKET_CURSOR_RUN_INVALID");
-    const previousNumber = ticket.cursor_run?.bounds?.correction_number;
+    const previousNumber = recordedCorrectionNumber(ticket);
     const nextNumber = receipt.bounds?.correction_number;
     if (!Number.isSafeInteger(nextNumber) || nextNumber < 1) throw new TicketError("TICKET_CURSOR_RUN_INVALID");
-    if (Number.isSafeInteger(previousNumber) && nextNumber <= previousNumber) throw new TicketError("TICKET_CURSOR_RUN_INVALID");
+    if (nextNumber <= previousNumber) throw new TicketError("TICKET_CURSOR_RUN_INVALID");
     ticket.cursor_run = receipt;
     ticket.agent = receipt.agent_id;
     ticket.blocker = null;
