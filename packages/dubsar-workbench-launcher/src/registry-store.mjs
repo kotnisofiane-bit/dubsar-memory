@@ -510,16 +510,24 @@ export async function applyTicketChange({ start, allocationRoot, projectId, oper
     const allocationTarget = path.join(safeAllocationRoot, TICKET_ALLOCATIONS_NAME);
     const allocationTemporary = `${allocationTarget}.${randomBytes(12).toString("hex")}.tmp`;
     const previousProject = await entryInfo(target) === null ? null : (await captureRegularFile(path.dirname(target), path.basename(target), 1024 * 1024)).content;
+    const previousAllocations = operation.type !== "create" || await entryInfo(allocationTarget) === null ? null : (await captureRegularFile(safeAllocationRoot, TICKET_ALLOCATIONS_NAME, 128 * 1024)).content;
+    let allocationsPublished = false;
     let projectPublished = false;
     try {
       await stagePrivateFile(projectTemporary, `${stable(preview.after)}\n`);
       if (operation.type === "create") await stagePrivateFile(allocationTemporary, `${stable(preview.allocations_after)}\n`);
+      // Publish allocations before tickets so a kill between the two renames
+      // leaves a gap, not DUB-N in tickets with next_number still N.
+      if (operation.type === "create") { await rename(allocationTemporary, allocationTarget); allocationsPublished = true; }
       await rename(projectTemporary, target); projectPublished = true;
-      if (operation.type === "create") await rename(allocationTemporary, allocationTarget);
     } catch (error) {
       if (projectPublished) {
         if (previousProject === null) await unlink(target).catch(() => {});
         else { const restore = `${target}.${randomBytes(12).toString("hex")}.restore`; await stagePrivateFile(restore, previousProject); await rename(restore, target); }
+      }
+      if (allocationsPublished) {
+        if (previousAllocations === null) await unlink(allocationTarget).catch(() => {});
+        else { const restore = `${allocationTarget}.${randomBytes(12).toString("hex")}.restore`; await stagePrivateFile(restore, previousAllocations); await rename(restore, allocationTarget); }
       }
       throw error;
     } finally { await unlink(projectTemporary).catch(() => {}); await unlink(allocationTemporary).catch(() => {}); }
