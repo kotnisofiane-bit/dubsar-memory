@@ -73,6 +73,19 @@ test("échec de publication projet ne consomme aucune allocation", async () => {
   assert.equal((await readTicketAllocations(env)).allocations.length, 0);
   assert.equal((await readTickets({ start: env.second })).tickets.length, 0);
 });
+test("allocations publiées sans ticket ne bloquent pas les créations suivantes", async () => {
+  const env = await environment();
+  await writeFile(path.join(env.allocationRoot, "ticket-allocations.json"), `${JSON.stringify({
+    format: "dubsar.ticket-allocations/1",
+    next_number: 2,
+    allocations: [{ id: "DUB-001", project_id: "project-a" }],
+  }, null, 0)}\n`);
+  await perform(env, env.first, "project-a", create("Après interruption"));
+  assert.equal((await readTickets({ start: env.first })).tickets[0].id, "DUB-002");
+  assert.equal((await readTicketAllocations(env)).next_number, 3);
+  await perform(env, env.second, "project-b", create("Suivant"));
+  assert.equal((await readTickets({ start: env.second })).tickets[0].id, "DUB-003");
+});
 test("le binaire installé expose réellement tickets list/create", async () => {
   const env = await environment(); const proposal = path.join(env.allocationRoot, "public-proposal.json"); await writeFile(proposal, JSON.stringify(create("CLI publique")));
   const bin = path.resolve("packages/dubsar-workbench-launcher/bin/dubsar-workbench-open.mjs");
