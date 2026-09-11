@@ -110,6 +110,8 @@ export const TICKET_STATES = Object.freeze([
 export const TERMINAL_TICKET_STATES = Object.freeze(["Done", "Cancelled", "Duplicate"]);
 const MAX_TICKETS = 999;
 const MAX_ACTIVITY = 200;
+export const MAX_TICKETS_JSON_BYTES = 1024 * 1024;
+const MAX_ACTIVITY_EVIDENCE_BYTES = 64 * 1024;
 const SHA = /^[0-9a-f]{64}$/u;
 const CONTRACT_FINGERPRINT = /^sha256:[0-9a-f]{64}$/u;
 const GITHUB_REPOSITORY_URL = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?$/u;
@@ -158,6 +160,20 @@ function boundedJson(value, max = 16 * 1024) {
   try { encoded = stable(value); } catch { throw new TicketError("TICKET_CURSOR_RECEIPT_INVALID"); }
   if (value === null || typeof value !== "object" || Array.isArray(value) || Buffer.byteLength(encoded, "utf8") > max) throw new TicketError("TICKET_CURSOR_RECEIPT_INVALID");
   return structuredClone(value);
+}
+function activityEvidence(value) {
+  if (value == null) return null;
+  let encoded;
+  try { encoded = stable(value); } catch { throw new TicketError("TICKET_ACTIVITY_EVIDENCE_INVALID"); }
+  if (typeof value !== "object" || Array.isArray(value) || Buffer.byteLength(encoded, "utf8") > MAX_ACTIVITY_EVIDENCE_BYTES) throw new TicketError("TICKET_ACTIVITY_EVIDENCE_INVALID");
+  return structuredClone(value);
+}
+function encodedTicketStore(value) {
+  return `${stable(value)}\n`;
+}
+function assertTicketStoreFits(value) {
+  if (Buffer.byteLength(encodedTicketStore(value), "utf8") > MAX_TICKETS_JSON_BYTES) throw new TicketError("TICKET_STORE_LIMIT");
+  return value;
 }
 function cursorReceipt(value, ticketId) {
   const receipt = boundedJson(value);
@@ -366,7 +382,7 @@ export async function readTicketAllocations({ allocationRoot }) {
 export async function readTickets({ start }) {
   const target = await storePath(start);
   if (await entryInfo(target) === null) return validateTicketStore(emptyStore());
-  try { return validateTicketStore(JSON.parse((await captureRegularFile(path.dirname(target), path.basename(target), 1024 * 1024)).content.toString("utf8"))); }
+  try { return validateTicketStore(JSON.parse((await captureRegularFile(path.dirname(target), path.basename(target), MAX_TICKETS_JSON_BYTES)).content.toString("utf8"))); }
   catch (error) { if (error?.code === "ENOENT") return validateTicketStore(emptyStore()); if (error instanceof TicketError) throw error; throw new TicketError("TICKET_STORE_INVALID"); }
 }
 function activity(previous, kind, summary, evidence = null) {
@@ -406,7 +422,7 @@ function applyOperation(store, operation, allocation = null, corroboration = nul
   } else if (operation.type === "activity") {
     const ticket = next.tickets.find((item) => item.id === operation.id); if (!ticket) throw new TicketError("TICKET_NOT_FOUND");
     if (ticket.activity.length >= MAX_ACTIVITY) throw new TicketError("TICKET_ACTIVITY_LIMIT");
-    ticket.activity.push(activity(ticket.activity, text(operation.kind, 40), text(operation.summary, 500), operation.evidence ?? null));
+    ticket.activity.push(activity(ticket.activity, text(operation.kind, 40), text(operation.summary, 500), activityEvidence(operation.evidence ?? null)));
   } else if (operation.type === "attach-cursor-launch") {
     const ticket = next.tickets.find((item) => item.id === operation.id); if (!ticket) throw new TicketError("TICKET_NOT_FOUND");
     if (ticket.cursor_launch !== null || terminal.has(ticket.state) || ticket.activity.length >= MAX_ACTIVITY) throw new TicketError("TICKET_CURSOR_LAUNCH_INVALID");
@@ -457,7 +473,7 @@ function applyOperation(store, operation, allocation = null, corroboration = nul
     ticket.duplicate_of = null;
     ticket.activity.push(activity(ticket.activity, "cursor_sync", `${from} → ${mapped.state}`, mapped.evidence));
   } else throw new TicketError("TICKET_OPERATION_INVALID");
-  return validateTicketStore(next);
+  return assertTicketStoreFits(validateTicketStore(next));
 }
 export async function previewTicketChange({ start, allocationRoot, projectId, operation, observeGithubMerge }) {
   const before = await readTickets({ start });
@@ -509,10 +525,12 @@ export async function applyTicketChange({ start, allocationRoot, projectId, oper
     const projectTemporary = `${target}.${randomBytes(12).toString("hex")}.tmp`;
     const allocationTarget = path.join(safeAllocationRoot, TICKET_ALLOCATIONS_NAME);
     const allocationTemporary = `${allocationTarget}.${randomBytes(12).toString("hex")}.tmp`;
-    const previousProject = await entryInfo(target) === null ? null : (await captureRegularFile(path.dirname(target), path.basename(target), 1024 * 1024)).content;
+    const previousProject = await entryInfo(target) === null ? null : (await captureRegularFile(path.dirname(target), path.basename(target), MAX_TICKETS_JSON_BYTES)).content;
     let projectPublished = false;
     try {
-      await stagePrivateFile(projectTemporary, `${stable(preview.after)}\n`);
+      const published = encodedTicketStore(preview.after);
+      assertTicketStoreFits(preview.after);
+      await stagePrivateFile(projectTemporary, published);
       if (operation.type === "create") await stagePrivateFile(allocationTemporary, `${stable(preview.allocations_after)}\n`);
       await rename(projectTemporary, target); projectPublished = true;
       if (operation.type === "create") await rename(allocationTemporary, allocationTarget);
