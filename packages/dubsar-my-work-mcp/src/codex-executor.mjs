@@ -42,6 +42,40 @@ function rejectFabricatedIds(herdrId, sessionId) {
   }
 }
 
+export function codexExecArgv(prompt) {
+  return ["exec", "--", requirePrompt(prompt)];
+}
+
+export function codexResumeArgv(sessionId, prompt) {
+  if (typeof sessionId !== "string" || sessionId.length < 1) {
+    throw new MyWorkMcpError("MY_WORK_CODEX_CONTINUE_AMBIGUOUS");
+  }
+  return ["exec", "resume", sessionId, "--", requirePrompt(prompt)];
+}
+
+function resultBody(payload) {
+  return payload?.result ?? payload;
+}
+
+function assertPositiveStop(sent, got, sessionId) {
+  const sentBody = resultBody(sent.payload);
+  const sentSession = sessionRefFrom({ result: sentBody }) ?? sentBody?.native_session_id;
+  if (sentBody?.interrupted !== true || sentBody?.process_exited !== true) {
+    throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
+  }
+  if (sentSession !== sessionId) throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
+  if (!got.ok) return;
+  if (got.payload?.result?.running !== false) throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
+  if (sessionRefFrom(got.payload) !== sessionId) throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
+}
+
+function failIfPromptMissing(started, code) {
+  if (started.payload?.error?.code === "prompt_missing") {
+    throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
+  }
+  if (!started.ok) throw new MyWorkMcpError(code);
+}
+
 export function createHerdrCodexExecutor() {
   return {
     kind: "herdr",
@@ -56,15 +90,11 @@ export function createHerdrCodexExecutor() {
       const ids = workspaceIdsFrom(created.payload);
       if (!ids) throw new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_AMBIGUOUS");
       if (ids.cwd && ids.cwd !== confined) throw new MyWorkMcpError("MY_WORK_SCOPE_EXTENSION");
-      const started = await herdrJson(
-        ["agent", "start", name, "--kind", "codex", "--pane", ids.paneId, "--", ...CODEX_LAUNCH_ARGV],
-        { cwd: confined },
-      );
-      if (!started.ok) throw new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_AMBIGUOUS");
-      const prompted = await herdrJson(["agent", "prompt", name, "--", text], { cwd: confined });
-      if (!prompted.ok) throw new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_AMBIGUOUS");
+      const argv = ["agent", "start", name, "--kind", "codex", "--pane", ids.paneId, "--", ...codexExecArgv(text)];
+      const started = await herdrJson(argv, { cwd: confined });
+      failIfPromptMissing(started, "MY_WORK_CODEX_LAUNCH_AMBIGUOUS");
       const got = await herdrJson(["agent", "get", name], { cwd: confined });
-      const sessionId = sessionRefFrom(got.payload);
+      const sessionId = sessionRefFrom(got.payload) ?? sessionRefFrom(started.payload);
       if (!sessionId) throw new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_AMBIGUOUS");
       const herdrId = herdrIdFrom(ids);
       rejectFabricatedIds(herdrId, sessionId);
@@ -73,7 +103,7 @@ export function createHerdrCodexExecutor() {
         herdr_id: herdrId,
         codex_session_id: sessionId,
         status: "launched",
-        argv: ["herdr", "agent", "start", name, "--kind", "codex", "--", ...CODEX_LAUNCH_ARGV],
+        argv: ["herdr", ...argv],
       };
     },
     async resume({ workspaceRoot, herdrId, sessionId, prompt, authorizedWorkspace, ticketId }) {
@@ -82,16 +112,19 @@ export function createHerdrCodexExecutor() {
       const parsed = parseStoredHerdrId(herdrId);
       if (!parsed) throw new MyWorkMcpError("MY_WORK_CODEX_CONTINUE_AMBIGUOUS");
       const name = agentName(ticketId);
-      const started = await herdrJson(
-        ["agent", "start", name, "--kind", "codex", "--pane", parsed.paneId, "--", ...CODEX_RESUME_ARGV, sessionId],
-        { cwd: confined },
-      );
-      if (!started.ok) {
-        if (started.payload?.error?.code === "session_missing") throw new MyWorkMcpError("MY_WORK_CODEX_SESSION_MISSING");
-        throw new MyWorkMcpError("MY_WORK_CODEX_CONTINUE_AMBIGUOUS");
-      }
-      const prompted = await herdrJson(["agent", "prompt", name, "--", text], { cwd: confined });
-      if (!prompted.ok) throw new MyWorkMcpError("MY_WORK_CODEX_CONTINUE_AMBIGUOUS");
+      const argv = [
+        "agent",
+        "start",
+        name,
+        "--kind",
+        "codex",
+        "--pane",
+        parsed.paneId,
+        "--",
+        ...codexResumeArgv(sessionId, text),
+      ];
+      const started = await herdrJson(argv, { cwd: confined });
+      failIfPromptMissing(started, "MY_WORK_CODEX_CONTINUE_AMBIGUOUS");
       const got = await herdrJson(["agent", "get", name], { cwd: confined });
       const observed = sessionRefFrom(got.payload);
       if (observed !== sessionId) throw new MyWorkMcpError("MY_WORK_CODEX_CONTINUE_AMBIGUOUS");
@@ -100,7 +133,7 @@ export function createHerdrCodexExecutor() {
         herdr_id: herdrId,
         codex_session_id: sessionId,
         status: "resumed",
-        argv: ["herdr", "agent", "start", name, "--kind", "codex", "--", ...CODEX_RESUME_ARGV, sessionId],
+        argv: ["herdr", ...argv],
       };
     },
     async stop({ sessionId, herdrId, workspaceRoot, ticketId, authorizedWorkspace }) {
@@ -111,10 +144,17 @@ export function createHerdrCodexExecutor() {
       const sent = await herdrJson(["agent", "send-keys", name, "ctrl+c"], { cwd: confined });
       if (sent.missing) throw new MyWorkMcpError("MY_WORK_HERDR_UNAVAILABLE");
       if (!sent.ok) throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
-      const got = await herdrJson(["agent", "get", name], { cwd: confined });
-      const observed = sessionRefFrom(got.payload);
-      if (observed !== sessionId) throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
-      if (got.payload?.result?.running === true) throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
+      let got;
+      try {
+        got = await herdrJson(["agent", "get", name], { cwd: confined });
+      } catch (error) {
+        if (error instanceof MyWorkMcpError && error.code === "MY_WORK_CODEX_SESSION_MISSING") {
+          got = { ok: false, payload: null };
+        } else {
+          throw error;
+        }
+      }
+      assertPositiveStop(sent, got, sessionId);
       return {
         ambiguous: false,
         herdr_id: herdrId,

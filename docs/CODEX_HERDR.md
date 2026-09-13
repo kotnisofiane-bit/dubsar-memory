@@ -10,24 +10,44 @@ receipts.
 
 Host-side My Work (never Hermes) drives Herdr with the published CLI:
 
+Non-interactive **`codex exec` inside Herdr** needs the prompt **as an argument
+at `agent start`**. A later `herdr agent prompt` is too late: Codex exits with
+`No prompt provided. Either specify one as an argument or pipe the prompt into
+stdin.`, Herdr reports startup timeout, then `agent get` is `agent_not_found`.
+Do not “fix” that by lengthening `--timeout`. Do not auto-approve dialogues.
+Do not `workspace close` or recreate a missing session.
+
 1. `herdr workspace create --cwd <authorized_realpath> --label <ticket> --no-focus`  
    JSON: `.result.workspace.workspace_id`, `.result.root_pane.pane_id`, cwd.  
    The adapter refuses a cwd that is not the authorized realpath (confinement is
    not `process.cwd` of the MCP alone).
-2. `herdr agent start <name> --kind codex --pane <pane_id> -- exec`  
-   Matches the isolated observation of **`codex exec` inside Herdr**.
-3. `herdr agent prompt <name> -- <mission text>` **without** `--wait`  
-   Launch/follow-up are non-blocking. The prompt is required; omitting it fails
-   closed. No auto-approval keys are sent (`blocked` is not answered).
-4. `herdr agent get <name>` captures the **native** Codex session reference.  
+2. `herdr agent start <name> --kind codex --pane <pane_id> -- exec -- <prompt>`  
+   Prompt is part of the Codex argv. Omitting it fails closed (no agent).
+3. `herdr agent get <name>` captures the **native** Codex session reference.  
    `herdr_id` is `workspace_id/pane_id` from Herdr JSON, never a fabricated
    `herdr-local` / `herdr-DUB-*` constant.
-5. Continuation: `herdr agent start <name> --kind codex --pane <same pane> -- exec resume <SESSION_ID>`  
-   then `herdr agent prompt` with the continuation text. A missing session is not
-   recreated. Workspaces are never closed (`workspace close` is not used).
-6. Stop: `herdr agent send-keys <name> ctrl+c` for **that** agent only.  
-   Stop is observed (`running: false`). A logging error on the real binary still
-   does not mean mission success.
+4. Continuation (same session):  
+   `herdr agent start <name> --kind codex --pane <same pane> -- exec resume <SESSION_ID> -- <prompt>`  
+   A missing session is not recreated. Workspaces are never closed.
+5. Stop: `herdr agent send-keys <name> ctrl+c` for **that** agent only.  
+   Interrupted is recorded only with **positive proof**: `interrupted: true`
+   and `process_exited: true` for the same session id. `running !== true` or a
+   missing `running` field is not enough. A logging error still is not mission
+   success.
+
+Isolated protocol double (not vendor Herdr):
+
+```bash
+export DUBSAR_HERDR_BIN="$PWD/tests/helpers/herdr-protocol/herdr.mjs"
+# after workspace create, bare exec must fail (no agent):
+node "$DUBSAR_HERDR_BIN" agent start d001 --kind codex --pane <pane> -- exec
+# launch with prompt at start:
+node "$DUBSAR_HERDR_BIN" agent start d001 --kind codex --pane <pane> -- exec -- "mission text"
+# continue same id:
+node "$DUBSAR_HERDR_BIN" agent start d001 --kind codex --pane <pane> -- exec resume <SESSION_ID> -- "follow-up"
+```
+
+Vendor binary validation remains a `local_install` gate.
 
 ## Private Hermes transport (container → My Work on the host)
 
@@ -91,6 +111,8 @@ Do not treat `npm test` as a VPS pilot.
 
 ## Findings
 
-- **BLOQUANT_LOT**: prompt transmission, Herdr CLI, captured ids, observed stop, Hermes private socket — addressed in this correction.
+- **BLOQUANT_LOT**: prompt as `codex exec` argument at `agent start` (not a later
+  `agent prompt`); stop requires positive `process_exited` for the targeted
+  session — addressed in this correction.
 - **REPORTE_POST_LOT**: vendor install, live Hermes image, VPS.
 - **NON_PERTINENT**: UI, multi-user, providers, CI workflow edits, OAuth repair.

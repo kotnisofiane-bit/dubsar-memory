@@ -2,8 +2,9 @@
 /**
  * Controlled Herdr CLI protocol for tests. Not the real Herdr binary.
  * Speaks the documented subset: workspace create --cwd/--no-focus,
- * agent start --kind codex --pane -- exec|exec resume ID,
- * agent prompt, agent get, agent send-keys ctrl+c.
+ * agent start --kind codex --pane -- exec -- <prompt> |
+ * exec resume ID -- <prompt>, agent get, agent send-keys ctrl+c.
+ * Bare `exec` (no prompt) reproduces vendor Codex: agent never stays up.
  */
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -40,6 +41,12 @@ function takeFlag(argv, name) {
   if (index < 0) return { argv, value: null };
   const value = argv[index + 1];
   return { argv: [...argv.slice(0, index), ...argv.slice(index + 2)], value };
+}
+
+function promptFrom(agentArgs, startIndex) {
+  const parts = agentArgs.slice(startIndex);
+  const text = (parts[0] === "--" ? parts.slice(1) : parts).join(" ");
+  return text;
 }
 
 const argv = process.argv.slice(2);
@@ -80,72 +87,68 @@ if (command === "workspace" && rest[0] === "create") {
     fail("usage", "agent start requires name, --kind codex, --pane");
   } else if (agentArgs[0] !== "exec") {
     fail("usage", "codex args must start with exec");
-  } else {
+  } else if (agentArgs[1] === "resume") {
+    const sessionId = agentArgs[2];
+    const prompt = promptFrom(agentArgs, 3);
     const state = await loadState();
-    const workspace = Object.values(state.workspaces).find((item) => item.pane_id === paneId);
-    if (!workspace) {
-      fail("pane_missing", "unknown pane");
-    } else if (agentArgs[1] === "resume") {
-      const sessionId = agentArgs[2];
-      const agent = state.agents[name];
-      if (!agent || agent.session_id !== sessionId) {
-        fail("session_missing", "unknown session");
-      } else if (agentArgs.length < 3) {
-        fail("usage", "resume requires session id");
-      } else {
-        agent.mode = "resume";
-        await saveState(state);
-        json({ name, pane_id: paneId, session_ref: { kind: "id", value: sessionId } });
-      }
-    } else if (agentArgs.length !== 1) {
-      fail("usage", "launch exec takes no extra args");
+    const agent = state.agents[name];
+    if (!sessionId || agentArgs.length < 3) {
+      fail("usage", "resume requires session id");
+    } else if (!prompt) {
+      process.stderr.write("No prompt provided. Either specify one as an argument or pipe the prompt into stdin.\n");
+      fail("prompt_missing", "codex exec resume requires a prompt argument");
+    } else if (!agent || agent.session_id !== sessionId) {
+      fail("session_missing", "unknown session");
     } else {
-      const sessionId = `codex_${randomBytes(8).toString("hex")}`;
-      const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
-        cwd,
-        detached: true,
-        stdio: "ignore",
-        windowsHide: true,
-      });
-      child.unref();
-      state.agents[name] = {
-        name,
-        pane_id: paneId,
-        session_id: sessionId,
-        pid: child.pid,
-        running: true,
-        mode: "exec",
-      };
+      agent.mode = "resume";
+      agent.last_prompt = prompt;
+      agent.running = true;
+      await writeFile(path.join(cwd, "codex-continue.txt"), `${prompt}\n`);
       await saveState(state);
       json({ name, pane_id: paneId, session_ref: { kind: "id", value: sessionId } });
     }
-  }
-} else if (command === "agent" && rest[0] === "prompt") {
-  const name = rest[1];
-  const dash = rest.indexOf("--");
-  const promptParts = dash >= 0 ? rest.slice(dash + 1) : rest.slice(2);
-  const prompt = promptParts.join(" ");
-  if (!prompt || prompt.trim() === "") {
-    fail("usage", "prompt required");
   } else {
-    const state = await loadState();
-    const agent = state.agents[name];
-    if (!agent) {
-      fail("session_missing", "unknown agent");
+    const prompt = promptFrom(agentArgs, 1);
+    if (!prompt) {
+      process.stderr.write("No prompt provided. Either specify one as an argument or pipe the prompt into stdin.\n");
+      fail("prompt_missing", "codex exec requires a prompt argument");
     } else {
-      const relative = agent.mode === "resume" ? "codex-continue.txt" : "codex-launch.txt";
-      await writeFile(path.join(cwd, relative), `${prompt}\n`);
-      agent.last_prompt = prompt;
-      await saveState(state);
-      json({ name, accepted: true, waited: false });
+      const state = await loadState();
+      const workspace = Object.values(state.workspaces).find((item) => item.pane_id === paneId);
+      if (!workspace) {
+        fail("pane_missing", "unknown pane");
+      } else {
+        const sessionId = `codex_${randomBytes(8).toString("hex")}`;
+        const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+          cwd,
+          detached: true,
+          stdio: "ignore",
+          windowsHide: true,
+        });
+        child.unref();
+        state.agents[name] = {
+          name,
+          pane_id: paneId,
+          session_id: sessionId,
+          pid: child.pid,
+          running: true,
+          mode: "exec",
+          last_prompt: prompt,
+        };
+        await writeFile(path.join(cwd, "codex-launch.txt"), `${prompt}\n`);
+        await saveState(state);
+        json({ name, pane_id: paneId, session_ref: { kind: "id", value: sessionId } });
+      }
     }
   }
+} else if (command === "agent" && rest[0] === "prompt") {
+  fail("too_late", "agent prompt after start is too late for non-interactive codex exec");
 } else if (command === "agent" && rest[0] === "get") {
   const name = rest[1];
   const state = await loadState();
   const agent = state.agents[name];
   if (!agent) {
-    fail("session_missing", "unknown agent");
+    fail("agent_not_found", "agent_not_found");
   } else {
     json({
       name,
@@ -164,19 +167,39 @@ if (command === "workspace" && rest[0] === "create") {
     const state = await loadState();
     const agent = state.agents[name];
     if (!agent) {
-      fail("session_missing", "unknown agent");
+      fail("agent_not_found", "unknown agent");
     } else {
-      if (agent.pid) {
-        try {
-          process.kill(agent.pid, "SIGTERM");
-        } catch {
-          // process may have already exited; interruption is still recorded
+      const mode = process.env.HERDR_PROTOCOL_STOP;
+      if (mode === "no_observation") {
+        json({ name, accepted: true });
+      } else if (mode === "still_running") {
+        json({
+          name,
+          interrupted: true,
+          process_exited: false,
+          running: true,
+          session_ref: { kind: "id", value: agent.session_id },
+        });
+      } else {
+        if (agent.pid) {
+          try {
+            process.kill(agent.pid, "SIGTERM");
+          } catch {
+            // process may have already exited
+          }
         }
+        agent.running = false;
+        await saveState(state);
+        await writeFile(path.join(cwd, "codex-interrupted.flag"), "interrupted\n");
+        json({
+          name,
+          interrupted: true,
+          process_exited: true,
+          running: false,
+          session_ref: { kind: "id", value: agent.session_id },
+          native_session_id: agent.session_id,
+        });
       }
-      agent.running = false;
-      await saveState(state);
-      await writeFile(path.join(cwd, "codex-interrupted.flag"), "interrupted\n");
-      json({ name, interrupted: true, running: false });
     }
   }
 } else if (command === "workspace" && rest[0] === "close") {

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,6 +25,23 @@ async function env() {
   const allocationRoot = await mkdtemp(path.join(tmpdir(), "dubsar-codex-global-"));
   await mkdir(path.join(start, ".dubsar"));
   return { start, allocation_root: allocationRoot, project_id: "project-codex" };
+}
+
+function runProtocol(cwd, args) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [herdrBin, ...args], { cwd, env: process.env });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("close", (code) => {
+      resolve({
+        code,
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8"),
+      });
+    });
+  });
 }
 
 function mission(extra = {}) {
@@ -107,6 +125,35 @@ test("stop interrupts the live protocol process and is not mission success", asy
   assert.equal(launchFile, "Ecrire le fichier de lancement\n");
 });
 
+test("stop is ambiguous when execution stays running or observation is absent", async (t) => {
+  t.after(() => {
+    delete process.env.HERDR_PROTOCOL_STOP;
+    if (previousHerdr == null) delete process.env.DUBSAR_HERDR_BIN;
+    else process.env.DUBSAR_HERDR_BIN = previousHerdr;
+  });
+  useProtocolHerdr();
+  const stillRunning = await env();
+  await executeTool("launch_codex_mission", { ...stillRunning, ...mission() });
+  process.env.HERDR_PROTOCOL_STOP = "still_running";
+  await assert.rejects(executeTool("stop_codex_mission", { ...stillRunning, ticket_id: "DUB-001" }), {
+    code: "MY_WORK_CODEX_STOP_AMBIGUOUS",
+  });
+  delete process.env.HERDR_PROTOCOL_STOP;
+  const cleaned = await executeTool("stop_codex_mission", { ...stillRunning, ticket_id: "DUB-001" });
+  assert.equal(cleaned.interrupted, true);
+
+  const absent = await env();
+  await executeTool("launch_codex_mission", { ...absent, ...mission() });
+  process.env.HERDR_PROTOCOL_STOP = "no_observation";
+  await assert.rejects(executeTool("stop_codex_mission", { ...absent, ticket_id: "DUB-001" }), {
+    code: "MY_WORK_CODEX_STOP_AMBIGUOUS",
+  });
+  delete process.env.HERDR_PROTOCOL_STOP;
+  const observed = await executeTool("stop_codex_mission", { ...absent, ticket_id: "DUB-001" });
+  assert.equal(observed.interrupted, true);
+  assert.equal(observed.mission_success, false);
+});
+
 test("omitted prompt, missing Herdr, fabricated ids, and out-of-scope cwd fail closed", async (t) => {
   t.after(() => {
     if (previousHerdr == null) delete process.env.DUBSAR_HERDR_BIN;
@@ -128,6 +175,37 @@ test("omitted prompt, missing Herdr, fabricated ids, and out-of-scope cwd fail c
     }),
     { code: "MY_WORK_HERDR_UNAVAILABLE" },
   );
+  const protocolBare = await env();
+  const created = await runProtocol(protocolBare.start, [
+    "workspace",
+    "create",
+    "--cwd",
+    protocolBare.start,
+    "--label",
+    "DUB-001",
+    "--no-focus",
+  ]);
+  assert.equal(created.code, 0);
+  const paneId = JSON.parse(created.stdout).result.root_pane.pane_id;
+  const bare = await runProtocol(protocolBare.start, [
+    "agent",
+    "start",
+    "d001",
+    "--kind",
+    "codex",
+    "--pane",
+    paneId,
+    "--",
+    "exec",
+  ]);
+  assert.notEqual(bare.code, 0);
+  assert.match(bare.stderr, /No prompt provided/u);
+  const missing = await runProtocol(protocolBare.start, ["agent", "get", "d001"]);
+  assert.notEqual(missing.code, 0);
+  assert.match(missing.stderr, /agent_not_found/u);
+  const latePrompt = await runProtocol(protocolBare.start, ["agent", "prompt", "d001", "--", "too late"]);
+  assert.notEqual(latePrompt.code, 0);
+  assert.match(latePrompt.stderr, /too_late/u);
   const outside = await mkdtemp(path.join(tmpdir(), "dubsar-outside-"));
   await assert.rejects(
     createHerdrCodexExecutor().exec({
