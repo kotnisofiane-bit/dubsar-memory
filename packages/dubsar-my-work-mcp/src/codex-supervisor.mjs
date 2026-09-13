@@ -132,10 +132,15 @@ export async function superviseCodex({ allocationRoot, ticketId, herdrId, argv, 
 
   liveChildren.set(ticketId, { child, exit: undefined });
 
-  child.stdout?.on("data", (chunk) => {
-    stdout += chunk.toString("utf8");
+  const collectStdout = (async () => {
+    if (!child.stdout) return;
+    for await (const chunk of child.stdout) {
+      stdout += typeof chunk === "string" ? chunk : chunk.toString("utf8");
+      if (!sessionId) sessionId = extractSessionIdFromCodexJson(stdout);
+    }
     if (!sessionId) sessionId = extractSessionIdFromCodexJson(stdout);
-  });
+  })();
+
   child.stderr?.on("data", (chunk) => {
     stderr += chunk.toString("utf8");
   });
@@ -153,9 +158,12 @@ export async function superviseCodex({ allocationRoot, ticketId, herdrId, argv, 
   const startedAt = Date.now();
   while (!sessionId && Date.now() - startedAt < SESSION_WAIT_MS) {
     if (spawnFailed) break;
-    if (liveChildren.get(ticketId)?.exit && !sessionId) break;
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await Promise.race([
+      collectStdout,
+      new Promise((resolve) => setTimeout(resolve, 20)),
+    ]);
     if (!sessionId) sessionId = extractSessionIdFromCodexJson(stdout);
+    if (liveChildren.get(ticketId)?.exit) break;
   }
 
   if (!sessionId) {
