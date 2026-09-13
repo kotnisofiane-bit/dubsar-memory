@@ -17,7 +17,9 @@ export function assertPrivateMcpSocketPath(socketPath) {
 
 export async function listenHermesMcpSocket(socketPath, stdio = process) {
   assertPrivateMcpSocketPath(socketPath);
-  assertPrivateMcpSocketPath(socketPath);
+  if (process.platform === "win32") {
+    throw new MyWorkMcpError("MY_WORK_HERMES_SOCKET_UNSUPPORTED");
+  }
   const server = createServer((socket) => {
     const write = (payload) => {
       if (payload == null) return;

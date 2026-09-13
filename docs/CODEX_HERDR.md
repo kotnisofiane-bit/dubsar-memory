@@ -42,9 +42,11 @@ node packages/dubsar-my-work-mcp/bin/dubsar-my-work-mcp.mjs \
 ```
 
 `--mcp-socket` is refused unless the profile is `hermes`. Paths named
-`docker.sock` or `herdr.sock` are rejected. The socket speaks the same MCP
-JSON-RPC as stdio (mission tools only). Herdr stays on the host process; Hermes
-only sees My Work.
+`docker.sock` or `herdr.sock` are rejected. The listener is a Unix domain
+socket (Linux/macOS). Windows fails closed with
+`MY_WORK_HERMES_SOCKET_UNSUPPORTED`. The socket speaks the same MCP JSON-RPC as
+stdio (mission tools only). Herdr stays on the host process; Hermes only sees
+My Work.
 
 stdio remains valid:
 

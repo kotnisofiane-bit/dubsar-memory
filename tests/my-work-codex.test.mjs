@@ -155,6 +155,11 @@ test("PROOF.md does not mark success; Hermes socket refuses docker/herdr sockets
   await assert.rejects(listenHermesMcpSocket("/tmp/docker.sock"), { code: "MY_WORK_HERMES_SOCKET_FORBIDDEN" });
   await assert.rejects(listenHermesMcpSocket("/tmp/herdr.sock"), { code: "MY_WORK_HERMES_SOCKET_FORBIDDEN" });
   const socketPath = path.join(context.start, "hermes.mcp.sock");
+  if (process.platform === "win32") {
+    await assert.rejects(listenHermesMcpSocket(socketPath), { code: "MY_WORK_HERMES_SOCKET_UNSUPPORTED" });
+    assert.equal(TOOL_NAMES.includes("ssh"), false);
+    return;
+  }
   const server = await listenHermesMcpSocket(socketPath);
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const listed = await new Promise((resolve, reject) => {
