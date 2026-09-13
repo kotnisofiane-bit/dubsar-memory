@@ -1019,10 +1019,14 @@ test("OAuth and Controller network stay in dedicated modules; credentials are no
           assert.equal(file, path.join(mcpRoot, "src", "oauth-flow.mjs"));
           continue;
         }
+        if (node.source.value === "node:net") {
+          assert.equal(file, path.join(mcpRoot, "src", "hermes-transport.mjs"), file);
+          continue;
+        }
         if (node.source.value === "node:child_process") {
           assert.ok(
             file === path.join(mcpRoot, "src", "oauth-flow.mjs") ||
-              file === path.join(mcpRoot, "src", "codex-executor.mjs"),
+              file === path.join(mcpRoot, "src", "herdr-cli.mjs"),
             file,
           );
           continue;

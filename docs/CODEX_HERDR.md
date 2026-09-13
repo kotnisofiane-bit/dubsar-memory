@@ -6,82 +6,89 @@ not a second ticket product. Tickets remain `dubsar.tickets/1` in
 Codex receipts are a distinct contract and are never rewritten as Cursor
 receipts.
 
-## Protocol actually used
+## Protocol actually used (verified Herdr CLI)
 
-Manual observation (outside this lot) showed:
+Host-side My Work (never Hermes) drives Herdr with the published CLI:
 
-1. `codex exec` starts one session in an authorized workspace.
-2. `codex exec resume <SESSION_ID>` resumes **that** session after disconnect
-   or process stop.
-3. Files and session identity survive disconnect and interrupt.
-4. A logging error at stop was observed on the real host. A stop result is
-   **not** mission success.
+1. `herdr workspace create --cwd <authorized_realpath> --label <ticket> --no-focus`  
+   JSON: `.result.workspace.workspace_id`, `.result.root_pane.pane_id`, cwd.  
+   The adapter refuses a cwd that is not the authorized realpath (confinement is
+   not `process.cwd` of the MCP alone).
+2. `herdr agent start <name> --kind codex --pane <pane_id> -- exec`  
+   Matches the isolated observation of **`codex exec` inside Herdr**.
+3. `herdr agent prompt <name> -- <mission text>` **without** `--wait`  
+   Launch/follow-up are non-blocking. The prompt is required; omitting it fails
+   closed. No auto-approval keys are sent (`blocked` is not answered).
+4. `herdr agent get <name>` captures the **native** Codex session reference.  
+   `herdr_id` is `workspace_id/pane_id` from Herdr JSON, never a fabricated
+   `herdr-local` / `herdr-DUB-*` constant.
+5. Continuation: `herdr agent start <name> --kind codex --pane <same pane> -- exec resume <SESSION_ID>`  
+   then `herdr agent prompt` with the continuation text. A missing session is not
+   recreated. Workspaces are never closed (`workspace close` is not used).
+6. Stop: `herdr agent send-keys <name> ctrl+c` for **that** agent only.  
+   Stop is observed (`running: false`). A logging error on the real binary still
+   does not mean mission success.
 
-This repository's adapter traces the argv **before** spawn, then issues exactly
-one `exec` or one `exec resume <id>`. It does **not**:
+## Private Hermes transport (container → My Work on the host)
 
-- close a homonym workspace;
-- recreate a missing session;
-- auto-approve a Codex dialogue;
-- retry after an ambiguous result;
-- treat `PROOF.md` or an agent declaration as success.
+Hermes must not receive SSH, a general shell, `docker.sock`, or `herdr.sock`.
 
-## Linux development install (this lot)
+Host (outside the container):
 
-Prerequisites: Node.js 20+, a git clone of `dubsar-memory`.
+```bash
+node packages/dubsar-my-work-mcp/bin/dubsar-my-work-mcp.mjs \
+  --profile hermes \
+  --mcp-socket /run/dubsar/hermes.mcp.sock
+```
+
+`--mcp-socket` is refused unless the profile is `hermes`. Paths named
+`docker.sock` or `herdr.sock` are rejected. The socket speaks the same MCP
+JSON-RPC as stdio (mission tools only). Herdr stays on the host process; Hermes
+only sees My Work.
+
+stdio remains valid:
 
 ```bash
 node packages/dubsar-my-work-mcp/bin/dubsar-my-work-mcp.mjs --profile hermes
 ```
 
-Default profile keeps Cursor tools. Hermes profile exposes only:
+Wiring a Hermes **container** to that host socket (volume of the MCP socket
+only, `--network none`, no Docker/Herdr sockets) is a **human** `local_install`
+/ `vm_cloud` step. This repository qualifies the adapter and the socket
+boundary; it does not prove a VPS or a live Hermes image.
 
-- `list_tickets`
-- `get_ticket`
-- `launch_codex_mission`
-- `continue_codex_mission`
-- `stop_codex_mission`
+## Linux development install
 
-No SSH, arbitrary shell, Docker socket, or Herdr socket is published to
-Hermes.
+Prerequisites: Node.js 20+, Herdr on `PATH` (or `DUBSAR_HERDR_BIN`), Codex
+integration (`herdr integration install codex`) for native session ids, a git
+clone of `dubsar-memory`.
 
-Tests use a fake executor (`DUBSAR_CODEX_EXECUTOR=fake` or the in-process test
-hook). They do **not** prove a VPS, a container Hermes, or a real Codex binary.
+CI uses `tests/helpers/herdr-protocol/herdr.mjs` via `DUBSAR_HERDR_BIN` — a
+protocol double, not the vendor binary. Green CI is **code qualification**, not a
+VPS/Hermes pilot.
 
 ## Public launch path
 
-`launch_codex_mission` is the single public call: it validates
-`dubsar.codex-local-contract/1`, persists one `DUB-###` ticket plus a
-`codex_contract` intention, traces the command, then starts exactly one Codex
-session through the configured executor. Dedup is bounded: a matching
-fingerprint reuses the ticket; a submitted launch without a valid receipt is
-not retryable.
+`launch_codex_mission` is the single public call: validate
+`dubsar.codex-local-contract/1`, persist one `DUB-###` plus `codex_contract`,
+trace argv, then exactly one Herdr workspace + `codex exec` session.
+Dedup: matching fingerprint reuses the ticket; a submitted launch without a valid
+receipt is not retryable.
 
-`get_ticket` after restart returns the contract, activity, authorized
-workspace, Herdr id, and Codex session id.
-
-`continue_codex_mission` resumes by the persisted Codex id only.
-
-`stop_codex_mission` interrupts that execution, keeps files and history, and
-always reports `mission_success: false`.
-
-## Gates still remaining (real Hermes / VPS pilot)
-
-The following are **not** proven by mocks or this repository's CI:
+## What CI does not prove (gates)
 
 | Gate | Status |
 | --- | --- |
-| `local_install` of Codex CLI + Herdr on a Linux machine | remaining |
-| Hermes container wired to this stdio MCP | remaining (no E2E Hermes in this lot) |
-| Real `codex exec` / `codex exec resume` on that host | remaining |
+| `local_install` of vendor Herdr + Codex on a Linux machine | remaining |
+| Hermes container attached only to `hermes.mcp.sock` | remaining |
 | VPS / `vm_cloud` | remaining, human gate |
-| Secrets, deployment, publication, merge | human gates, out of this lot |
-| Logging-error-on-stop on the real binary | remaining to observe |
+| Secrets, deployment, publication, merge | human gates |
+| Real binary logging error on stop | remaining to observe on vendor Herdr |
 
-Do not treat a green `npm test` as a VPS pilot.
+Do not treat `npm test` as a VPS pilot.
 
-## Findings classification used in this lot
+## Findings
 
-- **BLOQUANT_LOT**: missing ticket identity, Cursor receipt falsification, silent new session, Hermes socket exposure. Addressed in code.
-- **REPORTE_POST_LOT**: real Codex/Herdr install, Hermes container, VPS, stop-logging on the real binary.
-- **NON_PERTINENT**: UI refactor, multi-user, new providers, CI workflow edits, memory migration.
+- **BLOQUANT_LOT**: prompt transmission, Herdr CLI, captured ids, observed stop, Hermes private socket — addressed in this correction.
+- **REPORTE_POST_LOT**: vendor install, live Hermes image, VPS.
+- **NON_PERTINENT**: UI, multi-user, providers, CI workflow edits, OAuth repair.

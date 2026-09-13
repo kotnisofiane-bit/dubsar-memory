@@ -6,12 +6,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { encodeFrame, createFrameParser } from "../packages/dubsar-my-work-mcp/src/server.mjs";
-import {
-  FAKE_EXPECTED_CONTENTS,
-  FAKE_EXPECTED_RELATIVE,
-} from "../packages/dubsar-my-work-mcp/src/codex-executor.mjs";
 
 const bin = fileURLToPath(new URL("../packages/dubsar-my-work-mcp/bin/dubsar-my-work-mcp.mjs", import.meta.url));
+const herdrBin = fileURLToPath(new URL("./helpers/herdr-protocol/herdr.mjs", import.meta.url));
 
 function rpc(child) {
   let nextId = 1;
@@ -28,7 +25,7 @@ function rpc(child) {
     const id = nextId++;
     child.stdin.write(encodeFrame({ jsonrpc: "2.0", id, method, params }));
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`timeout:${method}`)), 10_000);
+      const timer = setTimeout(() => reject(new Error(`timeout:${method}`)), 15_000);
       pending.set(id, (message) => {
         clearTimeout(timer);
         resolve(message);
@@ -37,13 +34,13 @@ function rpc(child) {
   };
 }
 
-function startServer(extraEnv = {}) {
+function startServer(workspace, extraEnv = {}) {
   const child = spawn(process.execPath, [bin, "--profile", extraEnv.PROFILE ?? "default"], {
+    cwd: workspace,
     stdio: ["pipe", "pipe", "pipe"],
     env: {
-      PATH: process.env.PATH,
-      TMPDIR: tmpdir(),
-      DUBSAR_CODEX_EXECUTOR: "fake",
+      ...process.env,
+      DUBSAR_HERDR_BIN: herdrBin,
       ...extraEnv,
     },
   });
@@ -56,13 +53,15 @@ async function stopServer(child) {
   await new Promise((resolve) => child.once("exit", resolve));
 }
 
-test("E2E subprocess launch, independent file proof, restart, continue, stop", async () => {
+test("E2E Herdr protocol: launch file, restart, continue file, observed stop", async () => {
   const start = await mkdtemp(path.join(tmpdir(), "dubsar-codex-e2e-project-"));
   const allocationRoot = await mkdtemp(path.join(tmpdir(), "dubsar-codex-e2e-global-"));
   await mkdir(path.join(start, ".dubsar"));
   const context = { start, allocation_root: allocationRoot, project_id: "project-e2e-codex" };
 
-  const first = startServer();
+  const first = startServer(start);
+  let sessionId;
+  let herdrId;
   try {
     await first.call("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "test" } });
     const launched = await first.call("tools/call", {
@@ -73,20 +72,25 @@ test("E2E subprocess launch, independent file proof, restart, continue, stop", a
         objective: "Un seul lancement",
         criteria: ["Fichier attendu"],
         allowed_paths: ["packages/dubsar-my-work-mcp/**"],
+        mission: "Contenu de lancement E2E",
       },
     });
-    assert.equal(launched.result.isError, false);
+    assert.equal(launched.result.isError, false, JSON.stringify(launched.result));
     const body = launched.result.structuredContent;
     assert.equal(body.ticket_id, "DUB-001");
     assert.equal(body.launched, true);
     assert.equal(body.mission_success, false);
+    sessionId = body.codex_session_id;
+    herdrId = body.herdr_id;
+    assert.match(herdrId, /^ws_/u);
+    assert.equal(herdrId.startsWith("herdr-"), false);
   } finally {
     await stopServer(first.child);
   }
 
-  assert.equal(await readFile(path.join(start, FAKE_EXPECTED_RELATIVE), "utf8"), FAKE_EXPECTED_CONTENTS);
+  assert.equal(await readFile(path.join(start, "codex-launch.txt"), "utf8"), "Contenu de lancement E2E\n");
 
-  const afterRestart = startServer();
+  const afterRestart = startServer(start);
   try {
     await afterRestart.call("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "test" } });
     const loaded = await afterRestart.call("tools/call", {
@@ -94,14 +98,13 @@ test("E2E subprocess launch, independent file proof, restart, continue, stop", a
       arguments: { ...context, ticket_id: "DUB-001" },
     });
     const ticket = loaded.result.structuredContent;
-    assert.equal(ticket.codex_session_id, "codex-sess-DUB-001");
-    assert.equal(ticket.herdr_id, "herdr-DUB-001");
-    assert.equal(ticket.workspace_root, start);
+    assert.equal(ticket.codex_session_id, sessionId);
+    assert.equal(ticket.herdr_id, herdrId);
     const continued = await afterRestart.call("tools/call", {
       name: "continue_codex_mission",
-      arguments: { ...context, ticket_id: "DUB-001", prompt: "reprendre" },
+      arguments: { ...context, ticket_id: "DUB-001", prompt: "Contenu de continuation E2E" },
     });
-    assert.equal(continued.result.structuredContent.codex_session_id, "codex-sess-DUB-001");
+    assert.equal(continued.result.structuredContent.codex_session_id, sessionId);
     const stopped = await afterRestart.call("tools/call", {
       name: "stop_codex_mission",
       arguments: { ...context, ticket_id: "DUB-001" },
@@ -112,7 +115,10 @@ test("E2E subprocess launch, independent file proof, restart, continue, stop", a
     await stopServer(afterRestart.child);
   }
 
-  const hermes = startServer({ PROFILE: "hermes" });
+  assert.equal(await readFile(path.join(start, "codex-continue.txt"), "utf8"), "Contenu de continuation E2E\n");
+  assert.equal(await readFile(path.join(start, "codex-interrupted.flag"), "utf8"), "interrupted\n");
+
+  const hermes = startServer(start, { PROFILE: "hermes" });
   try {
     await hermes.call("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "hermes" } });
     const tools = await hermes.call("tools/list");

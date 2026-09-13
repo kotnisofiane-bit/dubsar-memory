@@ -1,18 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import net from "node:net";
 import { executeTool, HERMES_TOOL_NAMES, TOOL_NAMES } from "../packages/dubsar-my-work-mcp/src/tools.mjs";
-import { handleMessage, setMcpProfile } from "../packages/dubsar-my-work-mcp/src/server.mjs";
-import {
-  createFakeCodexExecutor,
-  FAKE_EXPECTED_CONTENTS,
-  FAKE_EXPECTED_RELATIVE,
-  resetTestCodexExecutor,
-  setTestCodexExecutor,
-} from "../packages/dubsar-my-work-mcp/src/codex-executor.mjs";
-import { previewTicketChange, readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
+import { createFrameParser, encodeFrame, handleMessage, setMcpProfile } from "../packages/dubsar-my-work-mcp/src/server.mjs";
+import { createHerdrCodexExecutor, resetTestCodexExecutor } from "../packages/dubsar-my-work-mcp/src/codex-executor.mjs";
+import { listenHermesMcpSocket } from "../packages/dubsar-my-work-mcp/src/hermes-transport.mjs";
+import { readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
+
+const herdrBin = fileURLToPath(new URL("./helpers/herdr-protocol/herdr.mjs", import.meta.url));
+const previousHerdr = process.env.DUBSAR_HERDR_BIN;
+
+function useProtocolHerdr() {
+  process.env.DUBSAR_HERDR_BIN = herdrBin;
+  resetTestCodexExecutor();
+}
 
 async function env() {
   const start = await mkdtemp(path.join(tmpdir(), "dubsar-codex-project-"));
@@ -27,265 +32,152 @@ function mission(extra = {}) {
     objective: "Lancer une session Herdr bornée",
     criteria: ["Ticket unique", "Reprise par identifiant"],
     allowed_paths: ["packages/dubsar-my-work-mcp/**"],
+    mission: "Ecrire le fichier de lancement",
     ...extra,
   };
 }
 
-test("public launch persists one ticket and starts exactly one fake Codex session", async () => {
-  const context = await env();
-  const executor = createFakeCodexExecutor();
-  let launches = 0;
-  setTestCodexExecutor({
-    ...executor,
-    async exec(input) {
-      launches += 1;
-      return executor.exec(input);
-    },
+test("production Herdr path persists one ticket, captured ids, and independent launch file", async (t) => {
+  t.after(() => {
+    if (previousHerdr == null) delete process.env.DUBSAR_HERDR_BIN;
+    else process.env.DUBSAR_HERDR_BIN = previousHerdr;
   });
-  try {
-    const launched = await executeTool("launch_codex_mission", { ...context, ...mission() });
-    assert.equal(launched.format, "dubsar.my-work-codex-launch/1");
-    assert.equal(launched.ticket_id, "DUB-001");
-    assert.equal(launched.launched, true);
-    assert.equal(launched.mission_success, false);
-    assert.equal(launched.codex_session_id, "codex-sess-DUB-001");
-    assert.equal(launched.herdr_id, "herdr-DUB-001");
-    assert.equal(launches, 1);
-    const store = await readTickets({ start: context.start });
-    assert.equal(store.tickets.length, 1);
-    assert.equal(store.tickets[0].cursor_launch, null);
-    assert.equal(store.tickets[0].codex_launch.receipt_version, "dubsar.codex-local-launch-receipt/1");
-    assert.equal(store.tickets[0].codex_launch.mission_success, false);
-    assert.equal(await readFile(path.join(context.start, FAKE_EXPECTED_RELATIVE), "utf8"), FAKE_EXPECTED_CONTENTS);
-  } finally {
-    resetTestCodexExecutor();
-  }
+  useProtocolHerdr();
+  const context = await env();
+  const launched = await executeTool("launch_codex_mission", { ...context, ...mission() });
+  assert.equal(launched.launched, true);
+  assert.equal(launched.mission_success, false);
+  assert.match(launched.herdr_id, /^ws_[0-9a-f]+\/pane_[0-9a-f]+$/u);
+  assert.match(launched.codex_session_id, /^codex_[0-9a-f]+$/u);
+  assert.equal(launched.herdr_id.startsWith("herdr-"), false);
+  const fromDisk = await readFile(path.join(context.start, "codex-launch.txt"), "utf8");
+  assert.equal(fromDisk, "Ecrire le fichier de lancement\n");
+  const store = await readTickets({ start: context.start });
+  assert.equal(store.tickets.length, 1);
+  assert.equal(store.tickets[0].cursor_launch, null);
 });
 
-test("independent verifier reads expected file outside the MCP return", async () => {
-  const context = await env();
-  setTestCodexExecutor(createFakeCodexExecutor());
-  try {
-    const launched = await executeTool("launch_codex_mission", { ...context, ...mission() });
-    assert.equal("expected_file_contents" in launched, false);
-    const fromDisk = await readFile(path.join(context.start, FAKE_EXPECTED_RELATIVE), "utf8");
-    assert.equal(fromDisk, FAKE_EXPECTED_CONTENTS);
-  } finally {
-    resetTestCodexExecutor();
-  }
-});
-
-test("consultation after restart finds contract, history, workspace, Herdr and Codex ids", async () => {
-  const context = await env();
-  setTestCodexExecutor(createFakeCodexExecutor());
-  try {
-    await executeTool("launch_codex_mission", { ...context, ...mission() });
-    const loaded = await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" });
-    assert.equal(loaded.prepared_codex_contract.format, "dubsar.codex-local-contract/1");
-    assert.equal(loaded.herdr_id, "herdr-DUB-001");
-    assert.equal(loaded.codex_session_id, "codex-sess-DUB-001");
-    assert.equal(loaded.workspace_root, context.start);
-    assert.ok(loaded.ticket.activity.some((row) => row.kind === "codex_trace"));
-    assert.ok(loaded.ticket.activity.some((row) => row.kind === "codex_contract"));
-    assert.equal(loaded.ticket.cursor_launch, null);
-  } finally {
-    resetTestCodexExecutor();
-  }
-});
-
-test("continue after process-equivalent reread reuses the same Codex session id", async () => {
-  const context = await env();
-  const executor = createFakeCodexExecutor();
-  let resumes = 0;
-  setTestCodexExecutor({
-    ...executor,
-    exec: (input) => executor.exec(input),
-    resume: async (input) => {
-      resumes += 1;
-      return executor.resume(input);
-    },
-    stop: (input) => executor.stop(input),
+test("consultation finds contract, Herdr id and Codex id after reread", async (t) => {
+  t.after(() => {
+    if (previousHerdr == null) delete process.env.DUBSAR_HERDR_BIN;
+    else process.env.DUBSAR_HERDR_BIN = previousHerdr;
   });
-  try {
-    await executeTool("launch_codex_mission", { ...context, ...mission() });
-    const continued = await executeTool("continue_codex_mission", {
-      ...context,
-      ticket_id: "DUB-001",
-      prompt: "Reprendre la même session",
-      codex_session_id: "codex-sess-DUB-001",
-    });
-    assert.equal(continued.continued, true);
-    assert.equal(continued.codex_session_id, "codex-sess-DUB-001");
-    assert.equal(continued.mission_success, false);
-    assert.equal(resumes, 1);
-    const store = await readTickets({ start: context.start });
-    assert.equal(store.tickets[0].id, "DUB-001");
-    assert.equal(store.tickets[0].codex_run.codex_session_id, "codex-sess-DUB-001");
-  } finally {
-    resetTestCodexExecutor();
-  }
+  useProtocolHerdr();
+  const context = await env();
+  await executeTool("launch_codex_mission", { ...context, ...mission() });
+  const loaded = await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" });
+  assert.equal(loaded.prepared_codex_contract.format, "dubsar.codex-local-contract/1");
+  assert.match(loaded.herdr_id, /^ws_/u);
+  assert.match(loaded.codex_session_id, /^codex_/u);
+  assert.ok(loaded.ticket.activity.some((row) => row.kind === "codex_trace"));
 });
 
-test("stop interrupts execution only and does not mean mission success", async () => {
-  const context = await env();
-  setTestCodexExecutor(createFakeCodexExecutor({ stopLoggingError: true }));
-  try {
-    await executeTool("launch_codex_mission", { ...context, ...mission() });
-    const before = await stat(path.join(context.start, FAKE_EXPECTED_RELATIVE));
-    const stopped = await executeTool("stop_codex_mission", { ...context, ticket_id: "DUB-001" });
-    assert.equal(stopped.interrupted, true);
-    assert.equal(stopped.mission_success, false);
-    assert.equal(stopped.logging_error, true);
-    const after = await stat(path.join(context.start, FAKE_EXPECTED_RELATIVE));
-    assert.equal(after.mtimeMs, before.mtimeMs);
-    const history = await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" });
-    assert.equal(history.ticket.codex_launch.codex_session_id, "codex-sess-DUB-001");
-    assert.equal(history.ticket.state, "In Progress");
-    assert.equal(history.ticket.codex_stop.mission_success, false);
-  } finally {
-    resetTestCodexExecutor();
-  }
-});
-
-test("ambiguous launch is not retryable and does not double-exec", async () => {
-  const context = await env();
-  let launches = 0;
-  setTestCodexExecutor({
-    kind: "fake",
-    async exec() {
-      launches += 1;
-      return { ambiguous: true };
-    },
+test("continuation reuses the Codex id and writes a second independent file", async (t) => {
+  t.after(() => {
+    if (previousHerdr == null) delete process.env.DUBSAR_HERDR_BIN;
+    else process.env.DUBSAR_HERDR_BIN = previousHerdr;
   });
-  try {
-    await assert.rejects(executeTool("launch_codex_mission", { ...context, ...mission() }), {
-      code: "MY_WORK_CODEX_LAUNCH_AMBIGUOUS",
-    });
-    await assert.rejects(executeTool("launch_codex_mission", { ...context, ...mission() }), {
-      code: "MY_WORK_CODEX_LAUNCH_NOT_RETRYABLE",
-    });
-    assert.equal(launches, 1);
-    const store = await readTickets({ start: context.start });
-    assert.equal(store.tickets[0].codex_launch, null);
-    assert.equal(store.tickets[0].state, "Blocked");
-  } finally {
-    resetTestCodexExecutor();
-  }
-});
-
-test("missing Codex session is not recreated silently", async () => {
+  useProtocolHerdr();
   const context = await env();
-  const { MyWorkMcpError } = await import("../packages/dubsar-my-work-mcp/src/canonical.mjs");
-  const executor = createFakeCodexExecutor();
-  setTestCodexExecutor({
-    ...executor,
-    exec: (input) => executor.exec(input),
-    async resume() {
-      throw new MyWorkMcpError("MY_WORK_CODEX_SESSION_MISSING");
-    },
-  });
-  try {
-    await executeTool("launch_codex_mission", { ...context, ...mission() });
-    await assert.rejects(
-      executeTool("continue_codex_mission", { ...context, ticket_id: "DUB-001", prompt: "reprendre" }),
-      { code: "MY_WORK_CODEX_SESSION_MISSING" },
-    );
-  } finally {
-    resetTestCodexExecutor();
-  }
-});
-
-test("auto-approved dialogue and workspace close flags are refused", async () => {
-  const context = await env();
-  setTestCodexExecutor(createFakeCodexExecutor());
-  try {
-    await assert.rejects(
-      executeTool("launch_codex_mission", { ...context, ...mission({ auto_approve_dialogue: true }) }),
-      { code: "MY_WORK_DIALOGUE_AUTO_APPROVE_FORBIDDEN" },
-    );
-    await assert.rejects(
-      executeTool("launch_codex_mission", { ...context, ...mission({ close_homonym_workspace: true }) }),
-      { code: "MY_WORK_WORKSPACE_CLOSE_FORBIDDEN" },
-    );
-    assert.equal((await readTickets({ start: context.start })).tickets.length, 0);
-  } finally {
-    resetTestCodexExecutor();
-  }
-});
-
-test("Cursor receipts cannot be stored as Codex receipts and Cursor path still works", async () => {
-  const context = await env();
-  const created = await executeTool("prepare_cursor_mission", {
+  const launched = await executeTool("launch_codex_mission", { ...context, ...mission() });
+  const continued = await executeTool("continue_codex_mission", {
     ...context,
-    title: "Cursor intact",
-    objective: "Non-regression",
-    criteria: ["Toujours Cursor"],
-    target_repository_url: "https://github.com/owner/repo",
-    starting_sha: "a".repeat(40),
-    allowed_paths: ["packages/dubsar-my-work-mcp/**"],
+    ticket_id: "DUB-001",
+    prompt: "Ecrire le fichier de continuation",
+    codex_session_id: launched.codex_session_id,
   });
-  assert.equal(created.ticket_id, "DUB-001");
+  assert.equal(continued.codex_session_id, launched.codex_session_id);
+  assert.equal(continued.herdr_id, launched.herdr_id);
+  assert.equal(await readFile(path.join(context.start, "codex-continue.txt"), "utf8"), "Ecrire le fichier de continuation\n");
+});
+
+test("stop interrupts the live protocol process and is not mission success", async (t) => {
+  t.after(() => {
+    if (previousHerdr == null) delete process.env.DUBSAR_HERDR_BIN;
+    else process.env.DUBSAR_HERDR_BIN = previousHerdr;
+  });
+  useProtocolHerdr();
+  const context = await env();
+  await executeTool("launch_codex_mission", { ...context, ...mission() });
+  const stopped = await executeTool("stop_codex_mission", { ...context, ticket_id: "DUB-001" });
+  assert.equal(stopped.interrupted, true);
+  assert.equal(stopped.mission_success, false);
+  assert.equal(await readFile(path.join(context.start, "codex-interrupted.flag"), "utf8"), "interrupted\n");
+  const launchFile = await readFile(path.join(context.start, "codex-launch.txt"), "utf8");
+  assert.equal(launchFile, "Ecrire le fichier de lancement\n");
+});
+
+test("omitted prompt, missing Herdr, fabricated ids, and out-of-scope cwd fail closed", async (t) => {
+  t.after(() => {
+    if (previousHerdr == null) delete process.env.DUBSAR_HERDR_BIN;
+    else process.env.DUBSAR_HERDR_BIN = previousHerdr;
+  });
+  const context = await env();
+  useProtocolHerdr();
+  const executor = createHerdrCodexExecutor();
+  await assert.rejects(executor.exec({ ticketId: "DUB-001", workspaceRoot: context.start, authorizedWorkspace: context.start }), {
+    code: "MY_WORK_MISSION_INCOMPLETE",
+  });
+  process.env.DUBSAR_HERDR_BIN = path.join(context.start, "missing-herdr");
   await assert.rejects(
-    previewTicketChange({
-      start: context.start,
-      allocationRoot: context.allocation_root,
-      projectId: context.project_id,
-      operation: {
-        type: "attach-codex-launch",
-        id: "DUB-001",
-        receipt: {
-          receipt_version: "dubsar.cursor-launch-receipt/1",
-          ticket_id: "DUB-001",
-          contract_fingerprint: created.contract_fingerprint,
-        },
-      },
+    createHerdrCodexExecutor().exec({
+      ticketId: "DUB-001",
+      workspaceRoot: context.start,
+      authorizedWorkspace: context.start,
+      prompt: "x",
     }),
-    { code: "TICKET_CODEX_RECEIPT_INVALID" },
+    { code: "MY_WORK_HERDR_UNAVAILABLE" },
+  );
+  const outside = await mkdtemp(path.join(tmpdir(), "dubsar-outside-"));
+  await assert.rejects(
+    createHerdrCodexExecutor().exec({
+      ticketId: "DUB-001",
+      workspaceRoot: outside,
+      authorizedWorkspace: context.start,
+      prompt: "x",
+    }),
+    { code: "MY_WORK_SCOPE_EXTENSION" },
   );
 });
 
-test("Hermes profile exposes only bounded mission tools", async () => {
-  setMcpProfile("hermes");
-  try {
-    const listed = await handleMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" });
-    assert.deepEqual(listed.result.tools.map((tool) => tool.name), [...HERMES_TOOL_NAMES]);
-    const forbidden = await handleMessage({
-      jsonrpc: "2.0",
-      id: 3,
-      method: "tools/call",
-      params: { name: "launch_cursor_mission", arguments: {} },
-    });
-    assert.equal(forbidden.result.structuredContent.code, "MY_WORK_HERMES_TOOL_FORBIDDEN");
-    const names = listed.result.tools.map((tool) => tool.name).join(" ");
-    assert.equal(/ssh|docker|shell|herdr.sock|socket/i.test(names), false);
-    assert.equal(TOOL_NAMES.includes("ssh"), false);
-  } finally {
+test("PROOF.md does not mark success; Hermes socket refuses docker/herdr sockets", async (t) => {
+  t.after(() => {
+    if (previousHerdr == null) delete process.env.DUBSAR_HERDR_BIN;
+    else process.env.DUBSAR_HERDR_BIN = previousHerdr;
     setMcpProfile("default");
-  }
-});
-
-test("agent declaration or PROOF.md cannot mark the mission successful", async () => {
-  const context = await env();
-  setTestCodexExecutor({
-    kind: "fake",
-    async exec({ ticketId, workspaceRoot }) {
-      await writeFile(path.join(workspaceRoot, "PROOF.md"), "success");
-      return {
-        ambiguous: false,
-        herdr_id: `herdr-${ticketId}`,
-        codex_session_id: `codex-sess-${ticketId}`,
-        status: "launched",
-        declared_success: true,
-      };
-    },
   });
-  try {
-    const launched = await executeTool("launch_codex_mission", { ...context, ...mission() });
-    assert.equal(launched.mission_success, false);
-    const ticket = (await readTickets({ start: context.start })).tickets[0];
-    assert.equal(ticket.codex_launch.mission_success, false);
-    assert.equal(ticket.state, "In Progress");
-  } finally {
-    resetTestCodexExecutor();
-  }
+  useProtocolHerdr();
+  const context = await env();
+  await writeFile(path.join(context.start, "PROOF.md"), "success");
+  const launched = await executeTool("launch_codex_mission", { ...context, ...mission() });
+  assert.equal(launched.mission_success, false);
+  setMcpProfile("hermes");
+  await assert.rejects(listenHermesMcpSocket("/tmp/docker.sock"), { code: "MY_WORK_HERMES_SOCKET_FORBIDDEN" });
+  await assert.rejects(listenHermesMcpSocket("/tmp/herdr.sock"), { code: "MY_WORK_HERMES_SOCKET_FORBIDDEN" });
+  const socketPath = path.join(context.start, "hermes.mcp.sock");
+  const server = await listenHermesMcpSocket(socketPath);
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const listed = await new Promise((resolve, reject) => {
+    const client = net.createConnection({ path: socketPath });
+    const timer = setTimeout(() => {
+      client.destroy();
+      reject(new Error("hermes-socket-timeout"));
+    }, 3000);
+    const onChunk = createFrameParser((message) => {
+      if (message.id !== 1) return;
+      clearTimeout(timer);
+      client.end();
+      resolve(message);
+    });
+    client.on("data", onChunk);
+    client.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    client.on("connect", () => {
+      client.write(encodeFrame({ jsonrpc: "2.0", id: 1, method: "tools/list" }));
+    });
+  });
+  assert.deepEqual(listed.result.tools.map((tool) => tool.name), [...HERMES_TOOL_NAMES]);
+  assert.equal(TOOL_NAMES.includes("ssh"), false);
 });

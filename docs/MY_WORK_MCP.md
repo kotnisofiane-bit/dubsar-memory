@@ -122,12 +122,13 @@ switch, and scope extension stay human gates.
 `launch_codex_mission` is a second **public** path on the same MCP and the same
 `dubsar.tickets/1` store. One call validates `dubsar.codex-local-contract/1`,
 persists the ticket and intention, traces argv, then starts exactly one
-Codex session via a configured executor (tests: fake; real host: `codex exec`).
-Receipts are `dubsar.codex-local-*-receipt/1`. They are not Cursor receipts.
+Codex session through **Herdr** (`workspace create`, `agent start --kind codex -- exec`,
+`agent prompt` without wait, `agent get` for the native session id). Receipts are
+`dubsar.codex-local-*-receipt/1`. They are not Cursor receipts.
 
-Hermes should start the server with `--profile hermes` so only the bounded
-mission tools are listed. Protocol, Linux install notes, and remaining VPS
-gates: [CODEX_HERDR.md](CODEX_HERDR.md).
+Hermes should start the server with `--profile hermes` and, from a container,
+only a dedicated `--mcp-socket` (never `docker.sock` / `herdr.sock`). Protocol,
+Linux install notes, and remaining VPS gates: [CODEX_HERDR.md](CODEX_HERDR.md).
 
 ## Tests
 

@@ -39,6 +39,7 @@ import {
   localCodexReceiptShape,
 } from "./codex-contract.mjs";
 import { resolveCodexExecutor } from "./codex-executor.mjs";
+import { confineAuthorizedWorkspace } from "./codex-workspace.mjs";
 
 export const TOOL_NAMES = Object.freeze([
   "list_tickets",
@@ -837,7 +838,7 @@ export async function executeTool(name, args = {}) {
       ) {
         throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
       }
-      const workspaceRoot = env.start;
+      const workspaceRoot = await confineAuthorizedWorkspace(env.start, env.start);
       const envelopeInput = {
         workspaceRoot,
         allowedPaths: args.allowed_paths,
@@ -914,7 +915,7 @@ export async function executeTool(name, args = {}) {
         throw new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_NOT_RETRYABLE");
       }
       const executor = resolveCodexExecutor();
-      const argv = ["codex", "exec"];
+      const argv = ["herdr", "workspace", "create", "--cwd", workspaceRoot, "--no-focus"];
       await mutate(env, {
         type: "activity",
         id: ticket.id,
@@ -934,6 +935,7 @@ export async function executeTool(name, args = {}) {
         result = await executor.exec({
           ticketId: ticket.id,
           workspaceRoot,
+          authorizedWorkspace: workspaceRoot,
           missionId: ticket.id,
           prompt: envelope.arguments.mission,
         });
@@ -997,21 +999,9 @@ export async function executeTool(name, args = {}) {
       const sessionId = ticket.codex_launch.codex_session_id;
       const herdrId = ticket.codex_launch.herdr_id;
       const workspaceRoot = ticket.codex_launch.workspace_root;
+      const confined = await confineAuthorizedWorkspace(env.start, workspaceRoot);
       if (args.codex_session_id != null && args.codex_session_id !== sessionId) {
         throw new MyWorkMcpError("MY_WORK_CODEX_SESSION_MISMATCH");
-      }
-      if (workspaceRoot !== env.start) throw new MyWorkMcpError("MY_WORK_SCOPE_EXTENSION");
-      if (ticket.codex_run && ticket.codex_run.status === "resumed" && ticket.codex_run.codex_session_id === sessionId) {
-        return {
-          format: "dubsar.my-work-codex-continue/1",
-          ticket_id: ticket.id,
-          state: ticket.state,
-          herdr_id: herdrId,
-          codex_session_id: sessionId,
-          workspace_root: workspaceRoot,
-          continued: false,
-          mission_success: false,
-        };
       }
       if (codexResumeSubmitted(ticket) && !ticket.codex_run) {
         throw new MyWorkMcpError("MY_WORK_CODEX_CONTINUE_NOT_RETRYABLE");
@@ -1022,7 +1012,7 @@ export async function executeTool(name, args = {}) {
         id: ticket.id,
         kind: "codex_trace",
         summary: "trace before Codex/Herdr resume",
-        evidence: { argv: ["codex", "exec", "resume", sessionId], ticket_id: ticket.id },
+        evidence: { argv: ["herdr", "agent", "start", "--kind", "codex", "exec", "resume", sessionId], ticket_id: ticket.id },
       });
       await mutate(env, {
         type: "activity",
@@ -1035,7 +1025,8 @@ export async function executeTool(name, args = {}) {
       try {
         result = await executor.resume({
           ticketId: ticket.id,
-          workspaceRoot,
+          workspaceRoot: confined,
+          authorizedWorkspace: confined,
           herdrId,
           sessionId,
           prompt: args.prompt,
@@ -1100,6 +1091,8 @@ export async function executeTool(name, args = {}) {
           sessionId: ticket.codex_launch.codex_session_id,
           herdrId: ticket.codex_launch.herdr_id,
           workspaceRoot: ticket.codex_launch.workspace_root,
+          authorizedWorkspace: env.start,
+          ticketId: ticket.id,
         });
         if (!result || result.ambiguous === true || result.status !== "interrupted") {
           throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
