@@ -1,4 +1,4 @@
-import { TOOL_DEFINITIONS, executeTool } from "./tools.mjs";
+import { TOOL_DEFINITIONS, HERMES_TOOL_NAMES, executeTool } from "./tools.mjs";
 import { MyWorkMcpError } from "./canonical.mjs";
 import { TicketError } from "../../dubsar-workbench-launcher/src/registry-store.mjs";
 
@@ -8,6 +8,26 @@ export const MY_WORK_MCP_IDENTITY = Object.freeze({
 });
 
 export const PROTOCOL_VERSION = "2024-11-05";
+
+let mcpProfile = "default";
+
+export function setMcpProfile(profile = "default") {
+  if (profile !== "default" && profile !== "hermes") {
+    throw new MyWorkMcpError("MY_WORK_PROFILE_INVALID");
+  }
+  mcpProfile = profile;
+}
+
+export function getMcpProfile() {
+  return mcpProfile;
+}
+
+function listedTools() {
+  if (mcpProfile === "hermes") {
+    return TOOL_DEFINITIONS.filter((tool) => HERMES_TOOL_NAMES.includes(tool.name));
+  }
+  return TOOL_DEFINITIONS;
+}
 
 function jsonResult(id, result) {
   return { jsonrpc: "2.0", id, result };
@@ -29,18 +49,25 @@ export async function handleMessage(message) {
     return jsonResult(id, {
       protocolVersion: PROTOCOL_VERSION,
       capabilities: { tools: { listChanged: false } },
-      serverInfo: MY_WORK_MCP_IDENTITY,
+      serverInfo: { ...MY_WORK_MCP_IDENTITY, profile: mcpProfile },
     });
   }
   if (method === "ping") {
     return jsonResult(id, {});
   }
   if (method === "tools/list") {
-    return jsonResult(id, { tools: TOOL_DEFINITIONS });
+    return jsonResult(id, { tools: listedTools() });
   }
   if (method === "tools/call") {
     const name = params?.name;
     const args = params?.arguments ?? {};
+    if (mcpProfile === "hermes" && !HERMES_TOOL_NAMES.includes(name)) {
+      return jsonResult(id, {
+        content: [{ type: "text", text: JSON.stringify({ format: "dubsar.my-work-mcp-error/1", code: "MY_WORK_HERMES_TOOL_FORBIDDEN" }) }],
+        structuredContent: { format: "dubsar.my-work-mcp-error/1", code: "MY_WORK_HERMES_TOOL_FORBIDDEN" },
+        isError: true,
+      });
+    }
     try {
       const result = await executeTool(name, args);
       return jsonResult(id, {

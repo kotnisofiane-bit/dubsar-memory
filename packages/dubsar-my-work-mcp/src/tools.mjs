@@ -31,6 +31,14 @@ import {
   controllerLaunchConfigured,
 } from "./controller-client.mjs";
 import { readCredentials } from "./oauth-store.mjs";
+import {
+  buildCodexEnvelope,
+  CODEX_LAUNCH_RECEIPT_VERSION,
+  CODEX_RUN_RECEIPT_VERSION,
+  CODEX_STOP_RECEIPT_VERSION,
+  localCodexReceiptShape,
+} from "./codex-contract.mjs";
+import { resolveCodexExecutor } from "./codex-executor.mjs";
 
 export const TOOL_NAMES = Object.freeze([
   "list_tickets",
@@ -40,6 +48,17 @@ export const TOOL_NAMES = Object.freeze([
   "continue_cursor_mission",
   "attach_cursor_receipt",
   "sync_cursor_status",
+  "launch_codex_mission",
+  "continue_codex_mission",
+  "stop_codex_mission",
+]);
+
+export const HERMES_TOOL_NAMES = Object.freeze([
+  "list_tickets",
+  "get_ticket",
+  "launch_codex_mission",
+  "continue_codex_mission",
+  "stop_codex_mission",
 ]);
 
 export const TOOL_DEFINITIONS = Object.freeze([
@@ -219,6 +238,76 @@ export const TOOL_DEFINITIONS = Object.freeze([
       },
     },
   },
+  {
+    name: "launch_codex_mission",
+    description:
+      "Validate one local Codex contract, persist one DUB ticket and intention, then start exactly one Codex/Herdr session. Does not allocate a parallel ticket registry.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "start",
+        "allocation_root",
+        "project_id",
+        "title",
+        "objective",
+        "criteria",
+        "allowed_paths",
+      ],
+      properties: {
+        start: { type: "string" },
+        allocation_root: { type: "string" },
+        project_id: { type: "string" },
+        title: { type: "string" },
+        objective: { type: "string" },
+        criteria: { type: "array", items: { type: "string" } },
+        allowed_paths: { type: "array", items: { type: "string" } },
+        mission: { type: "string" },
+        acceptance_criteria: { type: "array", items: { type: "string" } },
+        expected_evidence: { type: "array", items: { type: "string" } },
+        human_gates: { type: "array", items: { type: "string" } },
+        correction_budget: { type: "string", const: "uncapped" },
+        auto_approve_dialogue: { type: "boolean", const: false },
+        auto_recreate_session: { type: "boolean", const: false },
+        close_homonym_workspace: { type: "boolean", const: false },
+        work_id: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "continue_codex_mission",
+    description:
+      "Resume the same ticket through the persisted Codex session id. Never creates a silent new session or closes an existing workspace.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["start", "allocation_root", "project_id", "ticket_id", "prompt"],
+      properties: {
+        start: { type: "string" },
+        allocation_root: { type: "string" },
+        project_id: { type: "string" },
+        ticket_id: { type: "string" },
+        prompt: { type: "string" },
+        codex_session_id: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "stop_codex_mission",
+    description:
+      "Interrupt only the concerned Codex execution. Files and history are kept. The stop result is not mission success.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["start", "allocation_root", "project_id", "ticket_id"],
+      properties: {
+        start: { type: "string" },
+        allocation_root: { type: "string" },
+        project_id: { type: "string" },
+        ticket_id: { type: "string" },
+      },
+    },
+  },
 ]);
 
 function wrap(error) {
@@ -309,6 +398,29 @@ function preparedContractFrom(ticket) {
   return null;
 }
 
+function preparedCodexContractFrom(ticket) {
+  const activities = Array.isArray(ticket?.activity) ? ticket.activity : [];
+  for (let i = activities.length - 1; i >= 0; i -= 1) {
+    const row = activities[i];
+    if (row?.kind === "codex_contract" && row.evidence && typeof row.evidence === "object") {
+      return row.evidence;
+    }
+  }
+  return null;
+}
+
+function codexLaunchSubmitted(ticket) {
+  const activities = Array.isArray(ticket?.activity) ? ticket.activity : [];
+  return activities.some(
+    (row) => row?.kind === "codex_launch_submitted" || row?.kind === "codex_launch_failed",
+  );
+}
+
+function codexResumeSubmitted(ticket) {
+  const activities = Array.isArray(ticket?.activity) ? ticket.activity : [];
+  return activities.some((row) => row?.kind === "codex_resume_submitted");
+}
+
 function cursorRunHistory(ticket) {
   const activities = Array.isArray(ticket?.activity) ? ticket.activity : [];
   return activities
@@ -343,7 +455,14 @@ function publicTicket(ticket) {
     references: ticket.references,
     cursor_launch: ticket.cursor_launch,
     cursor_run: ticket.cursor_run ?? null,
+    codex_launch: ticket.codex_launch ?? null,
+    codex_run: ticket.codex_run ?? null,
+    codex_stop: ticket.codex_stop ?? null,
     prepared_contract: preparedContractFrom(ticket),
+    prepared_codex_contract: preparedCodexContractFrom(ticket),
+    herdr_id: ticket.codex_launch?.herdr_id ?? null,
+    codex_session_id: ticket.codex_launch?.codex_session_id ?? null,
+    workspace_root: ticket.codex_launch?.workspace_root ?? preparedCodexContractFrom(ticket)?.arguments?.workspace_root ?? null,
     work_id: ticket.work_id ?? null,
     duplicate_of: ticket.duplicate_of ?? null,
     agent: ticket.agent,
@@ -376,6 +495,11 @@ export async function executeTool(name, args = {}) {
         attached_receipt: current,
         attached_launch_receipt: ticket.cursor_launch ?? null,
         attached_run_receipts: cursorRunHistory(ticket),
+        prepared_codex_contract: preparedCodexContractFrom(ticket),
+        attached_codex_receipt: ticket.codex_run ?? ticket.codex_launch ?? null,
+        herdr_id: ticket.codex_launch?.herdr_id ?? null,
+        codex_session_id: ticket.codex_launch?.codex_session_id ?? null,
+        workspace_root: ticket.codex_launch?.workspace_root ?? preparedCodexContractFrom(ticket)?.arguments?.workspace_root ?? null,
       };
     }
     if (name === "prepare_cursor_mission") {
@@ -702,6 +826,308 @@ export async function executeTool(name, args = {}) {
         state: updated.state,
         idempotent: false,
         cursor_launch: updated.cursor_launch,
+      };
+    }
+    if (name === "launch_codex_mission") {
+      if (
+        typeof args.title !== "string" ||
+        typeof args.objective !== "string" ||
+        !Array.isArray(args.criteria) ||
+        !Array.isArray(args.allowed_paths)
+      ) {
+        throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
+      }
+      const workspaceRoot = env.start;
+      const envelopeInput = {
+        workspaceRoot,
+        allowedPaths: args.allowed_paths,
+        mission: args.mission,
+        acceptanceCriteria: args.acceptance_criteria,
+        expectedEvidence: args.expected_evidence,
+        humanGates: args.human_gates,
+        title: args.title,
+        objective: args.objective,
+        criteria: args.criteria,
+        autoApproveDialogue: args.auto_approve_dialogue,
+        autoRecreateSession: args.auto_recreate_session,
+        closeHomonymWorkspace: args.close_homonym_workspace,
+        correctionBudget: args.correction_budget,
+      };
+      buildCodexEnvelope({ ticketId: "DUB-001", ...envelopeInput });
+      const existingStore = await readTickets({ start: env.start });
+      let ticketId = null;
+      let envelope = null;
+      for (const existing of existingStore.tickets) {
+        const candidate = buildCodexEnvelope({ ticketId: existing.id, ...envelopeInput });
+        if (!(existing.references ?? []).includes(candidate.contract_fingerprint)) continue;
+        ticketId = existing.id;
+        envelope = preparedCodexContractFrom(existing) ?? candidate;
+        if (!preparedCodexContractFrom(existing)) {
+          await mutate(env, {
+            type: "activity",
+            id: existing.id,
+            kind: "codex_contract",
+            summary: "local Codex/Herdr contract persisted",
+            evidence: { ...candidate },
+          });
+          envelope = candidate;
+        }
+        break;
+      }
+      if (ticketId == null) {
+        const allocations = await readTicketAllocations({ allocationRoot: env.allocationRoot });
+        ticketId = `DUB-${String(allocations.next_number).padStart(3, "0")}`;
+        envelope = buildCodexEnvelope({ ticketId, ...envelopeInput });
+        await mutate(env, {
+          type: "create",
+          title: args.title,
+          objective: args.objective,
+          criteria: args.criteria,
+          work_id: args.work_id ?? null,
+          references: [envelope.contract_fingerprint, "codex-local"],
+        });
+        await mutate(env, {
+          type: "activity",
+          id: ticketId,
+          kind: "codex_contract",
+          summary: "local Codex/Herdr contract persisted",
+          evidence: { ...envelope },
+        });
+      }
+      const store = await readTickets({ start: env.start });
+      const ticket = store.tickets.find((item) => item.id === ticketId);
+      if (!ticket) throw new MyWorkMcpError("MY_WORK_TICKET_NOT_FOUND");
+      if (ticket.cursor_launch) throw new MyWorkMcpError("MY_WORK_BACKEND_CONFLICT");
+      if (ticket.codex_launch) {
+        return {
+          format: "dubsar.my-work-codex-launch/1",
+          ticket_id: ticket.id,
+          state: ticket.state,
+          herdr_id: ticket.codex_launch.herdr_id,
+          codex_session_id: ticket.codex_launch.codex_session_id,
+          workspace_root: ticket.codex_launch.workspace_root,
+          launched: false,
+          mission_success: false,
+        };
+      }
+      if (codexLaunchSubmitted(ticket)) {
+        throw new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_NOT_RETRYABLE");
+      }
+      const executor = resolveCodexExecutor();
+      const argv = ["codex", "exec"];
+      await mutate(env, {
+        type: "activity",
+        id: ticket.id,
+        kind: "codex_trace",
+        summary: "trace before Codex/Herdr launch",
+        evidence: { argv, workspace_root: workspaceRoot, ticket_id: ticket.id },
+      });
+      await mutate(env, {
+        type: "activity",
+        id: ticket.id,
+        kind: "codex_launch_submitted",
+        summary: "single Codex/Herdr exec request",
+        evidence: { argv, ticket_id: ticket.id },
+      });
+      let result;
+      try {
+        result = await executor.exec({
+          ticketId: ticket.id,
+          workspaceRoot,
+          missionId: ticket.id,
+          prompt: envelope.arguments.mission,
+        });
+        if (!result || result.ambiguous === true || typeof result.codex_session_id !== "string" || typeof result.herdr_id !== "string") {
+          throw new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_AMBIGUOUS");
+        }
+      } catch (error) {
+        await mutate(env, {
+          type: "fail-codex-launch",
+          id: ticket.id,
+          code: error instanceof MyWorkMcpError ? error.code : "MY_WORK_CODEX_LAUNCH_AMBIGUOUS",
+          summary: "Codex launch failed or was ambiguous; no retry",
+        });
+        throw error instanceof MyWorkMcpError ? error : new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_AMBIGUOUS");
+      }
+      const receipt = localCodexReceiptShape({
+        version: CODEX_LAUNCH_RECEIPT_VERSION,
+        ticketId: ticket.id,
+        contractFingerprint: envelope.contract_fingerprint,
+        workspaceRoot,
+        herdrId: result.herdr_id,
+        sessionId: result.codex_session_id,
+        missionId: ticket.id,
+        status: "launched",
+      });
+      try {
+        await mutate(env, { type: "attach-codex-launch", id: ticket.id, receipt });
+      } catch (error) {
+        await mutate(env, {
+          type: "fail-codex-launch",
+          id: ticket.id,
+          code: error instanceof MyWorkMcpError || error instanceof TicketError ? error.code : "MY_WORK_CODEX_LAUNCH_AMBIGUOUS",
+          summary: "Codex receipt did not match local ticket bounds; no fabricated Cursor receipt",
+        });
+        throw error instanceof MyWorkMcpError ? error : new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_AMBIGUOUS");
+      }
+      return {
+        format: "dubsar.my-work-codex-launch/1",
+        ticket_id: ticket.id,
+        state: "In Progress",
+        herdr_id: receipt.herdr_id,
+        codex_session_id: receipt.codex_session_id,
+        workspace_root: receipt.workspace_root,
+        launched: true,
+        mission_success: false,
+      };
+    }
+    if (name === "continue_codex_mission") {
+      const store = await readTickets({ start: env.start });
+      const ticket = store.tickets.find((item) => item.id === args.ticket_id);
+      if (!ticket) throw new MyWorkMcpError("MY_WORK_TICKET_NOT_FOUND");
+      const contract = preparedCodexContractFrom(ticket);
+      if (!contract) throw new MyWorkMcpError("MY_WORK_FINGERPRINT_MISMATCH");
+      if (!ticket.codex_launch) throw new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_REQUIRED");
+      if (TERMINAL_TICKET_STATES.includes(ticket.state)) {
+        throw new MyWorkMcpError("MY_WORK_TICKET_TERMINAL");
+      }
+      if (typeof args.prompt !== "string" || args.prompt.trim() !== args.prompt || args.prompt.length < 1) {
+        throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
+      }
+      const sessionId = ticket.codex_launch.codex_session_id;
+      const herdrId = ticket.codex_launch.herdr_id;
+      const workspaceRoot = ticket.codex_launch.workspace_root;
+      if (args.codex_session_id != null && args.codex_session_id !== sessionId) {
+        throw new MyWorkMcpError("MY_WORK_CODEX_SESSION_MISMATCH");
+      }
+      if (workspaceRoot !== env.start) throw new MyWorkMcpError("MY_WORK_SCOPE_EXTENSION");
+      if (ticket.codex_run && ticket.codex_run.status === "resumed" && ticket.codex_run.codex_session_id === sessionId) {
+        return {
+          format: "dubsar.my-work-codex-continue/1",
+          ticket_id: ticket.id,
+          state: ticket.state,
+          herdr_id: herdrId,
+          codex_session_id: sessionId,
+          workspace_root: workspaceRoot,
+          continued: false,
+          mission_success: false,
+        };
+      }
+      if (codexResumeSubmitted(ticket) && !ticket.codex_run) {
+        throw new MyWorkMcpError("MY_WORK_CODEX_CONTINUE_NOT_RETRYABLE");
+      }
+      const executor = resolveCodexExecutor();
+      await mutate(env, {
+        type: "activity",
+        id: ticket.id,
+        kind: "codex_trace",
+        summary: "trace before Codex/Herdr resume",
+        evidence: { argv: ["codex", "exec", "resume", sessionId], ticket_id: ticket.id },
+      });
+      await mutate(env, {
+        type: "activity",
+        id: ticket.id,
+        kind: "codex_resume_submitted",
+        summary: "single Codex exec resume by id",
+        evidence: { ticket_id: ticket.id, codex_session_id: sessionId, herdr_id: herdrId },
+      });
+      let result;
+      try {
+        result = await executor.resume({
+          ticketId: ticket.id,
+          workspaceRoot,
+          herdrId,
+          sessionId,
+          prompt: args.prompt,
+        });
+        if (!result || result.ambiguous === true || result.codex_session_id !== sessionId || result.herdr_id !== herdrId) {
+          throw new MyWorkMcpError("MY_WORK_CODEX_CONTINUE_AMBIGUOUS");
+        }
+      } catch (error) {
+        await mutate(env, {
+          type: "fail-codex-run",
+          id: ticket.id,
+          code: error instanceof MyWorkMcpError ? error.code : "MY_WORK_CODEX_CONTINUE_AMBIGUOUS",
+          summary: "Codex resume failed or was ambiguous; no silent new session",
+        });
+        throw error instanceof MyWorkMcpError ? error : new MyWorkMcpError("MY_WORK_CODEX_CONTINUE_AMBIGUOUS");
+      }
+      const receipt = localCodexReceiptShape({
+        version: CODEX_RUN_RECEIPT_VERSION,
+        ticketId: ticket.id,
+        contractFingerprint: contract.contract_fingerprint,
+        workspaceRoot,
+        herdrId,
+        sessionId,
+        missionId: ticket.id,
+        status: "resumed",
+      });
+      await mutate(env, { type: "attach-codex-run", id: ticket.id, receipt });
+      return {
+        format: "dubsar.my-work-codex-continue/1",
+        ticket_id: ticket.id,
+        state: "In Progress",
+        herdr_id: herdrId,
+        codex_session_id: sessionId,
+        workspace_root: workspaceRoot,
+        continued: true,
+        mission_success: false,
+      };
+    }
+    if (name === "stop_codex_mission") {
+      const store = await readTickets({ start: env.start });
+      const ticket = store.tickets.find((item) => item.id === args.ticket_id);
+      if (!ticket) throw new MyWorkMcpError("MY_WORK_TICKET_NOT_FOUND");
+      if (!ticket.codex_launch) throw new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_REQUIRED");
+      if (TERMINAL_TICKET_STATES.includes(ticket.state)) {
+        throw new MyWorkMcpError("MY_WORK_TICKET_TERMINAL");
+      }
+      if (ticket.codex_stop) {
+        return {
+          format: "dubsar.my-work-codex-stop/1",
+          ticket_id: ticket.id,
+          state: ticket.state,
+          herdr_id: ticket.codex_launch.herdr_id,
+          codex_session_id: ticket.codex_launch.codex_session_id,
+          interrupted: false,
+          mission_success: false,
+        };
+      }
+      const executor = resolveCodexExecutor();
+      let result;
+      try {
+        result = await executor.stop({
+          sessionId: ticket.codex_launch.codex_session_id,
+          herdrId: ticket.codex_launch.herdr_id,
+          workspaceRoot: ticket.codex_launch.workspace_root,
+        });
+        if (!result || result.ambiguous === true || result.status !== "interrupted") {
+          throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
+        }
+      } catch (error) {
+        throw error instanceof MyWorkMcpError ? error : new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
+      }
+      const contract = preparedCodexContractFrom(ticket);
+      const receipt = localCodexReceiptShape({
+        version: CODEX_STOP_RECEIPT_VERSION,
+        ticketId: ticket.id,
+        contractFingerprint: contract.contract_fingerprint,
+        workspaceRoot: ticket.codex_launch.workspace_root,
+        herdrId: ticket.codex_launch.herdr_id,
+        sessionId: ticket.codex_launch.codex_session_id,
+        missionId: ticket.id,
+        status: "interrupted",
+      });
+      await mutate(env, { type: "record-codex-stop", id: ticket.id, receipt });
+      return {
+        format: "dubsar.my-work-codex-stop/1",
+        ticket_id: ticket.id,
+        state: ticket.state,
+        herdr_id: ticket.codex_launch.herdr_id,
+        codex_session_id: ticket.codex_launch.codex_session_id,
+        interrupted: true,
+        mission_success: false,
+        logging_error: result.logging_error === true,
       };
     }
     if (name !== "sync_cursor_status") throw new MyWorkMcpError("MY_WORK_TOOL_UNKNOWN");

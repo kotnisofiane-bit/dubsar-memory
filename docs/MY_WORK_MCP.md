@@ -117,8 +117,20 @@ the launch receipt).
 Merge, local install, deployment, publication, VM/cloud, secrets, backend
 switch, and scope extension stay human gates.
 
+## Local Codex / Herdr (same ticket store)
+
+`launch_codex_mission` is a second **public** path on the same MCP and the same
+`dubsar.tickets/1` store. One call validates `dubsar.codex-local-contract/1`,
+persists the ticket and intention, traces argv, then starts exactly one
+Codex session via a configured executor (tests: fake; real host: `codex exec`).
+Receipts are `dubsar.codex-local-*-receipt/1`. They are not Cursor receipts.
+
+Hermes should start the server with `--profile hermes` so only the bounded
+mission tools are listed. Protocol, Linux install notes, and remaining VPS
+gates: [CODEX_HERDR.md](CODEX_HERDR.md).
+
 ## Tests
 
 ```bash
-node --test tests/my-work-mcp.test.mjs tests/my-work-mcp-e2e.test.mjs
+node --test tests/my-work-mcp.test.mjs tests/my-work-mcp-e2e.test.mjs tests/my-work-codex.test.mjs tests/my-work-codex-e2e.test.mjs
 ```

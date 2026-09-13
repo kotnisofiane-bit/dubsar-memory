@@ -15,6 +15,8 @@ records retained for review and compatibility.
   VM, product backend, Codex, Claude Code, or Cursor.
 - [Workbench guide](WORKBENCH.md) — open and interpret the optional read-only
   Dashboard.
+- [My Work MCP](MY_WORK_MCP.md) — local stdio tickets, Cursor Controller, Codex/Herdr.
+- [Codex/Herdr adapter](CODEX_HERDR.md) — local protocol, Hermes profile, remaining VPS gates.
 - [Known limits](LIMITATIONS.md) — current capacity, non-goals, and production
   constraints.
 

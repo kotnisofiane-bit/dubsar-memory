@@ -8,12 +8,12 @@
     "filesystem_read": "explicit_selected_project_ticket_store",
     "filesystem_write": "explicit_ticket_preview_apply",
     "network": "explicit_single_controller_launch_or_run",
-    "process_execution": "optional_local_browser_open_for_oauth",
-    "remote_mutation": "bounded_cursor_agent_creation"
+    "process_execution": "optional_local_browser_open_for_oauth_or_configured_codex_executor",
+    "remote_mutation": "bounded_cursor_agent_creation_or_local_codex_herdr_session"
   },
   "integrations": {
     "backend": "none",
-    "mcp": "local_stdio_plus_remote_controller_launch",
+    "mcp": "local_stdio_plus_remote_controller_launch_or_private_hermes_codex_profile",
     "personal_memory": "none"
   }
 }

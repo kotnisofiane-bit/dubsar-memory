@@ -14,13 +14,17 @@ Création, transition et activité passent par le même moteur pour la CLI et le
 2. l'utilisateur confirme cette empreinte exacte ;
 3. `applyTicketChange` recalcule l'aperçu depuis l'état courant et refuse une empreinte obsolète avant publication atomique.
 
-La CLI du launcher accepte `tickets list|create|transition|activity|attach-cursor-launch|attach-cursor-run|fail-cursor-launch|fail-cursor-run`. Les opérations d'écriture sont fournies dans un fichier de proposition, jamais comme commande arbitraire issue du Dashboard.
+La CLI du launcher accepte `tickets list|create|transition|activity|attach-cursor-launch|attach-cursor-run|fail-cursor-launch|fail-cursor-run|attach-codex-launch|attach-codex-run|fail-codex-launch|fail-codex-run|record-codex-stop`. Les opérations d'écriture sont fournies dans un fichier de proposition, jamais comme commande arbitraire issue du Dashboard.
 
 ### Lancement Cursor borné
 
 `attach-cursor-launch` vise un ticket existant. Une seule publication atomique conserve le reçu Controller exact : `receipt_version` (`dubsar.cursor-launch-receipt/1` ou `dubsar.cursor-run-receipt/1`), `target_repository_url`, `contract_fingerprint`, `repository_refs`, `ticket_id`, `agent_id`, `run_id`, `source_url`, `status` et `bounds`, puis place le ticket `In Progress`. Le dépôt cible est une URL GitHub HTTPS complète, chaque référence est exactement `{repository_url, starting_sha}`, et l'empreinte est exactement `sha256:` suivi de 64 caractères hexadécimaux minuscules. Le reçu doit porter le même `ticket_id`; l'ancien schéma local `format`/`target_repository`/hex64 est refusé. Les bornes d'un reçu déjà persisté (budget numérique `3` ou `uncapped` plus `correction_policy`, et `correction_number` pour un `dubsar.cursor-run-receipt/1`) sont relues telles quelles; aucune réécriture silencieuse n'est autorisée. `attach-cursor-run` ajoute un `dubsar.cursor-run-receipt/1` validé sans remplacer `cursor_launch` : même `agent_id`, `correction_number` strictement croissant, ticket non terminal. `fail-cursor-launch` ne crée aucun identifiant d'agent : il ajoute seulement une activité bornée avec un code, conserve le résumé comme blocage et place atomiquement le ticket `Blocked`. `fail-cursor-run` bloque une continuation sans effacer le reçu de lancement ni l'historique déjà enregistré. Les contrats budget `3` restent lisibles; ils n'autorisent pas une continuation uncapped.
 
 Ces opérations ne contactent aucun MCP. L'orchestrateur doit d'abord appliquer et relire la création du ticket, puis appeler une seule fois le Controller, comparer `ticket_id` et le `contract_fingerprint` obtenu par la canonicalisation exacte du Controller, préfixe `sha256:` inclus, et enfin prévisualiser/appliquer l'attachement. My Work ne fait qu'afficher le reçu local. Aucun secret n'appartient au registre.
+
+### Lancement Codex local
+
+`attach-codex-launch` conserve un reçu `dubsar.codex-local-launch-receipt/1` distinct : `herdr_id`, `codex_session_id`, `workspace_root`, `mission_id`, bornes `auto_approve_dialogue: false`, `auto_recreate_session: false`, `close_homonym_workspace: false`, `workspace_bind: authorized_only`, et `mission_success` toujours `false`. Un ticket ne peut pas porter à la fois un reçu Cursor et un reçu Codex (`TICKET_BACKEND_CONFLICT`). `record-codex-stop` interrompt l'exécution sans détruire l'historique ni les fichiers ; ce n'est pas un passage à Done.
 
 ## États et preuves
 

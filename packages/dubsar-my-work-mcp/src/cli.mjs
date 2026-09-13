@@ -1,11 +1,22 @@
 import { connectionStatus } from "./oauth-store.mjs";
 import { connectController } from "./oauth-flow.mjs";
 import { redactObject } from "./redact.mjs";
-import { attachStdio } from "./server.mjs";
+import { attachStdio, setMcpProfile } from "./server.mjs";
 
 export async function runCli(argv = process.argv.slice(2), stdio = process) {
-  const command = argv[0];
+  const rest = [...argv];
+  let profile = process.env.DUBSAR_MY_WORK_MCP_PROFILE ?? "default";
+  if (rest[0] === "--profile") {
+    profile = rest[1];
+    rest.splice(0, 2);
+  }
+  setMcpProfile(profile);
+  const command = rest[0];
   if (command === "connect") {
+    if (profile === "hermes") {
+      stdio.stderr.write(`${JSON.stringify({ format: "dubsar.my-work-mcp-error/1", code: "MY_WORK_HERMES_TOOL_FORBIDDEN" })}\n`);
+      return 1;
+    }
     await connectController({ write: stdio.stdout });
     return 0;
   }
