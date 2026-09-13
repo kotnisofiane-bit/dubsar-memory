@@ -62,6 +62,16 @@ function runCli(cwd, bin, args, extraEnv = {}) {
   });
 }
 
+function pidAliveWindows(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function waitSupervisorStatus(allocationRoot, ticketId, status) {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const run = await readSupervisorRun(allocationRoot, ticketId);
@@ -146,7 +156,13 @@ test("stop of a live long task is observed by the supervisor", async (t) => {
   const stopped = await executeTool("stop_codex_mission", { ...context, ticket_id: "DUB-001" });
   assert.equal(stopped.interrupted, true);
   assert.equal(stopped.mission_success, false);
-  assert.equal(await readFile(path.join(context.start, "codex-interrupted.flag"), "utf8"), "interrupted\n");
+  const run = await readSupervisorRun(context.allocation_root, "DUB-001");
+  assert.equal(run.status, "interrupted");
+  if (process.platform === "win32") {
+    assert.equal(pidAliveWindows(run.pid), false);
+  } else {
+    assert.equal(await readFile(path.join(context.start, "codex-interrupted.flag"), "utf8"), "interrupted\n");
+  }
 });
 
 test("missing observation is ambiguous and does not launch again", async (t) => {
