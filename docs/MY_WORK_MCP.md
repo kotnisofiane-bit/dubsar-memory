@@ -122,7 +122,7 @@ switch, and scope extension stay human gates.
 `launch_codex_mission` is a second **public** path on the same MCP and the same
 `dubsar.tickets/1` store. One call validates `dubsar.codex-local-contract/1`,
 persists the ticket and intention, traces argv, then starts exactly one
-Codex session through **Herdr workspace + supervised `codex exec --json`**.
+Codex session through **`herdr exec --pane` + occupant `codex exec --json`**.
 Session ids come from Codex events, not from `herdr agent get` (which is
 `agent_not_found` after a short occupant exit). Receipts are
 `dubsar.codex-local-*-receipt/1`. They are not Cursor receipts.

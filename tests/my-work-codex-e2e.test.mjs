@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -44,6 +44,7 @@ function startServer(workspace, extraEnv = {}) {
       ...process.env,
       DUBSAR_HERDR_BIN: herdrBin,
       DUBSAR_CODEX_BIN: codexBin,
+      CODEX_CONFIG_SENTINEL: "configured-account",
       ...extraEnv,
     },
   });
@@ -59,10 +60,11 @@ async function stopServer(child) {
 test("E2E Herdr protocol: launch file, restart, continue file, observed stop", async () => {
   const start = await mkdtemp(path.join(tmpdir(), "dubsar-codex-e2e-project-"));
   const allocationRoot = await mkdtemp(path.join(tmpdir(), "dubsar-codex-e2e-global-"));
+  const serviceHome = await mkdtemp(path.join(tmpdir(), "dubsar-codex-e2e-service-home-"));
   await mkdir(path.join(start, ".dubsar"));
   const context = { start, allocation_root: allocationRoot, project_id: "project-e2e-codex" };
 
-  const first = startServer(start);
+  const first = startServer(start, { CODEX_HOME: serviceHome });
   let sessionId;
   let herdrId;
   try {
@@ -92,8 +94,11 @@ test("E2E Herdr protocol: launch file, restart, continue file, observed stop", a
   }
 
   assert.equal(await readFile(path.join(start, "codex-launch.txt"), "utf8"), "Contenu de lancement E2E\n");
+  assert.equal(await readFile(path.join(start, "codex-context-sentinel.txt"), "utf8"), "configured-account\n");
+  assert.equal(await readFile(path.join(start, "codex-home-echo.txt"), "utf8"), `${serviceHome}\n`);
+  await assert.rejects(access(path.join(allocationRoot, "codex-native")));
 
-  const afterRestart = startServer(start);
+  const afterRestart = startServer(start, { CODEX_HOME: serviceHome });
   try {
     await afterRestart.call("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "test" } });
     const loaded = await afterRestart.call("tools/call", {

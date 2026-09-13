@@ -918,7 +918,7 @@ export async function executeTool(name, args = {}) {
         throw new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_NOT_RETRYABLE");
       }
       const executor = resolveCodexExecutor();
-      const argv = ["codex", "exec", "--json"];
+      const argv = ["herdr", "exec", "--pane", "--kind", "codex", "--", "exec", "--json"];
       await mutate(env, {
         type: "activity",
         id: ticket.id,
@@ -1016,7 +1016,7 @@ export async function executeTool(name, args = {}) {
         id: ticket.id,
         kind: "codex_trace",
         summary: "trace before Codex/Herdr resume",
-        evidence: { argv: ["codex", "exec", "resume", sessionId, "--json"], ticket_id: ticket.id },
+        evidence: { argv: ["herdr", "exec", "--pane", "--kind", "codex", "--", "exec", "resume", sessionId, "--json"], ticket_id: ticket.id },
       });
       await mutate(env, {
         type: "activity",

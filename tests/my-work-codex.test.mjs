@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, unlink, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, unlink, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -18,6 +18,8 @@ const codexBin = fileURLToPath(new URL("./helpers/codex-protocol/codex.mjs", imp
 const previousHerdr = process.env.DUBSAR_HERDR_BIN;
 const previousCodex = process.env.DUBSAR_CODEX_BIN;
 const previousHold = process.env.CODEX_PROTOCOL_HOLD;
+const previousHome = process.env.CODEX_HOME;
+const previousSentinel = process.env.CODEX_CONFIG_SENTINEL;
 
 function useProtocolBins() {
   process.env.DUBSAR_HERDR_BIN = herdrBin;
@@ -33,13 +35,21 @@ function restoreBins() {
   else process.env.DUBSAR_CODEX_BIN = previousCodex;
   if (previousHold == null) delete process.env.CODEX_PROTOCOL_HOLD;
   else process.env.CODEX_PROTOCOL_HOLD = previousHold;
+  if (previousHome == null) delete process.env.CODEX_HOME;
+  else process.env.CODEX_HOME = previousHome;
+  if (previousSentinel == null) delete process.env.CODEX_CONFIG_SENTINEL;
+  else process.env.CODEX_CONFIG_SENTINEL = previousSentinel;
 }
 
 async function env() {
   const start = await mkdtemp(path.join(tmpdir(), "dubsar-codex-project-"));
   const allocationRoot = await mkdtemp(path.join(tmpdir(), "dubsar-codex-global-"));
+  const serviceHome = await mkdtemp(path.join(tmpdir(), "dubsar-codex-service-home-"));
   await mkdir(path.join(start, ".dubsar"));
-  return { start, allocation_root: allocationRoot, project_id: "project-codex" };
+  await writeFile(path.join(serviceHome, "account.sentinel"), "configured-account\n");
+  process.env.CODEX_HOME = serviceHome;
+  process.env.CODEX_CONFIG_SENTINEL = "configured-account";
+  return { start, allocation_root: allocationRoot, project_id: "project-codex", serviceHome };
 }
 
 function runCli(cwd, bin, args, extraEnv = {}) {
@@ -102,6 +112,9 @@ test("short finished task persists durable session after Herdr agent_not_found",
   assert.match(launched.herdr_id, /^ws_[0-9a-f]+\/pane_[0-9a-f]+$/u);
   assert.match(launched.codex_session_id, /^codex_[0-9a-f]+$/u);
   assert.equal(await readFile(path.join(context.start, "codex-launch.txt"), "utf8"), "Ecrire le fichier de lancement\n");
+  assert.equal(await readFile(path.join(context.start, "codex-context-sentinel.txt"), "utf8"), "configured-account\n");
+  assert.equal(await readFile(path.join(context.start, "codex-home-echo.txt"), "utf8"), `${context.serviceHome}\n`);
+  await assert.rejects(access(path.join(context.allocation_root, "codex-native")));
   await waitSupervisorStatus(context.allocation_root, "DUB-001", "exited");
   const herdrGet = await runCli(context.start, herdrBin, ["agent", "get", "d001"]);
   assert.notEqual(herdrGet.code, 0);
@@ -115,6 +128,29 @@ test("short finished task persists durable session after Herdr agent_not_found",
   const store = await readTickets({ start: context.start });
   assert.equal(store.tickets.length, 1);
   assert.equal(store.tickets[0].cursor_launch, null);
+});
+
+test("public Herdr path occupies the returned pane and inherits CODEX_HOME", async (t) => {
+  t.after(restoreBins);
+  useProtocolBins();
+  const context = await env();
+  const result = await createHerdrCodexExecutor().exec({
+    ticketId: "DUB-001",
+    workspaceRoot: context.start,
+    authorizedWorkspace: context.start,
+    allocationRoot: context.allocation_root,
+    prompt: "occuper le pane",
+  });
+  assert.equal(result.argv[0], "herdr");
+  assert.equal(result.argv[1], "exec");
+  assert.equal(result.argv[2], "--pane");
+  assert.match(result.argv[3], /^pane_[0-9a-f]+$/u);
+  assert.equal(result.argv[4], "--kind");
+  assert.equal(result.argv[5], "codex");
+  assert.equal(result.herdr_id.endsWith(`/${result.argv[3]}`), true);
+  assert.equal(await readFile(path.join(context.start, "codex-home-echo.txt"), "utf8"), `${context.serviceHome}\n`);
+  assert.equal(await readFile(path.join(context.start, "codex-context-sentinel.txt"), "utf8"), "configured-account\n");
+  await assert.rejects(access(path.join(context.allocation_root, "codex-native")));
 });
 
 test("consultation and continue reuse the same Codex id after MCP-side durable record", async (t) => {
@@ -193,13 +229,18 @@ test("omitted prompt, missing binaries, --last, and out-of-scope cwd fail closed
     }),
     { code: "MY_WORK_MISSION_INCOMPLETE" },
   );
+  const horsPane = await runCli(context.start, codexBin, ["exec", "--json", "--", "x"], {
+    HERDR_ENV: "1",
+  });
+  assert.notEqual(horsPane.code, 0);
+  assert.match(horsPane.stderr, /outside a Herdr pane/u);
   const bare = await runCli(context.start, codexBin, ["exec", "--json"], {
-    CODEX_HOME: path.join(context.allocation_root, "codex-native"),
+    HERDR_PANE_ID: "pane_forged",
   });
   assert.notEqual(bare.code, 0);
   assert.match(bare.stderr, /No prompt provided/u);
   const last = await runCli(context.start, codexBin, ["exec", "resume", "--last", "--json", "--", "x"], {
-    CODEX_HOME: path.join(context.allocation_root, "codex-native"),
+    HERDR_PANE_ID: "pane_forged",
   });
   assert.notEqual(last.code, 0);
   process.env.DUBSAR_HERDR_BIN = path.join(context.start, "missing-herdr");
@@ -223,7 +264,7 @@ test("omitted prompt, missing binaries, --last, and out-of-scope cwd fail closed
       allocationRoot: context.allocation_root,
       prompt: "x",
     }),
-    { code: "MY_WORK_CODEX_UNAVAILABLE" },
+    { code: "MY_WORK_CODEX_LAUNCH_AMBIGUOUS" },
   );
   useProtocolBins();
   const outside = await mkdtemp(path.join(tmpdir(), "dubsar-outside-"));

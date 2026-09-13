@@ -6,8 +6,6 @@ not a second ticket product. Tickets remain `dubsar.tickets/1` in
 Codex receipts are a distinct contract and are never rewritten as Cursor
 receipts.
 
-## Protocol actually used (verified Herdr CLI)
-
 ## Protocol (Herdr host, Codex `--json` identity)
 
 Herdr hosts the workspace/pane. It is **not** a durable session registry. Isolated
@@ -21,32 +19,37 @@ cleared on exit. Native Codex history still has `session_meta.id`. Do not treat
 My Work therefore:
 
 1. `herdr workspace create --cwd <authorized_realpath> --label <ticket> --no-focus`  
-   `herdr_id` = `workspace_id/pane_id` from that JSON. Confinement is realpath, not
-   MCP `cwd` alone.
-2. Supervises **`codex exec --json -- <prompt>`** in that workspace (non-interactive).  
-   Session identity is collected from structured events (`session_meta.id`) as
-   soon as they are emitted. Prompt as argv; omitting it fails like vendor Codex.
-3. Persists that identity in the existing My Work ticket **and** in a supervisor
-   record under `allocation_root` (outside the Codex-writable workspace). No second
-   ticket registry.
-4. Continuation: **`codex exec resume <EXACT_ID> --json -- <prompt>`**  
-   Same ticket and same id. Never `--last`.
-5. Stop observes the **supervised process** (already finished / interrupted /
-   unknown). Stop is never mission success. Unknown observation is ambiguous and
-   does not relaunch.
+   `herdr_id` = `workspace_id/pane_id`. Confinement is realpath.
+2. Hosts the non-interactive occupant **in that pane**:  
+   `herdr exec --pane <pane_id> --kind codex -- exec --json -- <prompt>`  
+   The MCP supervises the Herdr CLI process that runs the pane; it does not spawn
+   `codex` as its own child. `HERDR_ENV=1` is not a hosting proof. Launch outside
+   a pane is refused.
+3. Session identity is collected from occupant `--json` events (`session_meta.id`)
+   forwarded on Herdr stdout. Persist in the My Work ticket and
+   `allocation_root/codex-supervisor.json` (outside the Codex-writable workspace).
+   Native `CODEX_HOME` / provider config of the service account is **inherited**.
+   It is not replaced by an empty `allocation_root/codex-native`. An operator may
+   set `DUBSAR_CODEX_HOME` explicitly; secrets are not copied or logged.
+4. Continuation: `herdr exec --pane <same pane> --kind codex -- exec resume <EXACT_ID> --json -- <prompt>`  
+   Never `--last`, no workspace close, no auto-approve.
+5. Stop signals the supervised **Herdr pane exec** (already finished / interrupted /
+   unknown). Stop is never mission success.
 
 ### Qualification commands for Work (vendor binaries, isolated temp repo)
 
-These are the candidate commands; running them on a real machine is a
-`local_install` human gate. CI doubles do not replace them.
-
 ```bash
 herdr workspace create --cwd "$TMP" --label DUB-001 --no-focus
-codex exec --json -- "Write DIAG006_OK"
-# expect NDJSON session_meta.id; a later `herdr agent get` may be agent_not_found
-codex exec resume "$SESSION_ID" --json -- "second turn"
-# never: codex exec resume --last
+# pane_id from the JSON; then host Codex in that pane (not a sidecar MCP child):
+herdr exec --pane "$PANE" --kind codex -- exec --json -- "Write DIAG006_OK"
+# expect NDJSON session_meta.id on the herdr CLI stdout
+# a later `herdr agent get` may be agent_not_found; that is not session loss
+herdr exec --pane "$PANE" --kind codex -- exec resume "$SESSION_ID" --json -- "second turn"
+# never: CODEX_HOME emptied; never: resume --last; never: workspace close
 ```
+
+The service-account `CODEX_HOME` (9router/DeepSeek or other configured provider)
+must remain the process environment. Supervisor storage is separate.
 
 CI uses `tests/helpers/herdr-protocol/herdr.mjs` and
 `tests/helpers/codex-protocol/codex.mjs` — protocol doubles, not vendor binaries.
@@ -96,8 +99,7 @@ qualification under `local_install` / `vm_cloud` gates — not abandoned.
 
 `launch_codex_mission` is the single public call: validate
 `dubsar.codex-local-contract/1`, persist one `DUB-###` plus `codex_contract`,
-trace argv, then exactly one Herdr workspace plus supervised `codex exec --json`
-session.
+trace argv, then exactly one Herdr workspace plus `herdr exec --pane` occupant.
 Dedup: matching fingerprint reuses the ticket; a submitted launch without a valid
 receipt is not retryable.
 
@@ -115,9 +117,8 @@ Do not treat `npm test` as a VPS pilot.
 
 ## Findings
 
-- **BLOQUANT_LOT**: durable Codex identity from `exec --json` (not Herdr
-  `session_ref` / `agent get`); supervisor stop observation; fixtures matching
-  `agent_not_found` after short tasks — addressed in this correction.
+- **BLOQUANT_LOT**: hébergement réel dans le pane Herdr (`herdr exec --pane`);
+  conservation de `CODEX_HOME` du compte de service — this correction.
 - **Qualification restante (gates, pas abandon)**: binaires Herdr/Codex vendor,
   Hermes conteneur → MCP My Work → Codex, pilote VPS.
 - **NON_PERTINENT**: UI, multi-user, providers, CI workflow edits, OAuth repair.

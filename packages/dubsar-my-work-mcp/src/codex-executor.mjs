@@ -6,7 +6,7 @@ import {
   stopSupervisedCodex,
   superviseCodex,
 } from "./codex-supervisor.mjs";
-import { herdrIdFrom, herdrJson, workspaceIdsFrom } from "./herdr-cli.mjs";
+import { herdrIdFrom, herdrJson, parseStoredHerdrId, workspaceIdsFrom } from "./herdr-cli.mjs";
 
 export const CODEX_LAUNCH_ARGV = Object.freeze(["exec", "--json"]);
 export const CODEX_RESUME_ARGV = Object.freeze(["exec", "resume"]);
@@ -54,6 +54,7 @@ export function createHerdrCodexExecutor() {
         allocationRoot,
         ticketId,
         herdrId,
+        paneId: ids.paneId,
         argv,
         cwd: confined,
       });
@@ -64,7 +65,7 @@ export function createHerdrCodexExecutor() {
         codex_session_id: supervised.sessionId,
         status: "launched",
         herdr_live: "not_found",
-        argv: ["codex", ...argv],
+        argv: ["herdr", "exec", "--pane", ids.paneId, "--kind", "codex", "--", ...argv],
       };
     },
     async resume({ workspaceRoot, herdrId, sessionId, prompt, authorizedWorkspace, ticketId, allocationRoot }) {
@@ -76,12 +77,15 @@ export function createHerdrCodexExecutor() {
       if (!durable || durable.codex_session_id !== sessionId || durable.herdr_id !== herdrId) {
         throw new MyWorkMcpError("MY_WORK_CODEX_CONTINUE_AMBIGUOUS");
       }
+      const parsed = parseStoredHerdrId(herdrId);
+      if (!parsed) throw new MyWorkMcpError("MY_WORK_CODEX_CONTINUE_AMBIGUOUS");
       const argv = codexResumeArgv(sessionId, prompt);
       assertNoLastFlag(argv);
       const supervised = await superviseCodex({
         allocationRoot,
         ticketId,
         herdrId,
+        paneId: parsed.paneId,
         argv,
         cwd: confined,
       });
@@ -92,7 +96,7 @@ export function createHerdrCodexExecutor() {
         codex_session_id: sessionId,
         status: "resumed",
         herdr_live: "not_found",
-        argv: ["codex", ...argv],
+        argv: ["herdr", "exec", "--pane", parsed.paneId, "--kind", "codex", "--", ...argv],
       };
     },
     async stop({ sessionId, herdrId, workspaceRoot, ticketId, authorizedWorkspace, allocationRoot }) {

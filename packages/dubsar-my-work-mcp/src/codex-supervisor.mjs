@@ -4,6 +4,7 @@ import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { MyWorkMcpError } from "./canonical.mjs";
 import { extractSessionIdFromCodexJson } from "./codex-json.mjs";
+import { herdrBinary } from "./herdr-cli.mjs";
 
 const SUPERVISOR_FORMAT = "dubsar.codex-supervisor/1";
 const SUPERVISOR_NAME = "codex-supervisor.json";
@@ -14,21 +15,19 @@ export function supervisorPath(allocationRoot) {
   return path.join(allocationRoot, SUPERVISOR_NAME);
 }
 
-export function codexHomeDir(allocationRoot) {
-  return path.join(allocationRoot, "codex-native");
-}
-
-export function codexBinary() {
-  const configured = process.env.DUBSAR_CODEX_BIN;
-  if (typeof configured === "string" && configured.length > 0) return configured;
-  return "codex";
-}
-
 function spawnArgv(bin, args) {
   if (bin.endsWith(".mjs") || bin.endsWith(".js")) {
     return { command: process.execPath, argv: [bin, ...args] };
   }
   return { command: bin, argv: args };
+}
+
+function herdrChildEnv() {
+  const env = { ...process.env };
+  if (typeof process.env.DUBSAR_CODEX_HOME === "string" && process.env.DUBSAR_CODEX_HOME.length > 0) {
+    env.CODEX_HOME = process.env.DUBSAR_CODEX_HOME;
+  }
+  return env;
 }
 
 function emptyStore() {
@@ -101,11 +100,12 @@ export function processObservation(run) {
   return "unknown";
 }
 
-export async function superviseCodex({ allocationRoot, ticketId, herdrId, argv, cwd }) {
-  const bin = codexBinary();
-  const launched = spawnArgv(bin, argv);
-  const home = codexHomeDir(allocationRoot);
-  await mkdir(home, { recursive: true });
+export async function superviseCodex({ allocationRoot, ticketId, herdrId, argv, cwd, paneId }) {
+  if (typeof paneId !== "string" || paneId.length < 1) {
+    throw new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_AMBIGUOUS");
+  }
+  const herdrArgv = ["exec", "--pane", paneId, "--kind", "codex", "--", ...argv];
+  const launched = spawnArgv(herdrBinary(), herdrArgv);
   let stdout = "";
   let stderr = "";
   let sessionId = null;
@@ -113,8 +113,9 @@ export async function superviseCodex({ allocationRoot, ticketId, herdrId, argv, 
 
   const child = spawn(launched.command, launched.argv, {
     cwd,
-    env: { ...process.env, CODEX_HOME: home },
+    env: herdrChildEnv(),
     windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"],
   });
 
   const finish = async (status, exitCode) => {
@@ -131,39 +132,43 @@ export async function superviseCodex({ allocationRoot, ticketId, herdrId, argv, 
   };
 
   liveChildren.set(ticketId, { child, exit: undefined });
-
-  const collectStdout = (async () => {
-    if (!child.stdout) return;
-    for await (const chunk of child.stdout) {
-      stdout += typeof chunk === "string" ? chunk : chunk.toString("utf8");
-      if (!sessionId) sessionId = extractSessionIdFromCodexJson(stdout);
-    }
-    if (!sessionId) sessionId = extractSessionIdFromCodexJson(stdout);
-  })();
-
-  child.stderr?.on("data", (chunk) => {
-    stderr += chunk.toString("utf8");
-  });
   child.on("error", () => {
     spawnFailed = true;
     liveChildren.delete(ticketId);
+  });
+  child.on("exit", (code, signal) => {
+    const entry = liveChildren.get(ticketId);
+    if (entry) entry.exit = { code, signal };
   });
   child.on("close", (code, signal) => {
     const entry = liveChildren.get(ticketId);
     if (entry) entry.exit = { code, signal };
     const status = signal === "SIGTERM" || signal === "SIGINT" ? "interrupted" : "exited";
-    void finish(status, code);
+    if (sessionId) void finish(status, code);
+  });
+
+  child.stdout?.on("data", (chunk) => {
+    stdout += chunk.toString("utf8");
+    if (!sessionId) sessionId = extractSessionIdFromCodexJson(stdout);
+  });
+  child.stderr?.on("data", (chunk) => {
+    stderr += chunk.toString("utf8");
   });
 
   const startedAt = Date.now();
   while (!sessionId && Date.now() - startedAt < SESSION_WAIT_MS) {
-    if (spawnFailed) break;
-    await Promise.race([
-      collectStdout,
-      new Promise((resolve) => setTimeout(resolve, 20)),
-    ]);
+    await new Promise((resolve) => setTimeout(resolve, 20));
     if (!sessionId) sessionId = extractSessionIdFromCodexJson(stdout);
-    if (liveChildren.get(ticketId)?.exit) break;
+    const herdrGone =
+      spawnFailed ||
+      child.exitCode != null ||
+      child.signalCode != null ||
+      Boolean(liveChildren.get(ticketId)?.exit) ||
+      (Number.isInteger(child.pid) && !pidAlive(child.pid));
+    if (herdrGone) {
+      if (!sessionId) sessionId = extractSessionIdFromCodexJson(stdout);
+      break;
+    }
   }
 
   if (!sessionId) {
@@ -182,16 +187,25 @@ export async function superviseCodex({ allocationRoot, ticketId, herdrId, argv, 
     throw new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_AMBIGUOUS");
   }
 
+  const settleUntil = Date.now() + 250;
+  while (!liveChildren.get(ticketId)?.exit && Date.now() < settleUntil) {
+    if (!pidAlive(child.pid)) break;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  const finished =
+    Boolean(liveChildren.get(ticketId)?.exit) ||
+    child.exitCode != null ||
+    (Number.isInteger(child.pid) && !pidAlive(child.pid));
   await recordSupervisorRun(allocationRoot, {
     ticket_id: ticketId,
     codex_session_id: sessionId,
     herdr_id: herdrId,
     pid: child.pid ?? null,
-    status: liveChildren.get(ticketId)?.exit ? "exited" : "running",
-    exit_code: liveChildren.get(ticketId)?.exit?.code ?? null,
+    status: finished ? "exited" : "running",
+    exit_code: liveChildren.get(ticketId)?.exit?.code ?? child.exitCode ?? null,
     herdr_live: "not_found",
   });
-  return { sessionId, pid: child.pid ?? null, status: liveChildren.get(ticketId)?.exit ? "exited" : "running" };
+  return { sessionId, pid: child.pid ?? null, status: finished ? "exited" : "running" };
 }
 
 export async function stopSupervisedCodex({ allocationRoot, ticketId, sessionId }) {
