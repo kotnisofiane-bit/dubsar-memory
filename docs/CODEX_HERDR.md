@@ -8,46 +8,48 @@ receipts.
 
 ## Protocol actually used (verified Herdr CLI)
 
-Host-side My Work (never Hermes) drives Herdr with the published CLI:
+## Protocol (Herdr host, Codex `--json` identity)
 
-Non-interactive **`codex exec` inside Herdr** needs the prompt **as an argument
-at `agent start`**. A later `herdr agent prompt` is too late: Codex exits with
-`No prompt provided. Either specify one as an argument or pipe the prompt into
-stdin.`, Herdr reports startup timeout, then `agent get` is `agent_not_found`.
-Do not “fix” that by lengthening `--timeout`. Do not auto-approve dialogues.
-Do not `workspace close` or recreate a missing session.
+Herdr hosts the workspace/pane. It is **not** a durable session registry. Isolated
+vendor observation: `herdr agent start … -- exec -- PROMPT` can succeed and
+return `agent_started` (`result.agent`, argv, type) **without** `session_ref`.
+After a short task, `agent get` is `agent_not_found` because the occupant name is
+cleared on exit. Native Codex history still has `session_meta.id`. Do not treat
+`agent_not_found` as a lost Codex session. Do not auto-approve dialogues, use
+`--last`, recreate a missing session, or `workspace close`.
+
+My Work therefore:
 
 1. `herdr workspace create --cwd <authorized_realpath> --label <ticket> --no-focus`  
-   JSON: `.result.workspace.workspace_id`, `.result.root_pane.pane_id`, cwd.  
-   The adapter refuses a cwd that is not the authorized realpath (confinement is
-   not `process.cwd` of the MCP alone).
-2. `herdr agent start <name> --kind codex --pane <pane_id> -- exec -- <prompt>`  
-   Prompt is part of the Codex argv. Omitting it fails closed (no agent).
-3. `herdr agent get <name>` captures the **native** Codex session reference.  
-   `herdr_id` is `workspace_id/pane_id` from Herdr JSON, never a fabricated
-   `herdr-local` / `herdr-DUB-*` constant.
-4. Continuation (same session):  
-   `herdr agent start <name> --kind codex --pane <same pane> -- exec resume <SESSION_ID> -- <prompt>`  
-   A missing session is not recreated. Workspaces are never closed.
-5. Stop: `herdr agent send-keys <name> ctrl+c` for **that** agent only.  
-   Interrupted is recorded only with **positive proof**: `interrupted: true`
-   and `process_exited: true` for the same session id. `running !== true` or a
-   missing `running` field is not enough. A logging error still is not mission
-   success.
+   `herdr_id` = `workspace_id/pane_id` from that JSON. Confinement is realpath, not
+   MCP `cwd` alone.
+2. Supervises **`codex exec --json -- <prompt>`** in that workspace (non-interactive).  
+   Session identity is collected from structured events (`session_meta.id`) as
+   soon as they are emitted. Prompt as argv; omitting it fails like vendor Codex.
+3. Persists that identity in the existing My Work ticket **and** in a supervisor
+   record under `allocation_root` (outside the Codex-writable workspace). No second
+   ticket registry.
+4. Continuation: **`codex exec resume <EXACT_ID> --json -- <prompt>`**  
+   Same ticket and same id. Never `--last`.
+5. Stop observes the **supervised process** (already finished / interrupted /
+   unknown). Stop is never mission success. Unknown observation is ambiguous and
+   does not relaunch.
 
-Isolated protocol double (not vendor Herdr):
+### Qualification commands for Work (vendor binaries, isolated temp repo)
+
+These are the candidate commands; running them on a real machine is a
+`local_install` human gate. CI doubles do not replace them.
 
 ```bash
-export DUBSAR_HERDR_BIN="$PWD/tests/helpers/herdr-protocol/herdr.mjs"
-# after workspace create, bare exec must fail (no agent):
-node "$DUBSAR_HERDR_BIN" agent start d001 --kind codex --pane <pane> -- exec
-# launch with prompt at start:
-node "$DUBSAR_HERDR_BIN" agent start d001 --kind codex --pane <pane> -- exec -- "mission text"
-# continue same id:
-node "$DUBSAR_HERDR_BIN" agent start d001 --kind codex --pane <pane> -- exec resume <SESSION_ID> -- "follow-up"
+herdr workspace create --cwd "$TMP" --label DUB-001 --no-focus
+codex exec --json -- "Write DIAG006_OK"
+# expect NDJSON session_meta.id; a later `herdr agent get` may be agent_not_found
+codex exec resume "$SESSION_ID" --json -- "second turn"
+# never: codex exec resume --last
 ```
 
-Vendor binary validation remains a `local_install` gate.
+CI uses `tests/helpers/herdr-protocol/herdr.mjs` and
+`tests/helpers/codex-protocol/codex.mjs` — protocol doubles, not vendor binaries.
 
 ## Private Hermes transport (container → My Work on the host)
 
@@ -85,15 +87,17 @@ Prerequisites: Node.js 20+, Herdr on `PATH` (or `DUBSAR_HERDR_BIN`), Codex
 integration (`herdr integration install codex`) for native session ids, a git
 clone of `dubsar-memory`.
 
-CI uses `tests/helpers/herdr-protocol/herdr.mjs` via `DUBSAR_HERDR_BIN` — a
-protocol double, not the vendor binary. Green CI is **code qualification**, not a
-VPS/Hermes pilot.
+CI uses protocol doubles via `DUBSAR_HERDR_BIN` and `DUBSAR_CODEX_BIN`. Green
+CI is **simulated code qualification**, not a vendor-binary or VPS/Hermes
+pilot. The Hermes → My Work → Codex/Herdr path remains a **mandatory**
+qualification under `local_install` / `vm_cloud` gates — not abandoned.
 
 ## Public launch path
 
 `launch_codex_mission` is the single public call: validate
 `dubsar.codex-local-contract/1`, persist one `DUB-###` plus `codex_contract`,
-trace argv, then exactly one Herdr workspace + `codex exec` session.
+trace argv, then exactly one Herdr workspace plus supervised `codex exec --json`
+session.
 Dedup: matching fingerprint reuses the ticket; a submitted launch without a valid
 receipt is not retryable.
 
@@ -111,8 +115,9 @@ Do not treat `npm test` as a VPS pilot.
 
 ## Findings
 
-- **BLOQUANT_LOT**: prompt as `codex exec` argument at `agent start` (not a later
-  `agent prompt`); stop requires positive `process_exited` for the targeted
-  session — addressed in this correction.
-- **REPORTE_POST_LOT**: vendor install, live Hermes image, VPS.
+- **BLOQUANT_LOT**: durable Codex identity from `exec --json` (not Herdr
+  `session_ref` / `agent get`); supervisor stop observation; fixtures matching
+  `agent_not_found` after short tasks — addressed in this correction.
+- **Qualification restante (gates, pas abandon)**: binaires Herdr/Codex vendor,
+  Hermes conteneur → MCP My Work → Codex, pilote VPS.
 - **NON_PERTINENT**: UI, multi-user, providers, CI workflow edits, OAuth repair.

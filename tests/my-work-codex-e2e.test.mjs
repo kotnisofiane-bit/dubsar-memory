@@ -6,9 +6,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { encodeFrame, createFrameParser } from "../packages/dubsar-my-work-mcp/src/server.mjs";
+import { readSupervisorRun } from "../packages/dubsar-my-work-mcp/src/codex-supervisor.mjs";
 
 const bin = fileURLToPath(new URL("../packages/dubsar-my-work-mcp/bin/dubsar-my-work-mcp.mjs", import.meta.url));
 const herdrBin = fileURLToPath(new URL("./helpers/herdr-protocol/herdr.mjs", import.meta.url));
+const codexBin = fileURLToPath(new URL("./helpers/codex-protocol/codex.mjs", import.meta.url));
 
 function rpc(child) {
   let nextId = 1;
@@ -41,6 +43,7 @@ function startServer(workspace, extraEnv = {}) {
     env: {
       ...process.env,
       DUBSAR_HERDR_BIN: herdrBin,
+      DUBSAR_CODEX_BIN: codexBin,
       ...extraEnv,
     },
   });
@@ -105,18 +108,23 @@ test("E2E Herdr protocol: launch file, restart, continue file, observed stop", a
       arguments: { ...context, ticket_id: "DUB-001", prompt: "Contenu de continuation E2E" },
     });
     assert.equal(continued.result.structuredContent.codex_session_id, sessionId);
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      const run = await readSupervisorRun(allocationRoot, "DUB-001");
+      if (run?.status === "exited") break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
     const stopped = await afterRestart.call("tools/call", {
       name: "stop_codex_mission",
       arguments: { ...context, ticket_id: "DUB-001" },
     });
     assert.equal(stopped.result.structuredContent.mission_success, false);
-    assert.equal(stopped.result.structuredContent.interrupted, true);
+    assert.equal(stopped.result.structuredContent.already_finished, true);
+    assert.equal(stopped.result.structuredContent.interrupted, false);
   } finally {
     await stopServer(afterRestart.child);
   }
 
   assert.equal(await readFile(path.join(start, "codex-continue.txt"), "utf8"), "Contenu de continuation E2E\n");
-  assert.equal(await readFile(path.join(start, "codex-interrupted.flag"), "utf8"), "interrupted\n");
 
   const hermes = startServer(start, { PROFILE: "hermes" });
   try {

@@ -39,6 +39,7 @@ import {
   localCodexReceiptShape,
 } from "./codex-contract.mjs";
 import { resolveCodexExecutor } from "./codex-executor.mjs";
+import { readSupervisorRun } from "./codex-supervisor.mjs";
 import { confineAuthorizedWorkspace } from "./codex-workspace.mjs";
 
 export const TOOL_NAMES = Object.freeze([
@@ -489,6 +490,7 @@ export async function executeTool(name, args = {}) {
       if (!ticket) throw new MyWorkMcpError("MY_WORK_TICKET_NOT_FOUND");
       const prepared = preparedContractFrom(ticket);
       const current = currentCursorReceipt(ticket);
+      const durable = await readSupervisorRun(env.allocationRoot, ticket.id);
       return {
         format: "dubsar.my-work-ticket/1",
         ticket: publicTicket(ticket),
@@ -498,8 +500,9 @@ export async function executeTool(name, args = {}) {
         attached_run_receipts: cursorRunHistory(ticket),
         prepared_codex_contract: preparedCodexContractFrom(ticket),
         attached_codex_receipt: ticket.codex_run ?? ticket.codex_launch ?? null,
-        herdr_id: ticket.codex_launch?.herdr_id ?? null,
-        codex_session_id: ticket.codex_launch?.codex_session_id ?? null,
+        herdr_id: durable?.herdr_id ?? ticket.codex_launch?.herdr_id ?? null,
+        herdr_live: durable?.herdr_live ?? null,
+        codex_session_id: durable?.codex_session_id ?? ticket.codex_launch?.codex_session_id ?? null,
         workspace_root: ticket.codex_launch?.workspace_root ?? preparedCodexContractFrom(ticket)?.arguments?.workspace_root ?? null,
       };
     }
@@ -915,7 +918,7 @@ export async function executeTool(name, args = {}) {
         throw new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_NOT_RETRYABLE");
       }
       const executor = resolveCodexExecutor();
-      const argv = ["herdr", "workspace", "create", "--cwd", workspaceRoot, "--no-focus"];
+      const argv = ["codex", "exec", "--json"];
       await mutate(env, {
         type: "activity",
         id: ticket.id,
@@ -936,6 +939,7 @@ export async function executeTool(name, args = {}) {
           ticketId: ticket.id,
           workspaceRoot,
           authorizedWorkspace: workspaceRoot,
+          allocationRoot: env.allocationRoot,
           missionId: ticket.id,
           prompt: envelope.arguments.mission,
         });
@@ -1012,7 +1016,7 @@ export async function executeTool(name, args = {}) {
         id: ticket.id,
         kind: "codex_trace",
         summary: "trace before Codex/Herdr resume",
-        evidence: { argv: ["herdr", "agent", "start", "--kind", "codex", "exec", "resume", sessionId], ticket_id: ticket.id },
+        evidence: { argv: ["codex", "exec", "resume", sessionId, "--json"], ticket_id: ticket.id },
       });
       await mutate(env, {
         type: "activity",
@@ -1027,6 +1031,7 @@ export async function executeTool(name, args = {}) {
           ticketId: ticket.id,
           workspaceRoot: confined,
           authorizedWorkspace: confined,
+          allocationRoot: env.allocationRoot,
           herdrId,
           sessionId,
           prompt: args.prompt,
@@ -1092,9 +1097,25 @@ export async function executeTool(name, args = {}) {
           herdrId: ticket.codex_launch.herdr_id,
           workspaceRoot: ticket.codex_launch.workspace_root,
           authorizedWorkspace: env.start,
+          allocationRoot: env.allocationRoot,
           ticketId: ticket.id,
         });
-        if (!result || result.ambiguous === true || result.status !== "interrupted") {
+        if (!result || result.ambiguous === true) {
+          throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
+        }
+        if (result.status === "already_finished") {
+          return {
+            format: "dubsar.my-work-codex-stop/1",
+            ticket_id: ticket.id,
+            state: ticket.state,
+            herdr_id: ticket.codex_launch.herdr_id,
+            codex_session_id: ticket.codex_launch.codex_session_id,
+            interrupted: false,
+            already_finished: true,
+            mission_success: false,
+          };
+        }
+        if (result.status !== "interrupted") {
           throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
         }
       } catch (error) {

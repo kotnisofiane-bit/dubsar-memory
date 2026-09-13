@@ -1026,7 +1026,8 @@ test("OAuth and Controller network stay in dedicated modules; credentials are no
         if (node.source.value === "node:child_process") {
           assert.ok(
             file === path.join(mcpRoot, "src", "oauth-flow.mjs") ||
-              file === path.join(mcpRoot, "src", "herdr-cli.mjs"),
+              file === path.join(mcpRoot, "src", "herdr-cli.mjs") ||
+              file === path.join(mcpRoot, "src", "codex-supervisor.mjs"),
             file,
           );
           continue;

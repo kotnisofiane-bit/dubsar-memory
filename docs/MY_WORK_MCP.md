@@ -122,9 +122,9 @@ switch, and scope extension stay human gates.
 `launch_codex_mission` is a second **public** path on the same MCP and the same
 `dubsar.tickets/1` store. One call validates `dubsar.codex-local-contract/1`,
 persists the ticket and intention, traces argv, then starts exactly one
-Codex session through **Herdr** (`workspace create`,
-`agent start --kind codex -- exec -- <prompt>`, `agent get` for the native
-session id). Receipts are
+Codex session through **Herdr workspace + supervised `codex exec --json`**.
+Session ids come from Codex events, not from `herdr agent get` (which is
+`agent_not_found` after a short occupant exit). Receipts are
 `dubsar.codex-local-*-receipt/1`. They are not Cursor receipts.
 
 Hermes should start the server with `--profile hermes` and, from a container,

@@ -116,12 +116,11 @@ export async function herdrJson(args, options = {}) {
     if (result.ambiguous) throw new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_AMBIGUOUS");
     const payload = parseHerdrJson(result.stderr) ?? parseHerdrJson(result.stdout);
     const code = payload?.error?.code ?? payload?.code;
-    if (
-      code === "session_missing" ||
-      code === "agent_not_found" ||
-      code === "MY_WORK_CODEX_SESSION_MISSING"
-    ) {
+    if (code === "session_missing" || code === "MY_WORK_CODEX_SESSION_MISSING") {
       throw new MyWorkMcpError("MY_WORK_CODEX_SESSION_MISSING");
+    }
+    if (code === "agent_not_found") {
+      return { ...result, payload, herdr_live: "not_found" };
     }
     if (code === "agent_blocked") throw new MyWorkMcpError("MY_WORK_DIALOGUE_AUTO_APPROVE_FORBIDDEN");
     return { ...result, payload: payload ?? null };

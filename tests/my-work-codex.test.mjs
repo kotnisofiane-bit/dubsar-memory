@@ -1,23 +1,38 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, unlink, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import net from "node:net";
 import { executeTool, HERMES_TOOL_NAMES, TOOL_NAMES } from "../packages/dubsar-my-work-mcp/src/tools.mjs";
-import { createFrameParser, encodeFrame, handleMessage, setMcpProfile } from "../packages/dubsar-my-work-mcp/src/server.mjs";
+import { createFrameParser, encodeFrame, setMcpProfile } from "../packages/dubsar-my-work-mcp/src/server.mjs";
 import { createHerdrCodexExecutor, resetTestCodexExecutor } from "../packages/dubsar-my-work-mcp/src/codex-executor.mjs";
 import { listenHermesMcpSocket } from "../packages/dubsar-my-work-mcp/src/hermes-transport.mjs";
+import { readSupervisorRun } from "../packages/dubsar-my-work-mcp/src/codex-supervisor.mjs";
 import { readTickets } from "../packages/dubsar-workbench-launcher/src/registry-store.mjs";
 
 const herdrBin = fileURLToPath(new URL("./helpers/herdr-protocol/herdr.mjs", import.meta.url));
+const codexBin = fileURLToPath(new URL("./helpers/codex-protocol/codex.mjs", import.meta.url));
 const previousHerdr = process.env.DUBSAR_HERDR_BIN;
+const previousCodex = process.env.DUBSAR_CODEX_BIN;
+const previousHold = process.env.CODEX_PROTOCOL_HOLD;
 
-function useProtocolHerdr() {
+function useProtocolBins() {
   process.env.DUBSAR_HERDR_BIN = herdrBin;
+  process.env.DUBSAR_CODEX_BIN = codexBin;
+  delete process.env.CODEX_PROTOCOL_HOLD;
   resetTestCodexExecutor();
+}
+
+function restoreBins() {
+  if (previousHerdr == null) delete process.env.DUBSAR_HERDR_BIN;
+  else process.env.DUBSAR_HERDR_BIN = previousHerdr;
+  if (previousCodex == null) delete process.env.DUBSAR_CODEX_BIN;
+  else process.env.DUBSAR_CODEX_BIN = previousCodex;
+  if (previousHold == null) delete process.env.CODEX_PROTOCOL_HOLD;
+  else process.env.CODEX_PROTOCOL_HOLD = previousHold;
 }
 
 async function env() {
@@ -27,9 +42,12 @@ async function env() {
   return { start, allocation_root: allocationRoot, project_id: "project-codex" };
 }
 
-function runProtocol(cwd, args) {
+function runCli(cwd, bin, args, extraEnv = {}) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [herdrBin, ...args], { cwd, env: process.env });
+    const child = spawn(process.execPath, [bin, ...args], {
+      cwd,
+      env: { ...process.env, ...extraEnv },
+    });
     const stdout = [];
     const stderr = [];
     child.stdout.on("data", (chunk) => stdout.push(chunk));
@@ -44,6 +62,15 @@ function runProtocol(cwd, args) {
   });
 }
 
+async function waitSupervisorStatus(allocationRoot, ticketId, status) {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const run = await readSupervisorRun(allocationRoot, ticketId);
+    if (run?.status === status) return run;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`supervisor-status-timeout:${status}`);
+}
+
 function mission(extra = {}) {
   return {
     title: "Lot Codex local",
@@ -55,49 +82,37 @@ function mission(extra = {}) {
   };
 }
 
-test("production Herdr path persists one ticket, captured ids, and independent launch file", async (t) => {
-  t.after(() => {
-    if (previousHerdr == null) delete process.env.DUBSAR_HERDR_BIN;
-    else process.env.DUBSAR_HERDR_BIN = previousHerdr;
-  });
-  useProtocolHerdr();
+test("short finished task persists durable session after Herdr agent_not_found", async (t) => {
+  t.after(restoreBins);
+  useProtocolBins();
   const context = await env();
   const launched = await executeTool("launch_codex_mission", { ...context, ...mission() });
   assert.equal(launched.launched, true);
   assert.equal(launched.mission_success, false);
   assert.match(launched.herdr_id, /^ws_[0-9a-f]+\/pane_[0-9a-f]+$/u);
   assert.match(launched.codex_session_id, /^codex_[0-9a-f]+$/u);
-  assert.equal(launched.herdr_id.startsWith("herdr-"), false);
-  const fromDisk = await readFile(path.join(context.start, "codex-launch.txt"), "utf8");
-  assert.equal(fromDisk, "Ecrire le fichier de lancement\n");
+  assert.equal(await readFile(path.join(context.start, "codex-launch.txt"), "utf8"), "Ecrire le fichier de lancement\n");
+  await waitSupervisorStatus(context.allocation_root, "DUB-001", "exited");
+  const herdrGet = await runCli(context.start, herdrBin, ["agent", "get", "d001"]);
+  assert.notEqual(herdrGet.code, 0);
+  assert.match(herdrGet.stderr, /agent_not_found/u);
+  const loaded = await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" });
+  assert.equal(loaded.codex_session_id, launched.codex_session_id);
+  assert.equal(loaded.herdr_id, launched.herdr_id);
+  assert.equal(loaded.herdr_live, "not_found");
+  const durable = await readSupervisorRun(context.allocation_root, "DUB-001");
+  assert.equal(durable.codex_session_id, launched.codex_session_id);
   const store = await readTickets({ start: context.start });
   assert.equal(store.tickets.length, 1);
   assert.equal(store.tickets[0].cursor_launch, null);
 });
 
-test("consultation finds contract, Herdr id and Codex id after reread", async (t) => {
-  t.after(() => {
-    if (previousHerdr == null) delete process.env.DUBSAR_HERDR_BIN;
-    else process.env.DUBSAR_HERDR_BIN = previousHerdr;
-  });
-  useProtocolHerdr();
-  const context = await env();
-  await executeTool("launch_codex_mission", { ...context, ...mission() });
-  const loaded = await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" });
-  assert.equal(loaded.prepared_codex_contract.format, "dubsar.codex-local-contract/1");
-  assert.match(loaded.herdr_id, /^ws_/u);
-  assert.match(loaded.codex_session_id, /^codex_/u);
-  assert.ok(loaded.ticket.activity.some((row) => row.kind === "codex_trace"));
-});
-
-test("continuation reuses the Codex id and writes a second independent file", async (t) => {
-  t.after(() => {
-    if (previousHerdr == null) delete process.env.DUBSAR_HERDR_BIN;
-    else process.env.DUBSAR_HERDR_BIN = previousHerdr;
-  });
-  useProtocolHerdr();
+test("consultation and continue reuse the same Codex id after MCP-side durable record", async (t) => {
+  t.after(restoreBins);
+  useProtocolBins();
   const context = await env();
   const launched = await executeTool("launch_codex_mission", { ...context, ...mission() });
+  await waitSupervisorStatus(context.allocation_root, "DUB-001", "exited");
   const continued = await executeTool("continue_codex_mission", {
     ...context,
     ticket_id: "DUB-001",
@@ -109,127 +124,118 @@ test("continuation reuses the Codex id and writes a second independent file", as
   assert.equal(await readFile(path.join(context.start, "codex-continue.txt"), "utf8"), "Ecrire le fichier de continuation\n");
 });
 
-test("stop interrupts the live protocol process and is not mission success", async (t) => {
-  t.after(() => {
-    if (previousHerdr == null) delete process.env.DUBSAR_HERDR_BIN;
-    else process.env.DUBSAR_HERDR_BIN = previousHerdr;
-  });
-  useProtocolHerdr();
+test("stop of an already finished short task is not interruption or success", async (t) => {
+  t.after(restoreBins);
+  useProtocolBins();
+  const context = await env();
+  await executeTool("launch_codex_mission", { ...context, ...mission() });
+  await waitSupervisorStatus(context.allocation_root, "DUB-001", "exited");
+  const stopped = await executeTool("stop_codex_mission", { ...context, ticket_id: "DUB-001" });
+  assert.equal(stopped.already_finished, true);
+  assert.equal(stopped.interrupted, false);
+  assert.equal(stopped.mission_success, false);
+  assert.equal(await readFile(path.join(context.start, "codex-launch.txt"), "utf8"), "Ecrire le fichier de lancement\n");
+});
+
+test("stop of a live long task is observed by the supervisor", async (t) => {
+  t.after(restoreBins);
+  useProtocolBins();
+  process.env.CODEX_PROTOCOL_HOLD = "1";
   const context = await env();
   await executeTool("launch_codex_mission", { ...context, ...mission() });
   const stopped = await executeTool("stop_codex_mission", { ...context, ticket_id: "DUB-001" });
   assert.equal(stopped.interrupted, true);
   assert.equal(stopped.mission_success, false);
   assert.equal(await readFile(path.join(context.start, "codex-interrupted.flag"), "utf8"), "interrupted\n");
-  const launchFile = await readFile(path.join(context.start, "codex-launch.txt"), "utf8");
-  assert.equal(launchFile, "Ecrire le fichier de lancement\n");
 });
 
-test("stop is ambiguous when execution stays running or observation is absent", async (t) => {
-  t.after(() => {
-    delete process.env.HERDR_PROTOCOL_STOP;
-    if (previousHerdr == null) delete process.env.DUBSAR_HERDR_BIN;
-    else process.env.DUBSAR_HERDR_BIN = previousHerdr;
-  });
-  useProtocolHerdr();
-  const stillRunning = await env();
-  await executeTool("launch_codex_mission", { ...stillRunning, ...mission() });
-  process.env.HERDR_PROTOCOL_STOP = "still_running";
-  await assert.rejects(executeTool("stop_codex_mission", { ...stillRunning, ticket_id: "DUB-001" }), {
-    code: "MY_WORK_CODEX_STOP_AMBIGUOUS",
-  });
-  delete process.env.HERDR_PROTOCOL_STOP;
-  const cleaned = await executeTool("stop_codex_mission", { ...stillRunning, ticket_id: "DUB-001" });
-  assert.equal(cleaned.interrupted, true);
-
-  const absent = await env();
-  await executeTool("launch_codex_mission", { ...absent, ...mission() });
-  process.env.HERDR_PROTOCOL_STOP = "no_observation";
-  await assert.rejects(executeTool("stop_codex_mission", { ...absent, ticket_id: "DUB-001" }), {
-    code: "MY_WORK_CODEX_STOP_AMBIGUOUS",
-  });
-  delete process.env.HERDR_PROTOCOL_STOP;
-  const observed = await executeTool("stop_codex_mission", { ...absent, ticket_id: "DUB-001" });
-  assert.equal(observed.interrupted, true);
-  assert.equal(observed.mission_success, false);
-});
-
-test("omitted prompt, missing Herdr, fabricated ids, and out-of-scope cwd fail closed", async (t) => {
-  t.after(() => {
-    if (previousHerdr == null) delete process.env.DUBSAR_HERDR_BIN;
-    else process.env.DUBSAR_HERDR_BIN = previousHerdr;
-  });
+test("missing observation is ambiguous and does not launch again", async (t) => {
+  t.after(restoreBins);
+  useProtocolBins();
   const context = await env();
-  useProtocolHerdr();
-  const executor = createHerdrCodexExecutor();
-  await assert.rejects(executor.exec({ ticketId: "DUB-001", workspaceRoot: context.start, authorizedWorkspace: context.start }), {
-    code: "MY_WORK_MISSION_INCOMPLETE",
+  await executeTool("launch_codex_mission", { ...context, ...mission() });
+  await waitSupervisorStatus(context.allocation_root, "DUB-001", "exited");
+  await unlink(path.join(context.allocation_root, "codex-supervisor.json"));
+  await assert.rejects(executeTool("stop_codex_mission", { ...context, ticket_id: "DUB-001" }), {
+    code: "MY_WORK_CODEX_STOP_AMBIGUOUS",
   });
+  const store = await readTickets({ start: context.start });
+  assert.equal(store.tickets.length, 1);
+});
+
+test("omitted prompt, missing binaries, --last, and out-of-scope cwd fail closed", async (t) => {
+  t.after(restoreBins);
+  useProtocolBins();
+  const context = await env();
+  const executor = createHerdrCodexExecutor();
+  await assert.rejects(
+    executor.exec({
+      ticketId: "DUB-001",
+      workspaceRoot: context.start,
+      authorizedWorkspace: context.start,
+      allocationRoot: context.allocation_root,
+    }),
+    { code: "MY_WORK_MISSION_INCOMPLETE" },
+  );
+  const bare = await runCli(context.start, codexBin, ["exec", "--json"], {
+    CODEX_HOME: path.join(context.allocation_root, "codex-native"),
+  });
+  assert.notEqual(bare.code, 0);
+  assert.match(bare.stderr, /No prompt provided/u);
+  const last = await runCli(context.start, codexBin, ["exec", "resume", "--last", "--json", "--", "x"], {
+    CODEX_HOME: path.join(context.allocation_root, "codex-native"),
+  });
+  assert.notEqual(last.code, 0);
   process.env.DUBSAR_HERDR_BIN = path.join(context.start, "missing-herdr");
   await assert.rejects(
     createHerdrCodexExecutor().exec({
       ticketId: "DUB-001",
       workspaceRoot: context.start,
       authorizedWorkspace: context.start,
+      allocationRoot: context.allocation_root,
       prompt: "x",
     }),
     { code: "MY_WORK_HERDR_UNAVAILABLE" },
   );
-  const protocolBare = await env();
-  const created = await runProtocol(protocolBare.start, [
-    "workspace",
-    "create",
-    "--cwd",
-    protocolBare.start,
-    "--label",
-    "DUB-001",
-    "--no-focus",
-  ]);
-  assert.equal(created.code, 0);
-  const paneId = JSON.parse(created.stdout).result.root_pane.pane_id;
-  const bare = await runProtocol(protocolBare.start, [
-    "agent",
-    "start",
-    "d001",
-    "--kind",
-    "codex",
-    "--pane",
-    paneId,
-    "--",
-    "exec",
-  ]);
-  assert.notEqual(bare.code, 0);
-  assert.match(bare.stderr, /No prompt provided/u);
-  const missing = await runProtocol(protocolBare.start, ["agent", "get", "d001"]);
-  assert.notEqual(missing.code, 0);
-  assert.match(missing.stderr, /agent_not_found/u);
-  const latePrompt = await runProtocol(protocolBare.start, ["agent", "prompt", "d001", "--", "too late"]);
-  assert.notEqual(latePrompt.code, 0);
-  assert.match(latePrompt.stderr, /too_late/u);
+  useProtocolBins();
+  process.env.DUBSAR_CODEX_BIN = path.join(context.start, "missing-codex");
+  await assert.rejects(
+    createHerdrCodexExecutor().exec({
+      ticketId: "DUB-001",
+      workspaceRoot: context.start,
+      authorizedWorkspace: context.start,
+      allocationRoot: context.allocation_root,
+      prompt: "x",
+    }),
+    { code: "MY_WORK_CODEX_UNAVAILABLE" },
+  );
+  useProtocolBins();
   const outside = await mkdtemp(path.join(tmpdir(), "dubsar-outside-"));
   await assert.rejects(
     createHerdrCodexExecutor().exec({
       ticketId: "DUB-001",
       workspaceRoot: outside,
       authorizedWorkspace: context.start,
+      allocationRoot: context.allocation_root,
       prompt: "x",
     }),
     { code: "MY_WORK_SCOPE_EXTENSION" },
   );
 });
 
-test("PROOF.md does not mark success; Hermes socket refuses docker/herdr sockets", async (t) => {
-  t.after(() => {
-    if (previousHerdr == null) delete process.env.DUBSAR_HERDR_BIN;
-    else process.env.DUBSAR_HERDR_BIN = previousHerdr;
-    setMcpProfile("default");
-  });
-  useProtocolHerdr();
+test("PROOF.md and workspace claims do not override service-side session identity", async (t) => {
+  t.after(restoreBins);
+  useProtocolBins();
   const context = await env();
   await writeFile(path.join(context.start, "PROOF.md"), "success");
   const launched = await executeTool("launch_codex_mission", { ...context, ...mission() });
+  await writeFile(path.join(context.start, "forged-session.txt"), "codex-sess-DUB-001\n");
+  const loaded = await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" });
+  assert.equal(loaded.codex_session_id, launched.codex_session_id);
+  assert.equal(loaded.codex_session_id.startsWith("codex-sess-DUB-"), false);
   assert.equal(launched.mission_success, false);
   setMcpProfile("hermes");
+  t.after(() => setMcpProfile("default"));
   await assert.rejects(listenHermesMcpSocket("/tmp/docker.sock"), { code: "MY_WORK_HERMES_SOCKET_FORBIDDEN" });
   await assert.rejects(listenHermesMcpSocket("/tmp/herdr.sock"), { code: "MY_WORK_HERMES_SOCKET_FORBIDDEN" });
   const socketPath = path.join(context.start, "hermes.mcp.sock");
