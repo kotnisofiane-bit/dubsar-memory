@@ -10,6 +10,7 @@ const SUPERVISOR_FORMAT = "dubsar.codex-supervisor/1";
 const SUPERVISOR_NAME = "codex-supervisor.json";
 const SESSION_WAIT_MS = 15_000;
 const liveChildren = new Map();
+const storeLocks = new Map();
 
 export function supervisorPath(allocationRoot) {
   return path.join(allocationRoot, SUPERVISOR_NAME);
@@ -52,29 +53,53 @@ export async function readSupervisorRun(allocationRoot, ticketId) {
   return run && typeof run === "object" ? run : null;
 }
 
+async function withStoreLock(allocationRoot, fn) {
+  const previous = storeLocks.get(allocationRoot) ?? Promise.resolve();
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  storeLocks.set(allocationRoot, previous.then(() => gate, () => gate));
+  await previous.catch(() => {});
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+}
+
 async function writeSupervisorStore(allocationRoot, store) {
   await mkdir(allocationRoot, { recursive: true });
   const target = supervisorPath(allocationRoot);
   const temporary = `${target}.${randomBytes(8).toString("hex")}.tmp`;
   await writeFile(temporary, `${JSON.stringify(store)}\n`);
-  await rename(temporary, target).catch(async (error) => {
+  try {
+    await rename(temporary, target);
+  } catch (error) {
+    if (error && (error.code === "EPERM" || error.code === "EEXIST")) {
+      await unlink(target).catch(() => {});
+      await rename(temporary, target);
+      return;
+    }
     await unlink(temporary).catch(() => {});
     throw error;
-  });
+  }
 }
 
 export async function recordSupervisorRun(allocationRoot, run) {
-  const store = await readSupervisorStore(allocationRoot);
-  store.runs[run.ticket_id] = {
-    ticket_id: run.ticket_id,
-    codex_session_id: run.codex_session_id,
-    herdr_id: run.herdr_id,
-    pid: run.pid ?? null,
-    status: run.status,
-    exit_code: run.exit_code ?? null,
-    herdr_live: run.herdr_live ?? "unknown",
-  };
-  await writeSupervisorStore(allocationRoot, store);
+  await withStoreLock(allocationRoot, async () => {
+    const store = await readSupervisorStore(allocationRoot);
+    store.runs[run.ticket_id] = {
+      ticket_id: run.ticket_id,
+      codex_session_id: run.codex_session_id,
+      herdr_id: run.herdr_id,
+      pid: run.pid ?? null,
+      status: run.status,
+      exit_code: run.exit_code ?? null,
+      herdr_live: run.herdr_live ?? "unknown",
+    };
+    await writeSupervisorStore(allocationRoot, store);
+  });
 }
 
 function pidAlive(pid) {
@@ -82,8 +107,8 @@ function pidAlive(pid) {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    return error && error.code === "EPERM";
   }
 }
 
