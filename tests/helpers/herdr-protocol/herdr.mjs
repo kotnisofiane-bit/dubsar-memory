@@ -5,7 +5,7 @@
  * This double does not invent session_ref, running, interrupted, or process_exited.
  */
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const cwd = process.cwd();
@@ -30,7 +30,7 @@ function json(result) {
 
 function fail(code, message) {
   process.stderr.write(`${JSON.stringify({ error: { code, message } })}\n`);
-  process.exitCode = 1;
+  process.exit(1);
 }
 
 function takeFlag(argv, name) {
@@ -53,9 +53,18 @@ if (command === "workspace" && rest[0] === "create") {
   const noFocus = args.includes("--no-focus");
   if (!cwdFlag.value || !noFocus) {
     fail("usage", "workspace create requires --cwd and --no-focus");
-  } else if (cwdFlag.value !== cwd) {
-    fail("cwd_mismatch", "workspace cwd must match process cwd");
   } else {
+    let cwdReal;
+    let flagReal;
+    try {
+      cwdReal = await realpath(cwd);
+      flagReal = await realpath(cwdFlag.value);
+    } catch {
+      fail("cwd_mismatch", "workspace cwd must exist");
+    }
+    if (cwdReal !== flagReal) {
+      fail("cwd_mismatch", "workspace cwd must match process cwd");
+    }
     const state = await loadState();
     const workspaceId = `ws_${randomBytes(6).toString("hex")}`;
     const paneId = `pane_${randomBytes(6).toString("hex")}`;
