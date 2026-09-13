@@ -1027,7 +1027,8 @@ test("OAuth and Controller network stay in dedicated modules; credentials are no
           assert.ok(
             file === path.join(mcpRoot, "src", "oauth-flow.mjs") ||
               file === path.join(mcpRoot, "src", "herdr-cli.mjs") ||
-              file === path.join(mcpRoot, "src", "codex-supervisor.mjs"),
+              file === path.join(mcpRoot, "src", "codex-supervisor.mjs") ||
+              file === path.join(mcpRoot, "src", "systemd-user.mjs"),
             file,
           );
           continue;

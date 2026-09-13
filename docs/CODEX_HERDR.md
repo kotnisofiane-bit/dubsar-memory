@@ -6,53 +6,79 @@ not a second ticket product. Tickets remain `dubsar.tickets/1` in
 Codex receipts are a distinct contract and are never rewritten as Cursor
 receipts.
 
-## Protocol (Herdr host, Codex `--json` identity)
+## Protocol (observed Herdr + Linux user scope)
 
-Herdr hosts the workspace/pane. It is **not** a durable session registry. Isolated
-vendor observation: `herdr agent start … -- exec -- PROMPT` can succeed and
-return `agent_started` (`result.agent`, argv, type) **without** `session_ref`.
-After a short task, `agent get` is `agent_not_found` because the occupant name is
-cleared on exit. Native Codex history still has `session_meta.id`. Do not treat
-`agent_not_found` as a lost Codex session. Do not auto-approve dialogues, use
-`--last`, recreate a missing session, or `workspace close`.
+Herdr hosts the workspace/pane. It is **not** a durable session registry. After a
+short occupant exit, `herdr agent get` is `agent_not_found`. That is not Codex
+session loss. Do not auto-approve dialogues, use `--last`, recreate a missing
+session, or `workspace close`.
 
-My Work therefore:
+**`herdr exec` is not an established interface** of the installed Herdr. The
+adapter must not invent it or treat forwarded CLI stdout as pane occupancy.
+
+Observed primitives:
 
 1. `herdr workspace create --cwd <authorized_realpath> --label <ticket> --no-focus`  
-   `herdr_id` = `workspace_id/pane_id`. Confinement is realpath.
-2. Hosts the non-interactive occupant **in that pane**:  
-   `herdr exec --pane <pane_id> --kind codex -- exec --json -- <prompt>`  
-   The MCP supervises the Herdr CLI process that runs the pane; it does not spawn
-   `codex` as its own child. `HERDR_ENV=1` is not a hosting proof. Launch outside
-   a pane is refused.
-3. Session identity is collected from occupant `--json` events (`session_meta.id`)
-   forwarded on Herdr stdout. Persist in the My Work ticket and
-   `allocation_root/codex-supervisor.json` (outside the Codex-writable workspace).
-   Native `CODEX_HOME` / provider config of the service account is **inherited**.
-   It is not replaced by an empty `allocation_root/codex-native`. An operator may
-   set `DUBSAR_CODEX_HOME` explicitly; secrets are not copied or logged.
-4. Continuation: `herdr exec --pane <same pane> --kind codex -- exec resume <EXACT_ID> --json -- <prompt>`  
-   Never `--last`, no workspace close, no auto-approve.
-5. Stop signals the supervised **Herdr pane exec** (already finished / interrupted /
-   unknown). Stop is never mission success.
+   `herdr_id` = `workspace_id/pane_id`.
+2. `herdr pane run <PANE_ID> COMMAND` submits the command into that pane's
+   terminal. It does not stream occupant stdout to the My Work process.
+3. Occupant `--json` is collected separately:
+   `herdr pane read --pane <PANE_ID> --source recent-unwrapped`
+4. Live occupancy:
+   `herdr pane process-info --pane <PANE_ID>` →
+   `result.process_info.foreground_process_group_id`,
+   `foreground_processes`, `shell_pid`.
 
-### Qualification commands for Work (vendor binaries, isolated temp repo)
+Linux confinement of the occupant (Ctrl+C can orphan `bwrap`/Codex/`sleep`):
+
+```bash
+env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+  systemd-run --user --scope --unit="<unique-execution-id>" \
+  --property=KillMode=control-group --property=TimeoutStopSec=5s \
+  codex exec --json -- "PROMPT"
+```
+
+Stop: `systemctl --user stop <scope>`. Proof is `ActiveState=inactive` /
+`SubState=dead` and an empty foreground process list — not the Herdr client PID
+returning to the shell. `XDG_RUNTIME_DIR` must already exist; it is not invented
+and VPS UIDs are not hard-coded. Missing Herdr or systemd `--user` is
+`MY_WORK_HERDR_UNAVAILABLE` / `MY_WORK_SYSTEMD_UNAVAILABLE` (no silent fallback).
+
+Resume uses **`thread.started.thread_id`** from pane NDJSON. Native Codex
+rollout `session_meta.payload.id` is a different identifier and is not the resume
+key. Never `--last`.
+
+`CODEX_HOME` / provider/auth of the service account are **inherited**. Supervisor
+NDJSON and `codex-supervisor.json` live under `allocation_root`, outside the
+writable workspace. Secrets are not copied.
+
+An interrupt can surface a Codex warning about missing tool output. That is not
+mission success.
+
+### Qualification commands (vendor, isolated temp repo, human gate)
 
 ```bash
 herdr workspace create --cwd "$TMP" --label DUB-001 --no-focus
-# pane_id from the JSON; then host Codex in that pane (not a sidecar MCP child):
-herdr exec --pane "$PANE" --kind codex -- exec --json -- "Write DIAG006_OK"
-# expect NDJSON session_meta.id on the herdr CLI stdout
-# a later `herdr agent get` may be agent_not_found; that is not session loss
-herdr exec --pane "$PANE" --kind codex -- exec resume "$SESSION_ID" --json -- "second turn"
-# never: CODEX_HOME emptied; never: resume --last; never: workspace close
+herdr pane run "$PANE" env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+  systemd-run --user --scope --unit="dubsar-mw-d001-trial.scope" \
+  --property=KillMode=control-group --property=TimeoutStopSec=5s \
+  codex exec --json -- "Write DIAG006_OK"
+herdr pane read --pane "$PANE" --source recent-unwrapped
+herdr pane process-info --pane "$PANE"
+systemctl --user stop dubsar-mw-d001-trial.scope
+herdr pane run "$PANE" env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+  systemd-run --user --scope --unit="dubsar-mw-d001-resume.scope" \
+  --property=KillMode=control-group --property=TimeoutStopSec=5s \
+  codex exec resume "$THREAD_ID" --json -- "second turn"
 ```
 
-The service-account `CODEX_HOME` (9router/DeepSeek or other configured provider)
-must remain the process environment. Supervisor storage is separate.
+Package helper (protocol doubles only unless env points at vendor binaries):
 
-CI uses `tests/helpers/herdr-protocol/herdr.mjs` and
-`tests/helpers/codex-protocol/codex.mjs` — protocol doubles, not vendor binaries.
+```bash
+node tools/codex-herdr-qualify-candidate.mjs --simulate
+```
+
+`--simulate` is **not** a VPS or Hermes E2E proof.
 
 ## Private Hermes transport (container → My Work on the host)
 
@@ -73,52 +99,40 @@ socket (Linux/macOS). Windows fails closed with
 stdio (mission tools only). Herdr stays on the host process; Hermes only sees
 My Work.
 
-stdio remains valid:
-
-```bash
-node packages/dubsar-my-work-mcp/bin/dubsar-my-work-mcp.mjs --profile hermes
-```
-
-Wiring a Hermes **container** to that host socket (volume of the MCP socket
-only, `--network none`, no Docker/Herdr sockets) is a **human** `local_install`
-/ `vm_cloud` step. This repository qualifies the adapter and the socket
-boundary; it does not prove a VPS or a live Hermes image.
-
 ## Linux development install
 
-Prerequisites: Node.js 20+, Herdr on `PATH` (or `DUBSAR_HERDR_BIN`), Codex
-integration (`herdr integration install codex`) for native session ids, a git
-clone of `dubsar-memory`.
+Prerequisites: Node.js 20+, Herdr on `PATH` (or `DUBSAR_HERDR_BIN`), Codex CLI
+with the service-account `CODEX_HOME`, `systemd --user` available, and an
+existing `XDG_RUNTIME_DIR`.
 
-CI uses protocol doubles via `DUBSAR_HERDR_BIN` and `DUBSAR_CODEX_BIN`. Green
-CI is **simulated code qualification**, not a vendor-binary or VPS/Hermes
-pilot. The Hermes → My Work → Codex/Herdr path remains a **mandatory**
-qualification under `local_install` / `vm_cloud` gates — not abandoned.
+CI uses protocol doubles (`DUBSAR_HERDR_BIN`, `DUBSAR_CODEX_BIN`,
+`DUBSAR_SYSTEMD_RUN_BIN`, `DUBSAR_SYSTEMCTL_BIN`). Green CI is **simulated code
+qualification**, not a vendor-binary, Hermes-container, or VPS pilot.
 
 ## Public launch path
 
 `launch_codex_mission` is the single public call: validate
 `dubsar.codex-local-contract/1`, persist one `DUB-###` plus `codex_contract`,
-trace argv, then exactly one Herdr workspace plus `herdr exec --pane` occupant.
-Dedup: matching fingerprint reuses the ticket; a submitted launch without a valid
-receipt is not retryable.
+trace argv, then exactly one `herdr workspace create` plus `herdr pane run`
+of the systemd-scoped `codex exec --json`. Dedup: matching fingerprint reuses
+the ticket; a submitted launch without a valid receipt is not retryable.
 
 ## What CI does not prove (gates)
 
 | Gate | Status |
 | --- | --- |
-| `local_install` of vendor Herdr + Codex on a Linux machine | remaining |
+| `local_install` of vendor Herdr + Codex + systemd --user | remaining |
 | Hermes container attached only to `hermes.mcp.sock` | remaining |
 | VPS / `vm_cloud` | remaining, human gate |
 | Secrets, deployment, publication, merge | human gates |
-| Real binary logging error on stop | remaining to observe on vendor Herdr |
+| Vendor logging warning after interrupt | remaining to observe |
 
-Do not treat `npm test` as a VPS pilot.
+Do not treat `npm test` or `--simulate` as a VPS pilot.
 
 ## Findings
 
-- **BLOQUANT_LOT**: hébergement réel dans le pane Herdr (`herdr exec --pane`);
-  conservation de `CODEX_HOME` du compte de service — this correction.
-- **Qualification restante (gates, pas abandon)**: binaires Herdr/Codex vendor,
-  Hermes conteneur → MCP My Work → Codex, pilote VPS.
-- **NON_PERTINENT**: UI, multi-user, providers, CI workflow edits, OAuth repair.
+- **BLOQUANT_LOT**: `herdr exec` n’est pas une primitive établie — this correction
+  uses `pane run` / `pane read` / `process-info` and a systemd `--user` scope.
+- **Qualification restante (gates, pas abandon)**: binaires vendor, Hermes
+  conteneur → MCP My Work → Herdr pane → Codex configuré, pilote VPS.
+- **NON_PERTINENT**: UI, multi-user, providers, CI workflow edits, OAuth.

@@ -26,13 +26,9 @@ export function codexResumeArgv(sessionId, prompt) {
 
 export function sessionIdFromCodexEvent(value) {
   if (!value || typeof value !== "object") return null;
-  const direct =
-    (value.type === "session_meta" && value.id) ||
-    value.session_meta?.id ||
-    value.payload?.session_meta?.id ||
-    value.msg?.session_meta?.id ||
-    (value.type === "thread.started" && value.thread_id);
-  if (typeof direct === "string" && direct.length > 0) return direct;
+  if (value.type === "thread.started" && typeof value.thread_id === "string" && value.thread_id.length > 0) {
+    return value.thread_id;
+  }
   return null;
 }
 
@@ -50,4 +46,19 @@ export function extractSessionIdFromCodexJson(text) {
     }
   }
   return null;
+}
+
+export function paneReadText(payload) {
+  const text = payload?.result?.text ?? payload?.result?.result?.text;
+  return typeof text === "string" ? text : "";
+}
+
+export function processInfoFrom(payload) {
+  const info = payload?.result?.process_info;
+  if (!info || typeof info !== "object") return null;
+  return {
+    foreground_process_group_id: info.foreground_process_group_id ?? null,
+    foreground_processes: Array.isArray(info.foreground_processes) ? info.foreground_processes : [],
+    shell_pid: info.shell_pid ?? null,
+  };
 }

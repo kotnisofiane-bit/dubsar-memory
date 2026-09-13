@@ -65,7 +65,7 @@ export function createHerdrCodexExecutor() {
         codex_session_id: supervised.sessionId,
         status: "launched",
         herdr_live: "not_found",
-        argv: ["herdr", "exec", "--pane", ids.paneId, "--kind", "codex", "--", ...argv],
+        argv: supervised.pane_argv,
       };
     },
     async resume({ workspaceRoot, herdrId, sessionId, prompt, authorizedWorkspace, ticketId, allocationRoot }) {
@@ -96,12 +96,19 @@ export function createHerdrCodexExecutor() {
         codex_session_id: sessionId,
         status: "resumed",
         herdr_live: "not_found",
-        argv: ["herdr", "exec", "--pane", parsed.paneId, "--kind", "codex", "--", ...argv],
+        argv: supervised.pane_argv,
       };
     },
     async stop({ sessionId, herdrId, workspaceRoot, ticketId, authorizedWorkspace, allocationRoot }) {
-      await confineAuthorizedWorkspace(authorizedWorkspace ?? workspaceRoot, workspaceRoot);
-      const result = await stopSupervisedCodex({ allocationRoot, ticketId, sessionId });
+      const confined = await confineAuthorizedWorkspace(authorizedWorkspace ?? workspaceRoot, workspaceRoot);
+      const parsed = parseStoredHerdrId(herdrId);
+      const result = await stopSupervisedCodex({
+        allocationRoot,
+        ticketId,
+        sessionId,
+        paneId: parsed?.paneId,
+        cwd: confined,
+      });
       return {
         ambiguous: false,
         herdr_id: herdrId,

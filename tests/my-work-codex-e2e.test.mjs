@@ -11,6 +11,8 @@ import { readSupervisorRun } from "../packages/dubsar-my-work-mcp/src/codex-supe
 const bin = fileURLToPath(new URL("../packages/dubsar-my-work-mcp/bin/dubsar-my-work-mcp.mjs", import.meta.url));
 const herdrBin = fileURLToPath(new URL("./helpers/herdr-protocol/herdr.mjs", import.meta.url));
 const codexBin = fileURLToPath(new URL("./helpers/codex-protocol/codex.mjs", import.meta.url));
+const systemdRunBin = fileURLToPath(new URL("./helpers/systemd-protocol/systemd-run.mjs", import.meta.url));
+const systemctlBin = fileURLToPath(new URL("./helpers/systemd-protocol/systemctl.mjs", import.meta.url));
 
 function rpc(child) {
   let nextId = 1;
@@ -44,6 +46,8 @@ function startServer(workspace, extraEnv = {}) {
       ...process.env,
       DUBSAR_HERDR_BIN: herdrBin,
       DUBSAR_CODEX_BIN: codexBin,
+      DUBSAR_SYSTEMD_RUN_BIN: systemdRunBin,
+      DUBSAR_SYSTEMCTL_BIN: systemctlBin,
       CODEX_CONFIG_SENTINEL: "configured-account",
       ...extraEnv,
     },
@@ -61,10 +65,11 @@ test("E2E Herdr protocol: launch file, restart, continue file, observed stop", a
   const start = await mkdtemp(path.join(tmpdir(), "dubsar-codex-e2e-project-"));
   const allocationRoot = await mkdtemp(path.join(tmpdir(), "dubsar-codex-e2e-global-"));
   const serviceHome = await mkdtemp(path.join(tmpdir(), "dubsar-codex-e2e-service-home-"));
+  const runtimeDir = await mkdtemp(path.join(tmpdir(), "dubsar-codex-e2e-xdg-"));
   await mkdir(path.join(start, ".dubsar"));
   const context = { start, allocation_root: allocationRoot, project_id: "project-e2e-codex" };
 
-  const first = startServer(start, { CODEX_HOME: serviceHome });
+  const first = startServer(start, { CODEX_HOME: serviceHome, XDG_RUNTIME_DIR: runtimeDir });
   let sessionId;
   let herdrId;
   try {
@@ -98,7 +103,7 @@ test("E2E Herdr protocol: launch file, restart, continue file, observed stop", a
   assert.equal(await readFile(path.join(start, "codex-home-echo.txt"), "utf8"), `${serviceHome}\n`);
   await assert.rejects(access(path.join(allocationRoot, "codex-native")));
 
-  const afterRestart = startServer(start, { CODEX_HOME: serviceHome });
+  const afterRestart = startServer(start, { CODEX_HOME: serviceHome, XDG_RUNTIME_DIR: runtimeDir });
   try {
     await afterRestart.call("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "test" } });
     const loaded = await afterRestart.call("tools/call", {

@@ -1,34 +1,28 @@
-import { spawn } from "node:child_process";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { MyWorkMcpError } from "./canonical.mjs";
-import { extractSessionIdFromCodexJson } from "./codex-json.mjs";
-import { herdrBinary } from "./herdr-cli.mjs";
+import { extractSessionIdFromCodexJson, paneReadText, processInfoFrom } from "./codex-json.mjs";
+import { herdrJson } from "./herdr-cli.mjs";
+import {
+  assertSystemdAvailable,
+  paneCommandArgv,
+  resolveXdgRuntimeDir,
+  scopeUnitName,
+  stopUserScope,
+} from "./systemd-user.mjs";
 
 const SUPERVISOR_FORMAT = "dubsar.codex-supervisor/1";
 const SUPERVISOR_NAME = "codex-supervisor.json";
 const SESSION_WAIT_MS = 15_000;
-const liveChildren = new Map();
 const storeLocks = new Map();
 
 export function supervisorPath(allocationRoot) {
   return path.join(allocationRoot, SUPERVISOR_NAME);
 }
 
-function spawnArgv(bin, args) {
-  if (bin.endsWith(".mjs") || bin.endsWith(".js")) {
-    return { command: process.execPath, argv: [bin, ...args] };
-  }
-  return { command: bin, argv: args };
-}
-
-function herdrChildEnv() {
-  const env = { ...process.env };
-  if (typeof process.env.DUBSAR_CODEX_HOME === "string" && process.env.DUBSAR_CODEX_HOME.length > 0) {
-    env.CODEX_HOME = process.env.DUBSAR_CODEX_HOME;
-  }
-  return env;
+export function ndjsonPath(allocationRoot, ticketId) {
+  return path.join(allocationRoot, "codex-pane-log", `${ticketId}.ndjson`);
 }
 
 function emptyStore() {
@@ -93,35 +87,58 @@ export async function recordSupervisorRun(allocationRoot, run) {
       ticket_id: run.ticket_id,
       codex_session_id: run.codex_session_id,
       herdr_id: run.herdr_id,
+      systemd_unit: run.systemd_unit ?? null,
       pid: run.pid ?? null,
       status: run.status,
       exit_code: run.exit_code ?? null,
       herdr_live: run.herdr_live ?? "unknown",
+      scope_state: run.scope_state ?? null,
     };
     await writeSupervisorStore(allocationRoot, store);
   });
 }
 
-function pidAlive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error && error.code === "EPERM";
+export function occupantBinary() {
+  const configured = process.env.DUBSAR_CODEX_BIN;
+  if (typeof configured === "string" && configured.length > 0) return configured;
+  return "codex";
+}
+
+export function publicPaneArgv(paneId, occupantTail) {
+  return ["herdr", "pane", "run", paneId, ...occupantTail];
+}
+
+async function collectPaneNdjson({ allocationRoot, ticketId, paneId, cwd }) {
+  const target = ndjsonPath(allocationRoot, ticketId);
+  await mkdir(path.dirname(target), { recursive: true });
+  const startedAt = Date.now();
+  let sessionId = null;
+  let text = "";
+  while (!sessionId && Date.now() - startedAt < SESSION_WAIT_MS) {
+    const read = await herdrJson(["pane", "read", "--pane", paneId, "--source", "recent-unwrapped"], { cwd });
+    text = paneReadText(read.payload);
+    await writeFile(target, text);
+    sessionId = extractSessionIdFromCodexJson(text);
+    if (sessionId) break;
+    if (Date.now() - startedAt > 400) {
+      const info = await herdrJson(["pane", "process-info", "--pane", paneId], { cwd });
+      const processes = processInfoFrom(info.payload)?.foreground_processes ?? [];
+      if (processes.length < 1) break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 40));
   }
+  return { sessionId, text, target };
+}
+
+async function readProcessInfo(paneId, cwd) {
+  const info = await herdrJson(["pane", "process-info", "--pane", paneId], { cwd });
+  return processInfoFrom(info.payload);
 }
 
 export function processObservation(run) {
-  const live = liveChildren.get(run?.ticket_id);
-  if (live?.exit) {
-    if (live.exit.signal === "SIGTERM" || live.exit.signal === "SIGINT") return "interrupted";
-    return "already_finished";
-  }
-  if (live?.child && live.exit === undefined) return "running";
   if (run?.status === "interrupted") return "interrupted";
   if (run?.status === "exited") return "already_finished";
-  if (Number.isInteger(run?.pid) && pidAlive(run.pid)) return "running";
+  if (run?.status === "running") return "running";
   return "unknown";
 }
 
@@ -129,111 +146,47 @@ export async function superviseCodex({ allocationRoot, ticketId, herdrId, argv, 
   if (typeof paneId !== "string" || paneId.length < 1) {
     throw new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_AMBIGUOUS");
   }
-  const herdrArgv = ["exec", "--pane", paneId, "--kind", "codex", "--", ...argv];
-  const launched = spawnArgv(herdrBinary(), herdrArgv);
-  let stdout = "";
-  let stderr = "";
-  let sessionId = null;
-  let spawnFailed = false;
-
-  const child = spawn(launched.command, launched.argv, {
-    cwd,
-    env: herdrChildEnv(),
-    windowsHide: true,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
-  const finish = async (status, exitCode) => {
-    if (!sessionId) return;
-    await recordSupervisorRun(allocationRoot, {
-      ticket_id: ticketId,
-      codex_session_id: sessionId,
-      herdr_id: herdrId,
-      pid: child.pid ?? null,
-      status,
-      exit_code: exitCode,
-      herdr_live: "not_found",
-    });
-  };
-
-  liveChildren.set(ticketId, { child, exit: undefined });
-  child.on("error", () => {
-    spawnFailed = true;
-    liveChildren.delete(ticketId);
-  });
-  child.on("exit", (code, signal) => {
-    const entry = liveChildren.get(ticketId);
-    if (entry) entry.exit = { code, signal };
-  });
-  child.on("close", (code, signal) => {
-    const entry = liveChildren.get(ticketId);
-    if (entry) entry.exit = { code, signal };
-    const status = signal === "SIGTERM" || signal === "SIGINT" ? "interrupted" : "exited";
-    if (sessionId) void finish(status, code);
-  });
-
-  child.stdout?.on("data", (chunk) => {
-    stdout += chunk.toString("utf8");
-    if (!sessionId) sessionId = extractSessionIdFromCodexJson(stdout);
-  });
-  child.stderr?.on("data", (chunk) => {
-    stderr += chunk.toString("utf8");
-  });
-
-  const startedAt = Date.now();
-  while (!sessionId && Date.now() - startedAt < SESSION_WAIT_MS) {
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    if (!sessionId) sessionId = extractSessionIdFromCodexJson(stdout);
-    const herdrGone =
-      spawnFailed ||
-      child.exitCode != null ||
-      child.signalCode != null ||
-      Boolean(liveChildren.get(ticketId)?.exit) ||
-      (Number.isInteger(child.pid) && !pidAlive(child.pid));
-    if (herdrGone) {
-      if (!sessionId) sessionId = extractSessionIdFromCodexJson(stdout);
-      break;
-    }
-  }
-
-  if (!sessionId) {
-    if (child.exitCode == null && pidAlive(child.pid)) {
-      try {
-        child.kill("SIGTERM");
-      } catch {
-        // ignore
-      }
-    }
-    liveChildren.delete(ticketId);
-    if (spawnFailed) throw new MyWorkMcpError("MY_WORK_CODEX_UNAVAILABLE");
-    if (/No prompt provided/u.test(stderr) || /No prompt provided/u.test(stdout)) {
-      throw new MyWorkMcpError("MY_WORK_MISSION_INCOMPLETE");
-    }
+  assertSystemdAvailable();
+  const runtimeDir = resolveXdgRuntimeDir();
+  const unit = scopeUnitName(ticketId);
+  const occupant = [occupantBinary(), ...argv];
+  const paneArgv = paneCommandArgv({ runtimeDir, unit, occupantArgv: occupant });
+  const submitted = await herdrJson(["pane", "run", paneId, ...paneArgv], { cwd, env: process.env });
+  if (submitted.payload?.error || submitted.ok === false) {
     throw new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_AMBIGUOUS");
   }
-
-  const settleUntil = Date.now() + 250;
-  while (!liveChildren.get(ticketId)?.exit && Date.now() < settleUntil) {
-    if (!pidAlive(child.pid)) break;
-    await new Promise((resolve) => setTimeout(resolve, 20));
+  if (submitted.payload?.result?.type !== "command_submitted") {
+    throw new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_AMBIGUOUS");
   }
-  const finished =
-    Boolean(liveChildren.get(ticketId)?.exit) ||
-    child.exitCode != null ||
-    (Number.isInteger(child.pid) && !pidAlive(child.pid));
+  const collected = await collectPaneNdjson({ allocationRoot, ticketId, paneId, cwd });
+  if (!collected.sessionId) throw new MyWorkMcpError("MY_WORK_CODEX_LAUNCH_AMBIGUOUS");
+  const settleUntil = Date.now() + 1_000;
+  let info = await readProcessInfo(paneId, cwd);
+  while ((info?.foreground_processes?.length ?? 0) > 0 && Date.now() < settleUntil) {
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    info = await readProcessInfo(paneId, cwd);
+  }
+  const running = (info?.foreground_processes?.length ?? 0) > 0;
   await recordSupervisorRun(allocationRoot, {
     ticket_id: ticketId,
-    codex_session_id: sessionId,
+    codex_session_id: collected.sessionId,
     herdr_id: herdrId,
-    pid: child.pid ?? null,
-    status: finished ? "exited" : "running",
-    exit_code: liveChildren.get(ticketId)?.exit?.code ?? child.exitCode ?? null,
+    systemd_unit: unit,
+    pid: info?.foreground_process_group_id ?? null,
+    status: running ? "running" : "exited",
     herdr_live: "not_found",
+    scope_state: running ? "active" : "inactive",
   });
-  return { sessionId, pid: child.pid ?? null, status: finished ? "exited" : "running" };
+  return {
+    sessionId: collected.sessionId,
+    pid: info?.foreground_process_group_id ?? null,
+    status: running ? "running" : "exited",
+    systemd_unit: unit,
+    pane_argv: publicPaneArgv(paneId, paneArgv),
+  };
 }
 
-export async function stopSupervisedCodex({ allocationRoot, ticketId, sessionId }) {
+export async function stopSupervisedCodex({ allocationRoot, ticketId, sessionId, paneId, cwd }) {
   const run = await readSupervisorRun(allocationRoot, ticketId);
   if (!run || run.codex_session_id !== sessionId) {
     throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
@@ -248,39 +201,26 @@ export async function stopSupervisedCodex({ allocationRoot, ticketId, sessionId 
   if (observation !== "running") {
     throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
   }
-  const live = liveChildren.get(ticketId);
-  if (live?.child) {
-    live.child.kill("SIGTERM");
-    const deadline = Date.now() + 5_000;
-    while (live.exit === undefined && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    if (live.exit === undefined) throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
-    await recordSupervisorRun(allocationRoot, {
-      ...run,
-      status: "interrupted",
-      pid: run.pid,
-      herdr_live: "not_found",
-    });
-    return { status: "interrupted", interrupted: true, mission_success: false };
+  if (typeof run.systemd_unit !== "string" || run.systemd_unit.length < 1) {
+    throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
   }
-  if (Number.isInteger(run.pid) && pidAlive(run.pid)) {
-    try {
-      process.kill(run.pid, "SIGTERM");
-    } catch {
-      throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
-    }
-    const deadline = Date.now() + 5_000;
-    while (pidAlive(run.pid) && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    if (pidAlive(run.pid)) throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
-    await recordSupervisorRun(allocationRoot, { ...run, status: "interrupted", herdr_live: "not_found" });
-    return { status: "interrupted", interrupted: true, mission_success: false };
+  const scope = await stopUserScope(run.systemd_unit);
+  let remaining = paneId ? await readProcessInfo(paneId, cwd) : { foreground_processes: [] };
+  const deadline = Date.now() + 2_000;
+  while (paneId && remaining.foreground_processes.length > 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    remaining = await readProcessInfo(paneId, cwd);
   }
-  throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
+  if (remaining && remaining.foreground_processes.length > 0) {
+    throw new MyWorkMcpError("MY_WORK_CODEX_STOP_AMBIGUOUS");
+  }
+  await recordSupervisorRun(allocationRoot, {
+    ...run,
+    status: "interrupted",
+    scope_state: scope.active_state,
+    herdr_live: "not_found",
+  });
+  return { status: "interrupted", interrupted: true, mission_success: false, scope };
 }
 
-export function resetSupervisorChildren() {
-  liveChildren.clear();
-}
+export function resetSupervisorChildren() {}
