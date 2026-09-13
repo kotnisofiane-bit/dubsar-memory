@@ -15,6 +15,14 @@ node packages/dubsar-my-work-mcp/bin/dubsar-my-work-mcp.mjs connect
 node packages/dubsar-my-work-mcp/bin/dubsar-my-work-mcp.mjs status
 ```
 
+Hermes private profile (bounded Codex tools only). Optional host socket for a
+container that must not see Docker or Herdr sockets:
+
+```bash
+node packages/dubsar-my-work-mcp/bin/dubsar-my-work-mcp.mjs --profile hermes
+node packages/dubsar-my-work-mcp/bin/dubsar-my-work-mcp.mjs --profile hermes --mcp-socket /run/dubsar/hermes.mcp.sock
+```
+
 OAuth credentials stay in the machine-local store documented in
-`docs/MY_WORK_MCP.md`. They are never committed. See that document for the
-Controller argument boundary.
+`docs/MY_WORK_MCP.md`. They are never committed. Local Codex receipts are not
+Cursor receipts. See `docs/CODEX_HERDR.md`.

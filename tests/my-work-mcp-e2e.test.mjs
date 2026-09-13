@@ -86,7 +86,7 @@ test("E2E prepare, restart, attach realistic receipt, restart, read and sync", a
     assert.equal(initialized.result.serverInfo.name, "dubsar-my-work");
     first.child.stdin.write(encodeFrame({ jsonrpc: "2.0", method: "notifications/initialized" }));
     const tools = await first.call("tools/list");
-    assert.equal(tools.result.tools.length, 7);
+    assert.equal(tools.result.tools.length, 10);
     const listed = await first.call("tools/call", { name: "list_tickets", arguments: context });
     assert.equal(listed.result.isError, false);
     assert.equal(JSON.parse(listed.result.content[0].text).tickets.length, 0);

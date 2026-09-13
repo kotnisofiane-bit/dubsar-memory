@@ -45,10 +45,9 @@ The skills are adapters, not the product core. The same CLI works without
 Codex, Claude Code, Cursor, a plugin marketplace, or a global `dubsar` command.
 
 A private local stdio MCP (`packages/dubsar-my-work-mcp`) exposes a closed My Work
-surface for ChatGPT Work: list/read tickets, persist one DUB ticket plus
-`create_dubsar_work_cursor_agent` arguments, attach a verified receipt, and reuse
-KOT-119 sync. It has no network client and no secrets. See
-[My Work MCP](docs/MY_WORK_MCP.md).
+surface: list/read tickets, the Cursor Controller launch/continue path, and a
+local Codex/Herdr path on the **same** ticket store. See
+[My Work MCP](docs/MY_WORK_MCP.md) and [Codex/Herdr](docs/CODEX_HERDR.md).
 
 ## How it works
 

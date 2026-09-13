@@ -132,6 +132,9 @@ Outils MCP locaux (`packages/dubsar-my-work-mcp/src/tools.mjs`, `TOOL_NAMES`) :
 | `continue_cursor_mission` | un run Controller, **sans** nouvel agent |
 | `attach_cursor_receipt` | reçu local |
 | `sync_cursor_status` | mapping Cursor/GitHub déjà existant |
+| `launch_codex_mission` | même store tickets ; **un** `codex exec` via adaptateur Herdr |
+| `continue_codex_mission` | `codex exec resume <id>` ; même ticket |
+| `stop_codex_mission` | interruption seule ; pas un succès de mission |
 
 Ce MCP **n’expose pas** les noms d’outils du Controller. Il **appelle** le Controller distant (voie A) : `create_dubsar_work_cursor_agent` et `create_dubsar_work_cursor_agent_run`. (`docs/MY_WORK_MCP.md`, `packages/dubsar-my-work-mcp/src/mission-args.mjs`)
 
@@ -176,7 +179,7 @@ D’après les contrats **in-tree** (pas une opinion) :
 | `pending record` / `open-session` = promotion canonique | ADR worktrees, `docs/CLI_REFERENCE.md`, `HOSTS.md` |
 | Lancer un agent Cursor **depuis le runtime Continuity** | Le runtime n’a pas de client réseau (`docs/INTEGRATION.md`) |
 | Être le Worker Cloudflare Cloud Agents API | Implémentation absente ; seulement citations SHA vers un **autre** repo |
-| Être le MCP VPS Codex / Herdr | **Zéro** fichier ne nomme `dubsar-codex-mcp`, Herdr, ou un VPS Hostinger |
+| Être le MCP VPS Codex / Herdr Hostinger | Adaptateur **local** seulement ; pas d’accès VPS, secrets, ni déploiement |
 
 **Nuance honnête :** `launch_cursor_mission` et le skill `launch-dubsar-work` **peuvent** déclencher **une** création d’agent **via A**, si credentials Controller et réseau sont configurés **hors** du moteur. Ce n’est **pas** « la mémoire a lancé un agent ». C’est un client optionnel qui **forward** un contrat vers A. Un ACK de plumbing (stdio MCP, OAuth `status`, `tools/call` soumis) n’est **pas** un OK mémoire ni un OK agent.
 
@@ -232,12 +235,10 @@ Les ponts `tools/cursor-cloud/*` **consomment** la CLI mémoire **dans** un agen
 
 ### Voie B — VPS `dubsar-codex-mcp` / Herdr / Codex CLI machine
 
-Recherche in-tree des chaînes `dubsar-codex-mcp`, `codex-controller`, `Herdr`, Hostinger VPS : **aucun hit**.
+Recherche in-tree historique : le dépôt n’était pas le MCP VPS. Ce lot ajoute un **adaptateur local** Codex/Herdr dans `packages/dubsar-my-work-mcp` (reçus `dubsar.codex-local-*`, pas des reçus Cursor). Ce n’est **pas** le pilote VPS : installation réelle, Hermes conteneur et Hostinger restent des gates humaines. Voir `docs/CODEX_HERDR.md`.
 
-Présent avec « Codex » : adapters marketplace Continuity (`HOSTS.md`) et `packages/dubsar-codex-workbench` (skills Workbench + lancement **Controller A**).  
-**Ne pas** identifier ce package avec B.
-
-Relation C↔B : **non documentée** dans ce dépôt. Inconnu.
+Présent avec « Codex » : adapters marketplace Continuity (`HOSTS.md`), `packages/dubsar-codex-workbench` (skills Workbench + lancement **Controller A**), et l’adaptateur local My Work ci-dessus.  
+**Ne pas** identifier `dubsar-codex-workbench` avec B.
 
 ### Voie C — ce dépôt
 

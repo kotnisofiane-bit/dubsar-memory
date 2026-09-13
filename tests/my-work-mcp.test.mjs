@@ -222,6 +222,9 @@ test("MCP initialize and tools/list expose the closed surface", async () => {
     "continue_cursor_mission",
     "attach_cursor_receipt",
     "sync_cursor_status",
+    "launch_codex_mission",
+    "continue_codex_mission",
+    "stop_codex_mission",
   ]);
 });
 
@@ -1012,8 +1015,22 @@ test("OAuth and Controller network stay in dedicated modules; credentials are no
     const ast = parse(source, { ecmaVersion: "latest", sourceType: "module" });
     for (const node of ast.body) {
       if (node.type === "ImportDeclaration") {
-        if (node.source.value === "node:http" || node.source.value === "node:child_process") {
+        if (node.source.value === "node:http") {
           assert.equal(file, path.join(mcpRoot, "src", "oauth-flow.mjs"));
+          continue;
+        }
+        if (node.source.value === "node:net") {
+          assert.equal(file, path.join(mcpRoot, "src", "hermes-transport.mjs"), file);
+          continue;
+        }
+        if (node.source.value === "node:child_process") {
+          assert.ok(
+            file === path.join(mcpRoot, "src", "oauth-flow.mjs") ||
+              file === path.join(mcpRoot, "src", "herdr-cli.mjs") ||
+              file === path.join(mcpRoot, "src", "codex-supervisor.mjs") ||
+              file === path.join(mcpRoot, "src", "systemd-user.mjs"),
+            file,
+          );
           continue;
         }
         assert.equal(forbiddenModules.has(node.source.value), false, file);

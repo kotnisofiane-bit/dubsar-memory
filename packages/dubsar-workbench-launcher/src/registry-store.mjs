@@ -153,10 +153,10 @@ function text(value, max, code = "TICKET_FIELD_INVALID") {
   if (typeof value !== "string" || value.trim() !== value || value.length < 1 || value.length > max || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(value)) throw new TicketError(code);
   return value;
 }
-function boundedJson(value, max = 16 * 1024) {
+function boundedJson(value, max = 16 * 1024, code = "TICKET_CURSOR_RECEIPT_INVALID") {
   let encoded;
-  try { encoded = stable(value); } catch { throw new TicketError("TICKET_CURSOR_RECEIPT_INVALID"); }
-  if (value === null || typeof value !== "object" || Array.isArray(value) || Buffer.byteLength(encoded, "utf8") > max) throw new TicketError("TICKET_CURSOR_RECEIPT_INVALID");
+  try { encoded = stable(value); } catch { throw new TicketError(code); }
+  if (value === null || typeof value !== "object" || Array.isArray(value) || Buffer.byteLength(encoded, "utf8") > max) throw new TicketError(code);
   return structuredClone(value);
 }
 function cursorReceipt(value, ticketId) {
@@ -174,6 +174,39 @@ function cursorReceipt(value, ticketId) {
   }
   boundedJson(receipt.bounds); boundedJson({ repository_refs: receipt.repository_refs });
   return Object.freeze({ receipt_version: receipt.receipt_version, target_repository_url: targetRepositoryUrl, contract_fingerprint: receipt.contract_fingerprint, repository_refs: structuredClone(receipt.repository_refs), ticket_id: ticketId, agent_id: agentId, run_id: runId, source_url: sourceUrl, status, bounds: structuredClone(receipt.bounds) });
+}
+const CODEX_RECEIPT_VERSIONS = new Set([
+  "dubsar.codex-local-launch-receipt/1",
+  "dubsar.codex-local-run-receipt/1",
+  "dubsar.codex-local-stop-receipt/1",
+]);
+const CODEX_STATUSES = new Set(["launched", "resumed", "running", "interrupted", "failed"]);
+function codexLocalReceipt(value, ticketId, expectedVersion = null) {
+  const receipt = boundedJson(value, 16 * 1024, "TICKET_CODEX_RECEIPT_INVALID");
+  if (!CODEX_RECEIPT_VERSIONS.has(receipt.receipt_version) || receipt.ticket_id !== ticketId) throw new TicketError("TICKET_CODEX_RECEIPT_INVALID");
+  if (expectedVersion && receipt.receipt_version !== expectedVersion) throw new TicketError("TICKET_CODEX_RECEIPT_INVALID");
+  if (CURSOR_RECEIPT_VERSIONS.has(receipt.receipt_version)) throw new TicketError("TICKET_CODEX_RECEIPT_INVALID");
+  const herdrId = text(receipt.herdr_id, 300, "TICKET_CODEX_RECEIPT_INVALID");
+  const sessionId = text(receipt.codex_session_id, 300, "TICKET_CODEX_RECEIPT_INVALID");
+  const workspaceRoot = text(receipt.workspace_root, 4096, "TICKET_CODEX_RECEIPT_INVALID");
+  const missionId = text(receipt.mission_id, 300, "TICKET_CODEX_RECEIPT_INVALID");
+  const status = text(receipt.status, 80, "TICKET_CODEX_RECEIPT_INVALID");
+  if (!CODEX_STATUSES.has(status) || !CONTRACT_FINGERPRINT.test(receipt.contract_fingerprint ?? "")) throw new TicketError("TICKET_CODEX_RECEIPT_INVALID");
+  const bounds = boundedJson(receipt.bounds, 16 * 1024, "TICKET_CODEX_RECEIPT_INVALID");
+  if (bounds.auto_approve_dialogue !== false || bounds.auto_recreate_session !== false || bounds.close_homonym_workspace !== false || bounds.workspace_bind !== "authorized_only") throw new TicketError("TICKET_CODEX_RECEIPT_INVALID");
+  if (receipt.mission_success === true) throw new TicketError("TICKET_CODEX_RECEIPT_INVALID");
+  return Object.freeze({
+    receipt_version: receipt.receipt_version,
+    ticket_id: ticketId,
+    contract_fingerprint: receipt.contract_fingerprint,
+    workspace_root: workspaceRoot,
+    herdr_id: herdrId,
+    codex_session_id: sessionId,
+    mission_id: missionId,
+    status,
+    bounds: structuredClone(bounds),
+    mission_success: false,
+  });
 }
 const CURSOR_LIFECYCLES = new Set(["running", "failed", "completed"]);
 const GITHUB_PR_STATES = new Set(["open", "draft", "closed", "merged"]);
@@ -343,7 +376,22 @@ export function validateTicketStore(value) {
     const run = ticket.cursor_run == null ? null : cursorReceipt(ticket.cursor_run, ticket.id);
     if (run && run.receipt_version !== "dubsar.cursor-run-receipt/1") throw new TicketError("TICKET_STORE_INVALID");
     if (run && launch && run.agent_id !== launch.agent_id) throw new TicketError("TICKET_STORE_INVALID");
-    return Object.freeze({ ...ticket, cursor_launch: launch, cursor_run: run, criteria: Object.freeze([...ticket.criteria]), activity: Object.freeze(validateActivity(ticket.activity)) });
+    const codexLaunch = ticket.codex_launch == null ? null : codexLocalReceipt(ticket.codex_launch, ticket.id, "dubsar.codex-local-launch-receipt/1");
+    const codexRun = ticket.codex_run == null ? null : codexLocalReceipt(ticket.codex_run, ticket.id, "dubsar.codex-local-run-receipt/1");
+    const codexStop = ticket.codex_stop == null ? null : codexLocalReceipt(ticket.codex_stop, ticket.id, "dubsar.codex-local-stop-receipt/1");
+    if (codexRun && codexLaunch && (codexRun.codex_session_id !== codexLaunch.codex_session_id || codexRun.herdr_id !== codexLaunch.herdr_id)) throw new TicketError("TICKET_STORE_INVALID");
+    if (codexStop && codexLaunch && (codexStop.codex_session_id !== codexLaunch.codex_session_id || codexStop.herdr_id !== codexLaunch.herdr_id)) throw new TicketError("TICKET_STORE_INVALID");
+    if (launch && codexLaunch) throw new TicketError("TICKET_STORE_INVALID");
+    return Object.freeze({
+      ...ticket,
+      cursor_launch: launch,
+      cursor_run: run,
+      codex_launch: codexLaunch,
+      codex_run: codexRun,
+      codex_stop: codexStop,
+      criteria: Object.freeze([...ticket.criteria]),
+      activity: Object.freeze(validateActivity(ticket.activity)),
+    });
   });
   return Object.freeze({ format: TICKETS_FORMAT, tickets: Object.freeze(tickets) });
 }
@@ -393,7 +441,7 @@ function applyOperation(store, operation, allocation = null, corroboration = nul
     if (!Array.isArray(criteria) || criteria.length > 20 || criteria.some((x) => typeof x !== "string" || x.length < 1 || x.length > 300)) throw new TicketError("TICKET_FIELD_INVALID");
     const references = operation.references ?? [];
     if (!Array.isArray(references) || references.length > 20 || references.some((item) => typeof item !== "string" || item.length < 1 || item.length > 300)) throw new TicketError("TICKET_FIELD_INVALID");
-    next.tickets.push({ id, work_id: operation.work_id ?? null, project_id: allocation.project_id, project: operation.project ?? allocation.project_id, title, objective, criteria, state: "Backlog", duplicate_of: null, agent: operation.agent ?? null, branch: operation.branch ?? null, pr: operation.pr ?? null, blocker: operation.blocker ?? null, references, cursor_launch: null, cursor_run: null, activity: [activity([], "created", `Ticket ${id} créé`)] });
+    next.tickets.push({ id, work_id: operation.work_id ?? null, project_id: allocation.project_id, project: operation.project ?? allocation.project_id, title, objective, criteria, state: "Backlog", duplicate_of: null, agent: operation.agent ?? null, branch: operation.branch ?? null, pr: operation.pr ?? null, blocker: operation.blocker ?? null, references, cursor_launch: null, cursor_run: null, codex_launch: null, codex_run: null, codex_stop: null, activity: [activity([], "created", `Ticket ${id} créé`)] });
   } else if (operation.type === "transition") {
     const ticket = next.tickets.find((item) => item.id === operation.id);
     if (!ticket || !states.has(operation.to) || ticket.state === operation.to) throw new TicketError("TICKET_TRANSITION_INVALID");
@@ -409,6 +457,7 @@ function applyOperation(store, operation, allocation = null, corroboration = nul
     ticket.activity.push(activity(ticket.activity, text(operation.kind, 40), text(operation.summary, 500), operation.evidence ?? null));
   } else if (operation.type === "attach-cursor-launch") {
     const ticket = next.tickets.find((item) => item.id === operation.id); if (!ticket) throw new TicketError("TICKET_NOT_FOUND");
+    if (ticket.codex_launch != null) throw new TicketError("TICKET_BACKEND_CONFLICT");
     if (ticket.cursor_launch !== null || terminal.has(ticket.state) || ticket.activity.length >= MAX_ACTIVITY) throw new TicketError("TICKET_CURSOR_LAUNCH_INVALID");
     const receipt = cursorReceipt(operation.receipt, ticket.id);
     const from = ticket.state; ticket.cursor_launch = receipt; ticket.agent = receipt.agent_id; ticket.blocker = null; ticket.state = "In Progress"; ticket.duplicate_of = null;
@@ -441,6 +490,50 @@ function applyOperation(store, operation, allocation = null, corroboration = nul
     const code = text(operation.code, 80, "TICKET_CURSOR_FAILURE_INVALID"); const summary = text(operation.summary, 500, "TICKET_CURSOR_FAILURE_INVALID");
     const from = ticket.state; ticket.state = "Blocked"; ticket.blocker = summary; ticket.duplicate_of = null;
     ticket.activity.push(activity(ticket.activity, "cursor_launch_failed", `${from} → Blocked · ${summary}`, { code }));
+  } else if (operation.type === "attach-codex-launch") {
+    const ticket = next.tickets.find((item) => item.id === operation.id); if (!ticket) throw new TicketError("TICKET_NOT_FOUND");
+    if (ticket.cursor_launch != null) throw new TicketError("TICKET_BACKEND_CONFLICT");
+    if (ticket.codex_launch !== null || terminal.has(ticket.state) || ticket.activity.length >= MAX_ACTIVITY) throw new TicketError("TICKET_CODEX_LAUNCH_INVALID");
+    const receipt = codexLocalReceipt(operation.receipt, ticket.id, "dubsar.codex-local-launch-receipt/1");
+    const from = ticket.state;
+    ticket.codex_launch = receipt;
+    ticket.agent = receipt.codex_session_id;
+    ticket.blocker = null;
+    ticket.state = "In Progress";
+    ticket.duplicate_of = null;
+    ticket.activity.push(activity(ticket.activity, "codex_launch", `${from} → In Progress · lancement Codex local attaché`, receipt));
+  } else if (operation.type === "attach-codex-run") {
+    const ticket = next.tickets.find((item) => item.id === operation.id); if (!ticket) throw new TicketError("TICKET_NOT_FOUND");
+    if (!ticket.codex_launch || terminal.has(ticket.state) || ticket.activity.length >= MAX_ACTIVITY) throw new TicketError("TICKET_CODEX_RUN_INVALID");
+    const receipt = codexLocalReceipt(operation.receipt, ticket.id, "dubsar.codex-local-run-receipt/1");
+    if (receipt.codex_session_id !== ticket.codex_launch.codex_session_id || receipt.herdr_id !== ticket.codex_launch.herdr_id) throw new TicketError("TICKET_CODEX_RUN_INVALID");
+    if (receipt.workspace_root !== ticket.codex_launch.workspace_root) throw new TicketError("TICKET_CODEX_RUN_INVALID");
+    ticket.codex_run = receipt;
+    ticket.agent = receipt.codex_session_id;
+    ticket.blocker = null;
+    ticket.state = "In Progress";
+    ticket.duplicate_of = null;
+    ticket.activity.push(activity(ticket.activity, "codex_run", `In Progress · reprise Codex ${receipt.codex_session_id}`, receipt));
+  } else if (operation.type === "fail-codex-launch") {
+    const ticket = next.tickets.find((item) => item.id === operation.id); if (!ticket) throw new TicketError("TICKET_NOT_FOUND");
+    if (ticket.codex_launch !== null || terminal.has(ticket.state) || ticket.activity.length >= MAX_ACTIVITY) throw new TicketError("TICKET_CODEX_LAUNCH_INVALID");
+    const code = text(operation.code, 80, "TICKET_CODEX_FAILURE_INVALID"); const summary = text(operation.summary, 500, "TICKET_CODEX_FAILURE_INVALID");
+    const from = ticket.state; ticket.state = "Blocked"; ticket.blocker = summary; ticket.duplicate_of = null;
+    ticket.activity.push(activity(ticket.activity, "codex_launch_failed", `${from} → Blocked · ${summary}`, { code }));
+  } else if (operation.type === "fail-codex-run") {
+    const ticket = next.tickets.find((item) => item.id === operation.id); if (!ticket) throw new TicketError("TICKET_NOT_FOUND");
+    if (!ticket.codex_launch || terminal.has(ticket.state) || ticket.activity.length >= MAX_ACTIVITY) throw new TicketError("TICKET_CODEX_RUN_INVALID");
+    const code = text(operation.code, 80, "TICKET_CODEX_FAILURE_INVALID"); const summary = text(operation.summary, 500, "TICKET_CODEX_FAILURE_INVALID");
+    const from = ticket.state; ticket.state = "Blocked"; ticket.blocker = summary; ticket.duplicate_of = null;
+    ticket.activity.push(activity(ticket.activity, "codex_run_failed", `${from} → Blocked · ${summary}`, { code }));
+  } else if (operation.type === "record-codex-stop") {
+    const ticket = next.tickets.find((item) => item.id === operation.id); if (!ticket) throw new TicketError("TICKET_NOT_FOUND");
+    if (!ticket.codex_launch || terminal.has(ticket.state) || ticket.activity.length >= MAX_ACTIVITY) throw new TicketError("TICKET_CODEX_STOP_INVALID");
+    const receipt = codexLocalReceipt(operation.receipt, ticket.id, "dubsar.codex-local-stop-receipt/1");
+    if (receipt.codex_session_id !== ticket.codex_launch.codex_session_id || receipt.herdr_id !== ticket.codex_launch.herdr_id) throw new TicketError("TICKET_CODEX_STOP_INVALID");
+    if (receipt.status !== "interrupted") throw new TicketError("TICKET_CODEX_STOP_INVALID");
+    ticket.codex_stop = receipt;
+    ticket.activity.push(activity(ticket.activity, "codex_stop", "exécution Codex interrompue · mission non réussie", receipt));
   } else if (operation.type === "sync-cursor-status") {
     const ticket = next.tickets.find((item) => item.id === operation.id); if (!ticket) throw new TicketError("TICKET_NOT_FOUND");
     if (!isTicketSyncEligible(ticket)) throw new TicketError(currentCursorReceipt(ticket) ? "TICKET_SYNC_TERMINAL" : "TICKET_SYNC_RECEIPT_REQUIRED");
