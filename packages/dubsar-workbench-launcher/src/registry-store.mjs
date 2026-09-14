@@ -312,9 +312,12 @@ export async function synchronizeEligibleTickets({ start, allocationRoot, projec
 }
 async function storePath(start) {
   const root = path.resolve(start);
-  const memory = path.join(root, ".dubsar");
-  if (await entryInfo(memory) !== null) return path.join(memory, "tickets.json");
-  return path.join(root, ".dubsar-project", "tickets.json");
+  const memory = path.join(root, ".dubsar", "tickets.json");
+  const fallback = path.join(root, ".dubsar-project", "tickets.json");
+  if (await entryInfo(memory) !== null) return memory;
+  if (await entryInfo(fallback) !== null) return fallback;
+  if (await entryInfo(path.join(root, ".dubsar")) !== null) return memory;
+  return fallback;
 }
 function emptyStore() { return { format: TICKETS_FORMAT, tickets: [] }; }
 function emptyAllocations() { return { format: TICKET_ALLOCATIONS_FORMAT, next_number: 1, allocations: [] }; }
