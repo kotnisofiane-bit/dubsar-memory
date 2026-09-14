@@ -5,6 +5,7 @@ import {
   previewTicketChange,
   readTicketAllocations,
   readTickets,
+  recordedCorrectionNumber,
   TERMINAL_TICKET_STATES,
 } from "../../dubsar-workbench-launcher/src/registry-store.mjs";
 import {
@@ -325,10 +326,10 @@ function continuationSubmittedFor(ticket, correctionNumber) {
   );
 }
 
-function lastRecordedCorrectionNumber(ticket) {
-  const current = ticket?.cursor_run?.bounds?.correction_number;
-  if (Number.isSafeInteger(current) && current >= 1) return current;
-  return 0;
+function receiptForCorrectionNumber(ticket, correctionNumber) {
+  if (ticket?.cursor_run?.bounds?.correction_number === correctionNumber) return ticket.cursor_run;
+  if (ticket?.cursor_launch?.bounds?.correction_number === correctionNumber) return ticket.cursor_launch;
+  return null;
 }
 
 function publicTicket(ticket) {
@@ -575,15 +576,16 @@ export async function executeTool(name, args = {}) {
         throw new MyWorkMcpError("MY_WORK_CORRECTION_BUDGET_CAPPED");
       }
       const correctionNumber = requirePositiveCorrectionNumber(args.correction_number);
-      const lastNumber = lastRecordedCorrectionNumber(ticket);
-      if (ticket.cursor_run && lastNumber === correctionNumber) {
+      const lastNumber = recordedCorrectionNumber(ticket);
+      if (lastNumber === correctionNumber) {
+        const receipt = receiptForCorrectionNumber(ticket, correctionNumber);
         return {
           format: "dubsar.my-work-cursor-continue/1",
           ticket_id: ticket.id,
           state: ticket.state,
-          agent_id: ticket.cursor_run.agent_id,
-          run_id: ticket.cursor_run.run_id,
-          source_url: ticket.cursor_run.source_url,
+          agent_id: receipt.agent_id,
+          run_id: receipt.run_id,
+          source_url: receipt.source_url,
           correction_number: correctionNumber,
           continued: false,
         };

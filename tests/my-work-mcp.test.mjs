@@ -806,6 +806,50 @@ test("isolated Controller run receipts 4 and 5 attach as first matching receipts
   assert.equal(TOOL_NAMES.includes("create_dubsar_work_cursor_agent_run"), false);
 });
 
+test("continue is idempotent when the first attached receipt already records that correction", async () => {
+  const vector = JSON.parse(await readFile(path.join(mcpRoot, "vectors", "controller-canonical-pr26.json"), "utf8"));
+  const context = await env();
+  await preparePr26(context, vector);
+  await executeTool("attach_cursor_receipt", {
+    ...context,
+    ticket_id: "DUB-001",
+    receipt: vector.follow_up_4_receipt,
+  });
+  const calls = [];
+  setTestControllerTransport(async (request) => {
+    calls.push(request);
+    throw new Error("Controller must not be called for an already-recorded correction");
+  });
+  try {
+    const same = await executeTool("continue_cursor_mission", {
+      ...context,
+      ticket_id: "DUB-001",
+      correction_number: 4,
+      prompt: "must not relaunch correction 4",
+    });
+    assert.equal(same.continued, false);
+    assert.equal(same.run_id, vector.follow_up_4_receipt.run_id);
+    assert.equal(same.agent_id, vector.follow_up_4_receipt.agent_id);
+    assert.equal(same.correction_number, 4);
+    await assert.rejects(
+      executeTool("continue_cursor_mission", {
+        ...context,
+        ticket_id: "DUB-001",
+        correction_number: 1,
+        prompt: "must not go backwards",
+      }),
+      { code: "MY_WORK_CORRECTION_NUMBER_INVALID" },
+    );
+    assert.equal(calls.length, 0);
+    const after = await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" });
+    assert.equal(after.ticket.cursor_launch.run_id, vector.follow_up_4_receipt.run_id);
+    assert.equal(after.ticket.cursor_run, null);
+    assert.equal(after.attached_receipt.run_id, vector.follow_up_4_receipt.run_id);
+  } finally {
+    resetTestControllerTransport();
+  }
+});
+
 test("already-attached receipt cannot be replaced; run-receipt divergences are refused", async () => {
   const vector = JSON.parse(await readFile(path.join(mcpRoot, "vectors", "controller-canonical-pr26.json"), "utf8"));
   const context = await env();
