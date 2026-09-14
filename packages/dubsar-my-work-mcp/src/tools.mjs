@@ -325,10 +325,26 @@ function continuationSubmittedFor(ticket, correctionNumber) {
   );
 }
 
-function lastRecordedCorrectionNumber(ticket) {
-  const current = ticket?.cursor_run?.bounds?.correction_number;
+function recordedCorrectionNumber(receipt) {
+  if (receipt?.receipt_version !== "dubsar.cursor-run-receipt/1") return 0;
+  const current = receipt?.bounds?.correction_number;
   if (Number.isSafeInteger(current) && current >= 1) return current;
   return 0;
+}
+
+function lastRecordedCorrectionNumber(ticket) {
+  return Math.max(
+    recordedCorrectionNumber(ticket?.cursor_run),
+    recordedCorrectionNumber(ticket?.cursor_launch),
+  );
+}
+
+function latestRunReceipt(ticket) {
+  const runNumber = recordedCorrectionNumber(ticket?.cursor_run);
+  const launchNumber = recordedCorrectionNumber(ticket?.cursor_launch);
+  if (runNumber >= launchNumber && runNumber >= 1) return ticket.cursor_run;
+  if (launchNumber >= 1) return ticket.cursor_launch;
+  return null;
 }
 
 function publicTicket(ticket) {
@@ -495,6 +511,9 @@ export async function executeTool(name, args = {}) {
           launched: false,
         };
       }
+      if (TERMINAL_TICKET_STATES.includes(ticket.state)) {
+        throw new MyWorkMcpError("MY_WORK_TICKET_TERMINAL");
+      }
       if (launchSubmissionRecorded(ticket)) {
         throw new MyWorkMcpError("MY_WORK_LAUNCH_NOT_RETRYABLE");
       }
@@ -576,14 +595,15 @@ export async function executeTool(name, args = {}) {
       }
       const correctionNumber = requirePositiveCorrectionNumber(args.correction_number);
       const lastNumber = lastRecordedCorrectionNumber(ticket);
-      if (ticket.cursor_run && lastNumber === correctionNumber) {
+      const latestRun = latestRunReceipt(ticket);
+      if (latestRun && lastNumber === correctionNumber) {
         return {
           format: "dubsar.my-work-cursor-continue/1",
           ticket_id: ticket.id,
           state: ticket.state,
-          agent_id: ticket.cursor_run.agent_id,
-          run_id: ticket.cursor_run.run_id,
-          source_url: ticket.cursor_run.source_url,
+          agent_id: latestRun.agent_id,
+          run_id: latestRun.run_id,
+          source_url: latestRun.source_url,
           correction_number: correctionNumber,
           continued: false,
         };
