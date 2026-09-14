@@ -325,6 +325,28 @@ function continuationSubmittedFor(ticket, correctionNumber) {
   );
 }
 
+function attachedCorrectionNumbers(ticket) {
+  const attached = new Set();
+  const current = ticket?.cursor_run?.bounds?.correction_number;
+  if (Number.isSafeInteger(current) && current >= 1) attached.add(current);
+  for (const row of Array.isArray(ticket?.activity) ? ticket.activity : []) {
+    const recorded = row?.kind === "cursor_run" ? row.evidence?.bounds?.correction_number : null;
+    if (Number.isSafeInteger(recorded) && recorded >= 1) attached.add(recorded);
+  }
+  return attached;
+}
+
+function pendingUnattachedContinuationNumbers(ticket) {
+  const attached = attachedCorrectionNumbers(ticket);
+  const pending = [];
+  for (const row of Array.isArray(ticket?.activity) ? ticket.activity : []) {
+    const submitted = row?.kind === "continuation_submitted" ? row.evidence?.correction_number : null;
+    if (!Number.isSafeInteger(submitted) || submitted < 1 || attached.has(submitted)) continue;
+    if (!pending.includes(submitted)) pending.push(submitted);
+  }
+  return pending;
+}
+
 function lastRecordedCorrectionNumber(ticket) {
   const current = ticket?.cursor_run?.bounds?.correction_number;
   if (Number.isSafeInteger(current) && current >= 1) return current;
@@ -591,7 +613,10 @@ export async function executeTool(name, args = {}) {
       if (correctionNumber <= lastNumber) {
         throw new MyWorkMcpError("MY_WORK_CORRECTION_NUMBER_INVALID");
       }
-      if (continuationSubmittedFor(ticket, correctionNumber)) {
+      if (
+        continuationSubmittedFor(ticket, correctionNumber) ||
+        pendingUnattachedContinuationNumbers(ticket).length > 0
+      ) {
         throw new MyWorkMcpError("MY_WORK_CONTINUE_NOT_RETRYABLE");
       }
       if (controllerLaunchConfigured() !== true) {
@@ -617,6 +642,13 @@ export async function executeTool(name, args = {}) {
           correction_number: correctionNumber,
         },
       });
+      const submittedStore = await readTickets({ start: env.start });
+      const submittedTicket = submittedStore.tickets.find((item) => item.id === ticket.id);
+      if (
+        pendingUnattachedContinuationNumbers(submittedTicket).some((number) => number !== correctionNumber)
+      ) {
+        throw new MyWorkMcpError("MY_WORK_CONTINUE_NOT_RETRYABLE");
+      }
       let receipt;
       try {
         receipt = await callCreateDubsarWorkCursorAgentRun(runCall.arguments);

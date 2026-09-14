@@ -687,6 +687,66 @@ test("continuation refuses capped budget-3 contracts and divergent or ambiguous 
   }
 });
 
+test("continuation does not skip to a later correction after a poisoned submit", async () => {
+  const context = await env();
+  const vector = JSON.parse(await readFile(path.join(mcpRoot, "vectors", "controller-canonical-pr26.json"), "utf8"));
+  const calls = [];
+  setTestControllerTransport(async (request) => {
+    calls.push(request);
+    if (request.tool === CONTROLLER_TOOL) return vector.realistic_receipt;
+    if (request.arguments.correction_number === 4) {
+      return { ...vector.follow_up_4_receipt, agent_id: "other-agent" };
+    }
+    if (request.arguments.correction_number === 5) return vector.follow_up_5_receipt;
+    throw new Error("unexpected correction_number");
+  });
+  try {
+    await executeTool("launch_cursor_mission", {
+      ...context,
+      title: "KOT-126",
+      objective: "MCP local My Work",
+      criteria: ["Ticket persisté"],
+      target_repository_url: vector.unsigned_arguments.target_repository_url,
+      starting_sha: vector.unsigned_arguments.repository_refs[0].starting_sha,
+      allowed_paths: vector.unsigned_arguments.allowed_paths,
+      mission: vector.unsigned_arguments.mission,
+      acceptance_criteria: vector.unsigned_arguments.acceptance_criteria,
+      expected_evidence: vector.unsigned_arguments.expected_evidence,
+      required_capabilities: vector.unsigned_arguments.required_capabilities,
+      preferred_plugins: vector.unsigned_arguments.preferred_plugins,
+      required_plugins: vector.unsigned_arguments.required_plugins,
+      human_gates: vector.unsigned_arguments.human_gates,
+      correction_budget: "uncapped",
+    });
+    await assert.rejects(
+      executeTool("continue_cursor_mission", {
+        ...context,
+        ticket_id: "DUB-001",
+        correction_number: 4,
+        prompt: "divergent agent",
+      }),
+      { code: "MY_WORK_CONTINUE_AMBIGUOUS" },
+    );
+    const runCallsAfterPoison = calls.filter((item) => item.tool === CONTROLLER_RUN_TOOL).length;
+    await assert.rejects(
+      executeTool("continue_cursor_mission", {
+        ...context,
+        ticket_id: "DUB-001",
+        correction_number: 5,
+        prompt: "must not skip a poisoned correction",
+      }),
+      { code: "MY_WORK_CONTINUE_NOT_RETRYABLE" },
+    );
+    const after = await executeTool("get_ticket", { ...context, ticket_id: "DUB-001" });
+    assert.equal(after.ticket.cursor_run, null);
+    assert.equal(after.ticket.state, "Blocked");
+    assert.equal(calls.filter((item) => item.tool === CONTROLLER_RUN_TOOL).length, runCallsAfterPoison);
+    assert.equal(runCallsAfterPoison, 1);
+  } finally {
+    resetTestControllerTransport();
+  }
+});
+
 test("legacy budget-3 tickets and receipts stay readable and unchanged after reread", async () => {
   const context = await env();
   const vector = JSON.parse(await readFile(path.join(mcpRoot, "vectors", "controller-canonical-v1.json"), "utf8"));
