@@ -149,3 +149,38 @@ test("reçus budget 3 et uncapped restent lisibles sans réécriture", async () 
   assert.equal(afterUncapped.cursor_launch.bounds.correction_budget, "uncapped");
   assert.equal(afterUncapped.cursor_launch.bounds.correction_policy, "uncapped");
 });
+test("un activity trop grand ou un store au-delà du plafond de lecture est refusé sans briquer le registre", async () => {
+  const env = await environment();
+  await perform(env, env.first, "project-a", create());
+  await assert.rejects(previewTicketChange(request(env, env.first, "project-a", {
+    type: "activity",
+    id: "DUB-001",
+    kind: "note",
+    summary: "preuve trop grande",
+    evidence: { blob: "x".repeat(65 * 1024) },
+  })), { code: "TICKET_ACTIVITY_EVIDENCE_INVALID" });
+  assert.equal((await readTickets({ start: env.first })).tickets[0].id, "DUB-001");
+  const payload = { blob: "y".repeat(60 * 1024) };
+  let added = 0;
+  for (;;) {
+    const operation = { type: "activity", id: "DUB-001", kind: "note", summary: `note-${added}`, evidence: payload };
+    try {
+      await perform(env, env.first, "project-a", operation);
+      added += 1;
+      if (added > 30) throw new Error("store limit was not reached");
+    } catch (error) {
+      assert.equal(error.code, "TICKET_STORE_LIMIT");
+      break;
+    }
+  }
+  const store = await readTickets({ start: env.first });
+  assert.equal(store.tickets[0].id, "DUB-001");
+  assert.equal(store.tickets[0].activity.length, added + 1);
+  await assert.rejects(previewTicketChange(request(env, env.first, "project-a", {
+    type: "activity",
+    id: "DUB-001",
+    kind: "note",
+    summary: "encore une note",
+    evidence: payload,
+  })), { code: "TICKET_STORE_LIMIT" });
+});
