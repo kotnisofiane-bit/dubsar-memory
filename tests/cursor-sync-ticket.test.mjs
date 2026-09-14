@@ -178,6 +178,51 @@ test("PR open vérifiée mappe vers In Review même si Cursor est encore running
   assert.equal((await readTickets({ start: env.start })).tickets[0].state, "In Review");
 });
 
+const runReceipt = {
+  ...receipt,
+  receipt_version: "dubsar.cursor-run-receipt/1",
+  run_id: "run-4",
+  source_url: "https://cursor.example/runs/4",
+  bounds: { correction_number: 4 },
+};
+function runObs({ lifecycle = "running", pr = null } = {}) {
+  return { source: "trusted_cursor_observer", ticket_id: "DUB-001", agent_id: "agent-1", run_id: "run-4", lifecycle, pr };
+}
+async function continuedThenFailed(env) {
+  await launched(env);
+  await apply(env, { type: "attach-cursor-run", id: "DUB-001", receipt: runReceipt });
+  await apply(env, { type: "fail-cursor-run", id: "DUB-001", code: "MY_WORK_CONTINUE_AMBIGUOUS", summary: "Controller continuation failed or was ambiguous; no retry" });
+}
+
+test("sync of the last successful run does not clear a newer cursor_run_failed", async () => {
+  const env = await setup();
+  await continuedThenFailed(env);
+  const failed = (await readTickets({ start: env.start })).tickets[0];
+  assert.equal(failed.state, "Blocked");
+  assert.match(failed.blocker, /Controller continuation failed/);
+  await apply(env, { type: "sync-cursor-status", id: "DUB-001", cursor_observation: runObs(), github_observation: null });
+  const ticket = (await readTickets({ start: env.start })).tickets[0];
+  assert.equal(ticket.state, "Blocked");
+  assert.equal(ticket.blocker, failed.blocker);
+  assert.equal(ticket.cursor_run.run_id, "run-4");
+});
+
+test("open PR on the last successful run does not clear a newer cursor_run_failed", async () => {
+  const env = await setup();
+  await continuedThenFailed(env);
+  await apply(env, { type: "sync-cursor-status", id: "DUB-001", cursor_observation: runObs({ lifecycle: "running", pr: { repository: "owner/repo", number: 12 } }), github_observation: githubObs({ state: "open" }) });
+  const ticket = (await readTickets({ start: env.start })).tickets[0];
+  assert.equal(ticket.state, "Blocked");
+  assert.match(ticket.blocker, /Controller continuation failed/);
+});
+
+test("merged PR still closes a ticket after cursor_run_failed", async () => {
+  const env = await setup();
+  await continuedThenFailed(env);
+  await apply(env, { type: "sync-cursor-status", id: "DUB-001", cursor_observation: runObs({ lifecycle: "completed", pr: { repository: "owner/repo", number: 12 } }), github_observation: githubObs({ state: "merged", merge_commit_sha: "c".repeat(40) }) });
+  assert.equal((await readTickets({ start: env.start })).tickets[0].state, "Done");
+});
+
 test("run Cursor terminé sans PR utilisable mappe vers Blocked", async () => {
   const env = await setup(); await launched(env);
   await apply(env, { type: "sync-cursor-status", id: "DUB-001", cursor_observation: cursorObs({ lifecycle: "completed" }), github_observation: null });

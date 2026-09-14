@@ -238,6 +238,15 @@ function lastSyncEvidence(ticket) {
   }
   return evidence;
 }
+function unresolvedCursorFailure(ticket) {
+  const activities = Array.isArray(ticket?.activity) ? ticket.activity : [];
+  for (let i = activities.length - 1; i >= 0; i -= 1) {
+    const kind = activities[i]?.kind;
+    if (kind === "cursor_run_failed" || kind === "cursor_launch_failed") return activities[i];
+    if (kind === "cursor_run" || kind === "cursor_launch") return null;
+  }
+  return null;
+}
 function sameSyncOutcome(ticket, mapped) {
   return ticket.state === mapped.state && ticket.pr === mapped.pr && ticket.branch === mapped.branch && ticket.blocker === mapped.blocker && stable(lastSyncEvidence(ticket)) === stable(mapped.evidence);
 }
@@ -251,7 +260,7 @@ function mapSyncedFields(ticket, cursorObs, githubObs) {
     return { state: "Blocked", pr: prLabel, branch, blocker: "Cursor run failed", evidence: githubObs ? prEvidence(githubObs, { lifecycle: "failed" }) : { type: "cursor_run_observation", lifecycle: "failed", agent_id: cursorObs.agent_id, run_id: cursorObs.run_id, ticket_id: cursorObs.ticket_id } };
   }
   if (githubObs?.state === "open" || githubObs?.state === "draft") {
-    return { state: "In Review", pr: prLabel, branch, blocker: null, evidence: prEvidence(githubObs) };
+    return retainUnresolvedCursorFailure(ticket, { state: "In Review", pr: prLabel, branch, blocker: null, evidence: prEvidence(githubObs) });
   }
   if (githubObs?.state === "closed") {
     return { state: "Blocked", pr: prLabel, branch, blocker: "Pull request closed without merge", evidence: prEvidence(githubObs) };
@@ -259,7 +268,12 @@ function mapSyncedFields(ticket, cursorObs, githubObs) {
   if (cursorObs.lifecycle === "completed") {
     return { state: "Blocked", pr: ticket.pr, branch: ticket.branch, blocker: "Cursor completed without a usable pull request", evidence: { type: "cursor_run_observation", lifecycle: "completed", agent_id: cursorObs.agent_id, run_id: cursorObs.run_id, ticket_id: cursorObs.ticket_id } };
   }
-  return { state: "In Progress", pr: ticket.pr, branch: ticket.branch, blocker: null, evidence: { type: "cursor_run_observation", lifecycle: "running", agent_id: cursorObs.agent_id, run_id: cursorObs.run_id, ticket_id: cursorObs.ticket_id } };
+  return retainUnresolvedCursorFailure(ticket, { state: "In Progress", pr: ticket.pr, branch: ticket.branch, blocker: null, evidence: { type: "cursor_run_observation", lifecycle: "running", agent_id: cursorObs.agent_id, run_id: cursorObs.run_id, ticket_id: cursorObs.ticket_id } });
+}
+function retainUnresolvedCursorFailure(ticket, mapped) {
+  const failure = unresolvedCursorFailure(ticket);
+  if (!failure) return mapped;
+  return { state: "Blocked", pr: mapped.pr, branch: mapped.branch, blocker: ticket.blocker, evidence: mapped.evidence };
 }
 function isReaderTransient(error) {
   return error instanceof TicketError && error.code === "TICKET_READER_TRANSIENT";
