@@ -110,6 +110,29 @@ test("locks malformé, surdimensionné, symbolique et hardlinké échouent ferm�
   }
 });
 
+test("l'apparition de .dubsar ne masque pas un tickets.json déjà publié dans .dubsar-project", async () => {
+  const allocationRoot = await mkdtemp(path.join(tmpdir(), "dubsar-global-"));
+  const start = await mkdtemp(path.join(tmpdir(), "dubsar-project-"));
+  await mkdir(path.join(start, ".dubsar-project"));
+  const env = { allocationRoot };
+  await perform(env, start, "project-a", create());
+  const fallback = path.join(start, ".dubsar-project", "tickets.json");
+  assert.equal((await readTickets({ start })).tickets[0].id, "DUB-001");
+  assert.equal(JSON.parse(await readFile(fallback, "utf8")).tickets[0].id, "DUB-001");
+  await mkdir(path.join(start, ".dubsar"));
+  assert.equal((await readTickets({ start })).tickets[0].id, "DUB-001");
+  await perform(env, start, "project-a", create("Second"));
+  assert.deepEqual((await readTickets({ start })).tickets.map((ticket) => ticket.id), ["DUB-001", "DUB-002"]);
+  await assert.rejects(readFile(path.join(start, ".dubsar", "tickets.json")));
+  assert.deepEqual(JSON.parse(await readFile(fallback, "utf8")).tickets.map((ticket) => ticket.id), ["DUB-001", "DUB-002"]);
+});
+test("un tickets.json déjà présent dans .dubsar reste le registre canonique", async () => {
+  const env = await environment();
+  await perform(env, env.first, "project-a", create());
+  await mkdir(path.join(env.first, ".dubsar-project"));
+  await writeFile(path.join(env.first, ".dubsar-project", "tickets.json"), `${JSON.stringify({ format: "dubsar.tickets/1", tickets: [] })}\n`);
+  assert.equal((await readTickets({ start: env.first })).tickets[0].id, "DUB-001");
+});
 test("reçus budget 3 et uncapped restent lisibles sans réécriture", async () => {
   const env = await environment();
   await perform(env, env.first, "project-a", create());
